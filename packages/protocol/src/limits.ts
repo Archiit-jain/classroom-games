@@ -1,0 +1,29 @@
+/** Limits shared by client and server. Server-side enforcement is authoritative. */
+
+export const NICKNAME_MIN_LENGTH = 2;
+export const NICKNAME_MAX_LENGTH = 16;
+
+export const CHAT_MAX_LENGTH = 200;
+
+/** Room codes avoid look-alike characters: no 0/O, 1/I/L. 31 symbols, 6 long ≈ 887M codes. */
+export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+export const ROOM_CODE_LENGTH = 6;
+
+export const REPORT_REASONS = ['CHAT', 'DRAWING', 'NAME', 'OTHER'] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+/** Largest Socket.IO message the server accepts (bytes). */
+export const MAX_MESSAGE_BYTES = 16 * 1024;
+
+/** Normalises user-typed room codes: uppercase, strip spaces and dashes. */
+export function normalizeRoomCode(input: string): string {
+  return input.toUpperCase().replace(/[\s-]/g, '');
+}
+
+export function isValidRoomCode(code: string): boolean {
+  if (code.length !== ROOM_CODE_LENGTH) return false;
+  for (const ch of code) {
+    if (!ROOM_CODE_ALPHABET.includes(ch)) return false;
+  }
+  return true;
+}
