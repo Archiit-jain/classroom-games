@@ -1,0 +1,270 @@
+import type {
+  Ack,
+  C2SEventName,
+  C2SPayload,
+  C2SResults,
+  ClientToServerEvents,
+  ReportReason,
+  RoomEvent,
+  ServerToClientEvents,
+} from '@cg/protocol';
+import { io, type Socket } from 'socket.io-client';
+import type { ClientErrorCode } from '../i18n/en';
+import { errorMessage, t } from '../i18n';
+import { estimateOffset, type PingSample } from './clock';
+import { KEYS, storage } from './storage';
+import { Store, initialState, type AppState, type Toast } from './store';
+
+type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+export type ClientAck<T> = Ack<T> | { ok: false; code: ClientErrorCode; retryAfterMs?: number };
+
+const REQUEST_TIMEOUT_MS = 8000;
+const SLOW_CONNECT_MS = 3000;
+const MAX_CHAT = 100;
+
+function loadHidden(): string[] {
+  try {
+    const raw = storage.get(KEYS.hidden, 'session');
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The client's single link to the server. Owns the socket, keeps the app
+ * store in sync with server messages and exposes typed request methods.
+ * The client never decides game outcomes; it only sends intents.
+ */
+export class GameConnection {
+  readonly store = new Store<AppState>({ ...initialState, hidden: loadHidden() });
+  private readonly socket: ClientSocket;
+  private clockOffset = 0;
+  private toastSeq = 0;
+  private slowTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(url: string) {
+    this.socket = io(url, {
+      auth: (cb) => {
+        const token = storage.get(KEYS.token);
+        cb(token ? { token } : {});
+      },
+      reconnectionDelayMax: 5000,
+    });
+    this.armSlowTimer();
+    this.wire();
+  }
+
+  // ─────────────────────────── requests ───────────────────────────
+
+  request<K extends C2SEventName>(
+    name: K,
+    payload: C2SPayload<K>,
+  ): Promise<ClientAck<C2SResults[K]>> {
+    if (!this.socket.connected) return Promise.resolve({ ok: false, code: 'OFFLINE' });
+    const s = this.socket as unknown as {
+      timeout(ms: number): {
+        emitWithAck(event: string, payload: unknown): Promise<ClientAck<C2SResults[K]>>;
+      };
+    };
+    return s
+      .timeout(REQUEST_TIMEOUT_MS)
+      .emitWithAck(name, payload)
+      .catch(() => ({ ok: false as const, code: 'TIMEOUT' as const }));
+  }
+
+  /** Sends a game action for the current match. */
+  sendAction(action: unknown): Promise<ClientAck<{ version: number }>> {
+    const match = this.store.get().match;
+    if (!match) return Promise.resolve({ ok: false, code: 'MATCH_NOT_FOUND' });
+    return this.request('match:action', { matchId: match.matchId, version: match.version, action });
+  }
+
+  async setNickname(nickname: string): Promise<ClientAck<{ nickname: string }>> {
+    const res = await this.request('session:setNickname', { nickname });
+    if (res.ok) {
+      storage.set(KEYS.nickname, res.nickname);
+      this.store.set((s) => ({
+        session: s.session ? { ...s.session, nickname: res.nickname } : s.session,
+      }));
+    }
+    return res;
+  }
+
+  toggleHidden(playerId: string, hide?: boolean): void {
+    this.store.set((s) => {
+      const isHidden = s.hidden.includes(playerId);
+      const shouldHide = hide ?? !isHidden;
+      const hidden = shouldHide
+        ? isHidden
+          ? s.hidden
+          : [...s.hidden, playerId]
+        : s.hidden.filter((id) => id !== playerId);
+      storage.set(KEYS.hidden, JSON.stringify(hidden), 'session');
+      return { hidden };
+    });
+  }
+
+  async report(playerId: string, reason: ReportReason): Promise<void> {
+    // Hide immediately for the reporter, whatever the server says.
+    this.toggleHidden(playerId, true);
+    const res = await this.request('report:submit', { playerId, reason });
+    if (res.ok) this.toast(t('room.reported'));
+  }
+
+  /** Milliseconds from now until a server timestamp, on this device's clock. */
+  msUntil = (serverTs: number): number => serverTs - (Date.now() + this.clockOffset);
+
+  toast(message: string, tone: Toast['tone'] = 'info'): void {
+    const id = ++this.toastSeq;
+    this.store.set((s) => ({ toasts: [...s.toasts, { id, message, tone }] }));
+    setTimeout(
+      () => this.store.set((s) => ({ toasts: s.toasts.filter((x) => x.id !== id) })),
+      4500,
+    );
+  }
+
+  toastError(res: { code: Parameters<typeof errorMessage>[0]; retryAfterMs?: number }): void {
+    this.toast(errorMessage(res.code, res.retryAfterMs), 'error');
+  }
+
+  reconnectHere(): void {
+    this.store.set({ connection: 'connecting' });
+    this.socket.connect();
+  }
+
+  // ─────────────────────────── wiring ───────────────────────────
+
+  private armSlowTimer(): void {
+    if (this.slowTimer) clearTimeout(this.slowTimer);
+    this.slowTimer = setTimeout(() => {
+      if (this.store.get().connection !== 'connected') this.store.set({ slow: true });
+    }, SLOW_CONNECT_MS);
+  }
+
+  private async syncClock(): Promise<void> {
+    const samples: PingSample[] = [];
+    for (let i = 0; i < 5; i++) {
+      const sentAt = Date.now();
+      const res = await this.request('time:ping', { clientTs: sentAt });
+      if (!res.ok) break;
+      samples.push({ sentAt, receivedAt: Date.now(), serverNow: res.serverNow });
+    }
+    if (samples.length > 0) this.clockOffset = estimateOffset(samples);
+  }
+
+  private wire(): void {
+    const { socket, store } = this;
+
+    socket.on('connect', () => {
+      store.set({ connection: 'connected', slow: false, serverRestarting: false });
+      void this.syncClock();
+    });
+
+    socket.on('connect_error', (err) => {
+      if (store.get().connection === 'connected') store.set({ connection: 'reconnecting' });
+      if (err.message === 'SERVER_BUSY' || err.message === 'RATE_LIMITED') {
+        this.toastError({ code: err.message });
+      }
+    });
+
+    socket.on('disconnect', (reason) => {
+      if (store.get().connection === 'displaced') return;
+      store.set({ connection: 'reconnecting' });
+      this.armSlowTimer();
+      // A server-initiated disconnect is not retried automatically by Socket.IO.
+      if (reason === 'io server disconnect') socket.connect();
+    });
+
+    socket.on('session:ready', (ready) => {
+      if (ready.token) storage.set(KEYS.token, ready.token);
+      store.set((s) => {
+        const session = { playerId: ready.playerId, nickname: ready.nickname };
+        // A different identity (e.g. the server restarted) owns none of the old room state.
+        if (s.session && s.session.playerId !== ready.playerId) {
+          return { session, games: ready.games, room: null, match: null, results: null, chat: [] };
+        }
+        return { session, games: ready.games };
+      });
+    });
+
+    socket.on('session:displaced', () => {
+      store.set({ connection: 'displaced' });
+    });
+
+    socket.on('room:snapshot', ({ room }) => {
+      store.set((s) => {
+        if (!room) return { room: null, match: null, results: null, chat: [] };
+        const sameMatch = room.match && s.match?.matchId === room.match.matchId;
+        return {
+          room,
+          match: sameMatch ? s.match : null,
+          results: room.match?.results
+            ? { matchId: room.match.matchId, results: room.match.results }
+            : null,
+        };
+      });
+    });
+
+    socket.on('room:event', (event) => this.onRoomEvent(event));
+
+    socket.on('match:update', (update) => {
+      store.set((s) => {
+        // Ignore out-of-order deliveries for the same match. Every update carries a
+        // complete view, so a skipped version only means skipped animations.
+        if (s.match?.matchId === update.matchId && update.version <= s.match.version) return {};
+        return {
+          match: {
+            matchId: update.matchId,
+            gameId: update.gameId,
+            version: update.version,
+            you: update.you,
+            view: update.view,
+            events: update.events,
+          },
+        };
+      });
+    });
+
+    socket.on('match:end', (end) => store.set({ results: end }));
+
+    socket.on('chat:message', (message) => {
+      store.set((s) => ({ chat: [...s.chat, message].slice(-MAX_CHAT) }));
+    });
+
+    socket.on('chat:history', ({ messages }) => store.set({ chat: messages.slice(-MAX_CHAT) }));
+
+    socket.on('system:notice', ({ code }) => {
+      if (code === 'SERVER_RESTARTING') store.set({ serverRestarting: true });
+    });
+  }
+
+  private onRoomEvent(event: RoomEvent): void {
+    const me = this.store.get().session?.playerId;
+    switch (event.type) {
+      case 'KICKED':
+        this.toast(t('room.kicked'), 'error');
+        break;
+      case 'ROOM_CLOSED':
+        this.toast(t('room.closed'));
+        break;
+      case 'HOST_CHANGED':
+        if (event.hostId === me) this.toast(t('room.nowHost'));
+        break;
+      case 'MATCH_ABORTED':
+        this.toast(t('room.matchAborted'), 'error');
+        break;
+      case 'SEAT_TAKEN_OVER':
+      case 'SEAT_RECLAIMED':
+        // Shown from the room snapshot (seat takeover state), which survives reconnects.
+        break;
+    }
+  }
+}
+
+export function defaultServerUrl(): string {
+  const configured = import.meta.env.VITE_SERVER_URL as string | undefined;
+  if (configured) return configured;
+  return `${window.location.protocol}//${window.location.hostname}:3001`;
+}

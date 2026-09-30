@@ -1,0 +1,57 @@
+/*
+ * Design tokens. PHASE 1 FOUNDATION ONLY: the final visual direction
+ * (colourful, energetic, premium, playful, nostalgic — not childish) is to be
+ * established before the polished game UI is built. Components must use these
+ * tokens, never raw values, so the restyle is a token change.
+ */
+:root {
+  --color-bg: #f6f4ff;
+  --color-surface: #ffffff;
+  --color-surface-2: #efebff;
+  --color-text: #1d1a2e;
+  --color-text-muted: #625d7a;
+  --color-border: #ddd6fb;
+
+  --color-primary: #5b3df5;
+  --color-primary-strong: #4527d8;
+  --color-on-primary: #ffffff;
+  --color-accent: #ff7a45;
+  --color-success: #1f9d61;
+  --color-warn-bg: #fff4d6;
+  --color-warn-text: #6b4a00;
+  --color-danger: #d4344a;
+  --color-danger-bg: #fde8eb;
+
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 2rem;
+  --font-size-hero: clamp(2rem, 6vw, 3.25rem);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --shadow-card: 0 2px 0 rgba(29, 26, 46, 0.06), 0 8px 24px rgba(91, 61, 245, 0.08);
+
+  --touch-target: 44px;
+  --page-gutter: 16px;
+  --layout-max: 1100px;
+
+  --duration-fast: 120ms;
+  --duration-med: 220ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-med: 0ms;
+  }
+}
