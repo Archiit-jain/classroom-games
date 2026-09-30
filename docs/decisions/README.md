@@ -1,0 +1,21 @@
+# Architecture decision records
+
+Short records of _why_ things are the way they are. Format: Context → Decision →
+Consequences. Status is `Accepted`, `Proposed` (waiting for approval) or `Superseded`.
+
+| ADR                                              | Title                                                                | Status                                      |
+| ------------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------- |
+| [001](ADR-001-pnpm-monorepo.md)                  | pnpm monorepo, packages consumed as TypeScript source                | Accepted                                    |
+| [002](ADR-002-react-vite.md)                     | React + Vite for the client (Motion later)                           | Accepted                                    |
+| [003](ADR-003-socketio-view-event-sync.md)       | Socket.IO with acked intents; full per-player view + filtered events | Accepted                                    |
+| [004](ADR-004-pure-engines-seeded-rng.md)        | Pure game engines with a seeded RNG                                  | Accepted                                    |
+| [005](ADR-005-in-memory-room-store.md)           | In-memory RoomStore; documented scaling path                         | Accepted                                    |
+| [006](ADR-006-anonymous-session-tokens.md)       | Anonymous session tokens                                             | Accepted                                    |
+| [007](ADR-007-moderation-pipeline.md)            | Moderation pipeline on obscenity + our datasets                      | Accepted                                    |
+| 008                                              | Server-side physics with keyframe playback                           | Accepted in spec; record written in Phase 5 |
+| [009](ADR-009-static-client-websocket-server.md) | Static client + WebSocket server                                     | Accepted                                    |
+| [010](ADR-010-typed-i18n-catalog.md)             | Lightweight typed i18n catalog                                       | Accepted                                    |
+| [011](ADR-011-report-flags-no-auto-punish.md)    | Reports create flags; no automatic punishment                        | Accepted                                    |
+| [012](ADR-012-typescript-6.md)                   | Pin TypeScript 6.0 (not 7)                                           | Accepted                                    |
+| [013](ADR-013-node-http-no-express.md)           | Plain `node:http`, no Express                                        | Accepted                                    |
+| [014](ADR-014-lenient-action-versions.md)        | Lenient action versions                                              | **Proposed — needs product-owner approval** |

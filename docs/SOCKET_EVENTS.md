@@ -1,0 +1,95 @@
+# Socket events
+
+Source of truth: `packages/protocol/src/events.ts` (types) and
+`packages/protocol/src/schemas.ts` (server-side zod schemas). This page lists what is
+implemented in Phase 1.
+
+## Conventions
+
+- Transport: Socket.IO 4. The client authenticates in the handshake with
+  `auth: { token }` (omit it on first visit).
+- **Every client → server event must carry an acknowledgement callback.** Events without
+  one are ignored. The ack is always:
+
+  ```ts
+  { ok: true, ...result } | { ok: false, code: ErrorCode, retryAfterMs?: number }
+  ```
+
+- Payloads are validated with strict schemas (unknown keys rejected) **after** rate
+  limiting. Invalid payloads → `INVALID_PAYLOAD`. Messages larger than 16 KB close the
+  connection.
+- The server never sends user-facing text; clients translate error codes.
+
+## Client → server
+
+| Event                 | Payload                                                  | Success result                        | Rate bucket         |
+| --------------------- | -------------------------------------------------------- | ------------------------------------- | ------------------- |
+| `session:setNickname` | `{ nickname }`                                           | `{ nickname }` (normalised)           | nickname            |
+| `room:create`         | `{ gameId }`                                             | `{ room: RoomView }`                  | roomCreate          |
+| `room:join`           | `{ code }`                                               | `{ room: RoomView }`                  | roomJoin            |
+| `room:leave`          | `{}`                                                     | `{}`                                  | roomAdmin           |
+| `room:setGame`        | `{ gameId }`                                             | `{}` (host, LOBBY)                    | roomAdmin           |
+| `room:updateSettings` | `{ settings }`                                           | `{}` (host, LOBBY)                    | roomAdmin           |
+| `room:addBot`         | `{}`                                                     | `{}` (host, LOBBY)                    | roomAdmin           |
+| `room:removeBot`      | `{ botId }`                                              | `{}` (host, LOBBY)                    | roomAdmin           |
+| `room:kick`           | `{ playerId }`                                           | `{}` (host)                           | roomAdmin           |
+| `room:start`          | `{}`                                                     | `{}` (host, LOBBY)                    | roomAdmin           |
+| `room:playAgain`      | `{}`                                                     | `{}` (host, RESULTS → STARTING)       | roomAdmin           |
+| `room:backToLobby`    | `{}`                                                     | `{}` (host, RESULTS → LOBBY)          | roomAdmin           |
+| `room:reclaimSeat`    | `{}`                                                     | `{}` (take your seat back from a bot) | roomAdmin           |
+| `match:action`        | `{ matchId, version, action }`                           | `{ version }`                         | matchAction         |
+| `match:resync`        | `{ matchId }`                                            | `{ update: MatchUpdate }`             | matchAction         |
+| `chat:send`           | `{ text }`                                               | `{}`                                  | chat (own cooldown) |
+| `report:submit`       | `{ playerId, reason: CHAT \| DRAWING \| NAME \| OTHER }` | `{}`                                  | report              |
+| `time:ping`           | `{ clientTs }`                                           | `{ clientTs, serverNow }`             | ping                |
+
+A coarse per-socket flood guard (burst 40, 20/s) silently drops excess packets before any
+handler runs.
+
+## Server → client
+
+| Event               | Payload                                                        | When                                                                                                            |
+| ------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `session:ready`     | `{ playerId, nickname, token?, games: GameInfo[], serverNow }` | After every connection. `token` only when a new session was created — the client must store it.                 |
+| `session:displaced` | —                                                              | Another tab took over this session; this socket is then disconnected.                                           |
+| `room:snapshot`     | `{ room: RoomView \| null }`                                   | Any room change; on every connect; `null` when not in a room.                                                   |
+| `room:event`        | `RoomEvent`                                                    | `KICKED`, `ROOM_CLOSED`, `HOST_CHANGED {hostId}`, `SEAT_TAKEN_OVER {reason}`, `SEAT_RECLAIMED`, `MATCH_ABORTED` |
+| `match:update`      | `MatchUpdate`                                                  | After every transition, per player: `{ matchId, gameId, version, you, events, view, serverNow }`                |
+| `match:end`         | `{ matchId, results }`                                         | Match finished.                                                                                                 |
+| `chat:message`      | `ChatMessage`                                                  | A (moderated) message you may see.                                                                              |
+| `chat:history`      | `{ messages }`                                                 | On joining or reconnecting to a room (last 50 room-channel messages).                                           |
+| `system:notice`     | `{ code: 'SERVER_RESTARTING' }`                                | Graceful shutdown started.                                                                                      |
+
+## Key types
+
+```ts
+RoomView {
+  id; kind: 'PRIVATE' | 'PUBLIC'; code: string | null; gameId; settings;
+  phase: 'LOBBY' | 'STARTING' | 'IN_GAME' | 'RESULTS' | 'CLOSED';
+  hostId; startsAt; capacity; minPlayers;
+  members: ({ kind: 'HUMAN'; id; nickname; status: 'CONNECTED' | 'AWAY' } | { kind: 'BOT'; id; name })[];
+  match: { matchId; gameId; results; seats: SeatView[] } | null;
+}
+SeatView { seat; memberId; memberKind; displayName; controller: 'HUMAN' | 'BOT';
+           takeover: { reason: 'DISCONNECTED' | 'IDLE' | 'LEFT'; botName } | null }
+ChatMessage { id; fromId; fromName; isBot; text; sentAt; channel }
+GameResults { placements: { seat; place }[]; stats? }
+```
+
+## Error codes
+
+`INVALID_PAYLOAD`, `RATE_LIMITED`, `SERVER_BUSY`, `INTERNAL_ERROR`, `NICKNAME_REQUIRED`,
+`NICKNAME_INVALID`, `NICKNAME_REJECTED`, `NICKNAME_TAKEN`, `NICKNAME_LOCKED_IN_ROOM`,
+`GAME_NOT_FOUND`, `ROOM_NOT_FOUND`, `ROOM_FULL`, `ROOM_IN_PROGRESS`, `ALREADY_IN_ROOM`,
+`NOT_IN_ROOM`, `NOT_HOST`, `REMOVED_FROM_ROOM`, `INVALID_SETTINGS`,
+`TOO_MANY_PLAYERS_FOR_GAME`, `NOT_ENOUGH_PLAYERS`, `BOTS_NOT_SUPPORTED`, `INVALID_PHASE`,
+`PLAYER_NOT_FOUND`, `BOT_NOT_FOUND`, `CANNOT_TARGET_SELF`, `MATCH_NOT_FOUND`,
+`STALE_VERSION`, `NOT_YOUR_TURN`, `ILLEGAL_ACTION`, `NOT_ELIGIBLE`,
+`SEAT_NOT_RECLAIMABLE`, `SEAT_CONTROLLED_BY_BOT`, `CHAT_EMPTY`, `CHAT_COOLDOWN`,
+`CHAT_BLOCKED`. Handshake refusals arrive as `connect_error` with message `RATE_LIMITED`
+or `SERVER_BUSY`.
+
+## Not implemented yet
+
+`mm:quickPlay`, `mm:cancel`, `lobby:watch`, `lobby:unwatch`, `lobby:rooms` (Phase 6),
+`match:stream` (Phase 4), `chat:react` / `chat:reaction` (quick reactions, with 16 Parchi).
