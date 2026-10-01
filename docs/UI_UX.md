@@ -2,20 +2,20 @@
 
 **Visual direction (approved for Phase 2):** _nostalgic classroom games × modern
 multiplayer arcade_ — colourful, energetic, premium, playful, nostalgic, highly animated,
-catchy, **not childish, not a dashboard.** Raja Mantri Chor Sipahi is the first full
-demonstration. Implementation: `packages/ui` ([ADR-015](decisions/ADR-015-shared-ui-package.md)).
+catchy, **not childish, not a dashboard.** Raja Mantri Chor Sipahi was the first full
+demonstration; 16 Parchi (the flagship) is the second. Implementation: `packages/ui` ([ADR-015](decisions/ADR-015-shared-ui-package.md)).
 
 ## Design language
 
-| Element   | Treatment                                                                                                                                                                                                                                      |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stage     | Deep "arcade night" indigo with soft pink / cyan / yellow / violet colour bursts and a faint arcade dot grid (fixed layer, no repaint on scroll).                                                                                              |
-| Accents   | Pink `#ff3e8a`, Yellow `#ffd23f`, Cyan `#2de2e6`, Lime `#9cf04a`, Orange `#ff8a3d`, Violet `#9b7bff`, each with a deeper shade for edges/pressed states. Seats get a stable accent each.                                                       |
-| Surfaces  | Chunky "sticker" panels: gradient fill, thick dark outline, hard offset shadow + soft float shadow.                                                                                                                                            |
-| Nostalgia | Notebook paper (ruled lines + red margin) for chits and your role card, a "HELLO my name is" name tag for the nickname, a ticket stub for the room code, rubber stamps for verdicts, a chalkboard desk with a wooden frame for the RMCS table. |
-| Buttons   | "Arcade keys": bright fill, thick outline, 5 px hard shadow that compresses on press. Yellow = primary, pink = decisive (accuse, send, join), cyan = secondary.                                                                                |
-| Type      | **Baloo 2** (variable, OFL, self-hosted; has Devanagari for future Hindi) for display, buttons and numbers; the system UI font for body text.                                                                                                  |
-| Icons     | Original inline SVGs (crown, scroll, shield, mask, arrow); no third-party artwork.                                                                                                                                                             |
+| Element   | Treatment                                                                                                                                                                                                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stage     | Deep "arcade night" indigo with soft pink / cyan / yellow / violet colour bursts and a faint arcade dot grid (fixed layer, no repaint on scroll).                                                                                                                                                  |
+| Accents   | Pink `#ff3e8a`, Yellow `#ffd23f`, Cyan `#2de2e6`, Lime `#9cf04a`, Orange `#ff8a3d`, Violet `#9b7bff`, each with a deeper shade for edges/pressed states. Seats get a stable accent each.                                                                                                           |
+| Surfaces  | Chunky "sticker" panels: gradient fill, thick dark outline, hard offset shadow + soft float shadow.                                                                                                                                                                                                |
+| Nostalgia | Notebook paper (ruled lines + red margin) for chits and your role card, a "HELLO my name is" name tag for the nickname, a ticket stub for the room code, rubber stamps for verdicts, a chalkboard desk with a wooden frame for the RMCS table, a wooden school desk and paper slips for 16 Parchi. |
+| Buttons   | "Arcade keys": bright fill, thick outline, 5 px hard shadow that compresses on press. Yellow = primary, pink = decisive (accuse, send, join), cyan = secondary.                                                                                                                                    |
+| Type      | **Baloo 2** (variable, OFL, self-hosted; has Devanagari for future Hindi) for display, buttons and numbers; the system UI font for body text.                                                                                                                                                      |
+| Icons     | Original inline SVGs (crown, scroll, shield, mask, arrow; the 40 16 Parchi item icons and medals); no third-party artwork ([ADR-019](decisions/ADR-019-category-content-packs.md)).                                                                                                                |
 
 Tokens live in `packages/ui/src/styles/tokens.css`; components never use raw colours.
 
@@ -23,23 +23,28 @@ Tokens live in `packages/ui/src/styles/tokens.css`; components never use raw col
 
 Animations communicate **server-confirmed** state changes; they are not decoration.
 
-| Moment          | Animation                                                                      |
-| --------------- | ------------------------------------------------------------------------------ |
-| Screen entrance | Staggered rise-in of home cards; players slide into the lobby list.            |
-| Match start     | Big bouncing 3-2-1 countdown over a blurred lobby.                             |
-| Deal            | Folded chits fly from the desk centre to each seat; your role card flips in.   |
-| Reveal          | Chits flip in 3D; the revealed Raja/Mantri chit pops.                          |
-| Thinking        | Countdown ring around the acting player's avatar (turns pink in the last 5 s). |
-| Accusation      | Two-step Suspect → Accuse; an arrow lands on the accused chit, which shakes.   |
-| Verdict         | A rubber stamp thumps onto the desk; score changes float up; totals roll.      |
-| Results         | Podium rises in place order; confetti burst; scores roll up.                   |
+| Moment          | Animation                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Screen entrance | Staggered rise-in of home cards; players slide into the lobby list.                                                       |
+| Match start     | Big bouncing 3-2-1 countdown over a blurred lobby.                                                                        |
+| Deal            | Folded chits fly from the desk centre to each seat; your role card flips in.                                              |
+| Reveal          | Chits flip in 3D; the revealed Raja/Mantri chit pops.                                                                     |
+| Thinking        | Countdown ring around the acting player's avatar (turns pink in the last 5 s).                                            |
+| Accusation      | Two-step Suspect → Accuse; an arrow lands on the accused chit, which shakes.                                              |
+| Verdict         | A rubber stamp thumps onto the desk; score changes float up; totals roll.                                                 |
+| Results         | Podium rises in place order; confetti burst; scores roll up.                                                              |
+| 16P select      | Tap a slip: it folds shut and slides into the pass spot inside the countdown ring.                                        |
+| 16P pass        | Folded slips fly clockwise together on curved, fluttering paths; yours lands folded and unfolds.                          |
+| 16P claim       | Pulsing CLAIM button (+ haptic buzz); the set is revealed at the seat with a medal; the seat dims and the ring re-routes. |
+| Reactions       | An emote bubble pops over the sender's seat and floats away.                                                              |
 
 Pacing is handled by the **animation director** and three **effects modes**
 ([ADR-016](decisions/ADR-016-animation-director.md)):
 
 - **Full** — everything above.
 - **Lite** — shorter, simpler motion (no 3D flourishes on low-end devices, a third of the
-  confetti, no shake). Chosen automatically on low-end devices.
+  confetti — none for 16 Parchi, spec §11 — no shake, straight slip slides). Chosen
+  automatically on low-end devices.
 - **Reduced** — no motion; states change instantly. Forced when the OS asks for reduced
   motion.
 
@@ -52,7 +57,11 @@ Players can switch **Effects: Auto / Full / Lite** from the header.
   below 700 px so the whole table fits; the Mantri's accuse bar sticks to the bottom of the
   screen.
 - Touch targets ≥ 48 px (small buttons 36 px with generous spacing).
-- RMCS seats are always relative to you: you at the bottom, play clockwise.
+- RMCS and 16 Parchi seats are always relative to you: you at the bottom, play clockwise —
+  you pass to your screen-left and receive from your screen-right.
+- 16 Parchi: your hand (four slips ≥ 56 px wide on phones, grouped by item with a ×N badge)
+  sits under the table; the CLAIM button sticks above it; quick reactions are a "React" tray
+  on phones and an always-visible row on wider screens.
 
 ## Accessibility
 
@@ -67,5 +76,5 @@ No user-facing string is hard-coded in components: platform text goes through `t
 
 ## Not built yet
 
-Quick reactions (with 16 Parchi), per-game sound (excluded from v1), Motion bundle trimming
-and a measured low-end device pass (Phase 8).
+Per-game sound (excluded from v1), Motion bundle trimming and a measured low-end device pass
+(Phase 8).

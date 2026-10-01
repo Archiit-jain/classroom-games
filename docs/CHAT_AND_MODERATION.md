@@ -75,6 +75,19 @@ confirmed by the product owner in the Phase 2 review), no profanity or contact d
   restart) and writes a log line without any message content. **A report never kicks,
   bans or skips anyone.**
 
+## Quick reactions
+
+A fixed set of eight emotes — 😂 😱 😤 🙏 👏 🔥 😭 🤫 (`LOL`, `SHOCK`, `ANGRY`, `PLEASE`,
+`CLAP`, `FIRE`, `CRY`, `SHH`) — shown as a bubble over the sender's seat for everyone in the
+match ([ADR-018](decisions/ADR-018-quick-reactions.md)).
+
+- Only while a match is running, only from a seated player; at most **one per 1.5 s**
+  (`RATE_LIMITED`). There is no free text, so nothing to moderate, and nothing is stored.
+- **Only ever sent by a person.** Bots never react, and nothing reacts automatically —
+  automatic reactions could leak hidden information (spec I1).
+- Muting or reporting a player also hides their reactions on your screen.
+- Shown in games whose board draws seat bubbles: 16 Parchi (Phase 3).
+
 ## Storage
 
 The only chat storage is the last 50 censored room messages, in memory, deleted with the

@@ -99,11 +99,21 @@ Create the `GameClientModule` (see `games/rmcs/src/client/index.ts`):
 - `eventDuration(event, effects)` — how long each event animates (use `durationFor` from
   `@cg/ui`, so lite/reduced modes shorten or skip it); the animation director uses it to pace
   updates, so keep it shorter than the server's phase holds;
-- `resultStats` — columns for the results screen, read from `getResults(s).stats`.
+- `resultStats` — columns for the results screen, read from `getResults(s).stats`;
+- `reactions: true` if the board draws quick-reaction bubbles over its seats (the platform
+  then shows the picker and passes `reactions` to the board);
+- `liteConfetti: false` if the game's spec asks for podium confetti in full effects only.
 
-The board receives `view`, `events`, `version`, `me`, `seats`, `send`, `effects`, `msUntil`.
-Build it from `@cg/ui` primitives (`Avatar`, `PaperChit`, `CountdownRing`, `RollingNumber`,
-`Stamp`, `ConfettiBurst`) and Motion; check it on a 360 px phone and in reduced motion.
+Games with content (16 Parchi categories) keep language-neutral ids in `src/shared`,
+labels in `content/<lang>`, and original artwork in the client
+([ADR-019](decisions/ADR-019-category-content-packs.md)); add tests that every item has a
+label and an icon and that every label passes the moderator.
+
+The board receives `view`, `events`, `version`, `me`, `seats`, `send`, `effects`, `msUntil`,
+`reactions`. Build it from `@cg/ui` primitives (`Avatar`, `PaperChit`, `CountdownRing`,
+`RollingNumber`, `Stamp`, `ConfettiBurst`, `ReactionBubble`) and Motion; check it on a 360 px
+phone and in reduced motion. `games/sixteen-parchi` shows simultaneous actions, private
+per-seat events and a claim race.
 
 ## 9. Register the game
 

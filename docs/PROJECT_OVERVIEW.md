@@ -35,8 +35,8 @@ Expandability → Security → Performance → Documentation.
 
 ## Current status
 
-Phases 1–2 are complete: the platform plus Raja Mantri Chor Sipahi in the Color Burst
-Arcade design. See the README
+Phases 1–3 are complete: the platform (with quick reactions) plus Raja Mantri Chor Sipahi
+and the flagship 16 Parchi in the Color Burst Arcade design. See the README
 [roadmap](../README.md#roadmap).
 
 ## Roles

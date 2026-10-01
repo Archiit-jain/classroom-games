@@ -46,7 +46,12 @@ sequenceDiagram
   view, so it never acts on stale information.
 - Each bot seat has its own seeded RNG.
 - When a human reclaims the seat the bot is detached and its memory discarded.
-- Bot delays are game-defined (RMCS: 0.8–2.5 s, scaled by `GAME_TIME_SCALE`; fixture 0.6–1.2 s;
-  tests 20–60 ms).
+- Bot delays are game-defined (RMCS and 16 Parchi: 0.8–2.5 s, scaled by `GAME_TIME_SCALE`;
+  fixture 0.6–1.2 s; tests 10–60 ms).
 - **RMCS bot:** the only decision is the Mantri's guess between two players it knows nothing
   about, so it guesses uniformly at random — honest, and it never sees hidden roles.
+- **16 Parchi bot** ("Normal"): chooses a slip with the spec's safe auto-pick — keep the item
+  it holds most of, pass one it holds fewest of, ties at random — after 0.8–2.5 s, and claims
+  a full set after 0.8–2.5 s so humans can win claim races. It only ever looks at its own
+  hand (the same view a human in its seat gets); it has no memory of passed slips.
+- Bots never chat or send quick reactions.

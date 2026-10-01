@@ -3,11 +3,11 @@
 Quick multiplayer classroom and childhood games in the browser. No accounts, no login:
 pick a nickname, create or join a room, play.
 
-> **Status: Phase 2 of 9 — first game playable.** The multiplayer platform (sessions,
-> private rooms, reconnect, bots, chat moderation, game runtime) is built, and **Raja Mantri
-> Chor Sipahi** is fully playable with friends and bots in the new **Color Burst Arcade**
-> design. 16 Parchi, Draw & Guess and Pen Fight arrive in Phases 3–5. See the
-> [roadmap](#roadmap).
+> **Status: Phase 3 of 9 — two games playable.** The multiplayer platform (sessions,
+> private rooms, reconnect, bots, chat moderation, quick reactions, game runtime) is built,
+> and **Raja Mantri Chor Sipahi** and the flagship **16 Parchi** are fully playable with
+> friends and bots in the **Color Burst Arcade** design. Draw & Guess and Pen Fight arrive in
+> Phases 4–5. See the [roadmap](#roadmap).
 
 ## Why
 
@@ -20,6 +20,12 @@ server, not the browser, decides every outcome.
 
 - **Raja Mantri Chor Sipahi** — 4 players, 10 rounds, secret chits, the Mantri hunts the
   Chor; clearly-labelled bots fill empty seats. Rules: [docs/GAME_RULES/RAJA_MANTRI_CHOR_SIPAHI.md](docs/GAME_RULES/RAJA_MANTRI_CHOR_SIPAHI.md).
+- **16 Parchi** (flagship) — 4 players pass folded paper slips clockwise all at once,
+  collect four of a kind and race to CLAIM; finished players leave the circle until everyone
+  is placed. Ten categories with original artwork (Fruits, Street Food, Childhood Toys…),
+  chosen by the host or Random. Rules: [docs/GAME_RULES/16_PARCHI.md](docs/GAME_RULES/16_PARCHI.md).
+- **Quick reactions** — eight emotes that pop over your seat for everyone (one per 1.5 s,
+  only ever sent by a person).
 - **Color Burst Arcade design** — nostalgic classroom games × modern arcade: paper chits,
   chalkboard desk, rubber-stamp verdicts, rolling scores, podium and confetti. Phone first.
   Effects modes: Full / Lite (auto on low-end devices) / Reduced (OS setting). See
@@ -43,7 +49,7 @@ server, not the browser, decides every outcome.
 | Game                        | Status                                     |
 | --------------------------- | ------------------------------------------ |
 | Raja Mantri Chor Sipahi     | ✅ Playable (Phase 2)                      |
-| 16 Parchi (flagship)        | Planned — Phase 3                          |
+| 16 Parchi (flagship)        | ✅ Playable (Phase 3)                      |
 | Draw & Guess (working name) | Planned — Phase 4                          |
 | Pen Fight                   | Planned — Phase 5                          |
 | Count Up (fixture)          | Development/test only, never in production |
@@ -76,6 +82,7 @@ packages/
   ui/             Color Burst Arcade design system (tokens, styles, animated primitives)
 games/
   rmcs/           Raja Mantri Chor Sipahi (shared types, engine + bot, board)
+  sixteen-parchi/ 16 Parchi (shared types + categories, engine + bot, board, content/en labels)
 e2e/              Playwright end-to-end tests
 tools/            Screenshot capture for visual review
 docs/             Documentation, frozen spec, architecture decision records
@@ -136,22 +143,24 @@ See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) and [docs/GAME_SYSTEM.md](doc
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md). Current suite: 219 unit/integration tests and 7
-end-to-end runs (desktop + mobile), including a full RMCS match on a phone profile.
+See [docs/TESTING.md](docs/TESTING.md). Current suite: 257 unit/integration tests and 10
+end-to-end runs (desktop + mobile), including full RMCS and 16 Parchi matches on a phone
+profile and a 16 Parchi match with reduced motion.
 
 ## Known limitations
 
 - All rooms and sessions live in server memory: a restart or deploy ends every game.
 - One server instance only (scaling path documented, not built).
-- Only one product game so far; public lobby and matchmaking arrive in Phase 6.
-- Client bundle is ≈ 142 KB gzipped (Motion); trimming is planned for Phase 8.
+- Two of the four games so far; public lobby and matchmaking arrive in Phase 6.
+- Client bundle is ≈ 144 KB gzipped (Motion; game boards load separately); trimming is
+  planned for Phase 8.
 - No sound (excluded from v1). English only (the UI is translation-ready).
 
 ## Roadmap
 
 1. ✅ Infrastructure and private rooms
 2. ✅ Raja Mantri Chor Sipahi + Color Burst Arcade design system
-3. 16 Parchi
+3. ✅ 16 Parchi + quick reactions
 4. Draw & Guess
 5. Pen Fight
 6. Public lobby, Quick Play, bot fill, "Play with Bots"

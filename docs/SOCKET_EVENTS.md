@@ -2,7 +2,7 @@
 
 Source of truth: `packages/protocol/src/events.ts` (types) and
 `packages/protocol/src/schemas.ts` (server-side zod schemas). This page lists what is
-implemented as of Phase 2.
+implemented as of Phase 3.
 
 ## Conventions
 
@@ -22,26 +22,27 @@ implemented as of Phase 2.
 
 ## Client → server
 
-| Event                 | Payload                                                  | Success result                        | Rate bucket         |
-| --------------------- | -------------------------------------------------------- | ------------------------------------- | ------------------- |
-| `session:setNickname` | `{ nickname }`                                           | `{ nickname }` (normalised)           | nickname            |
-| `room:create`         | `{ gameId }`                                             | `{ room: RoomView }`                  | roomCreate          |
-| `room:join`           | `{ code }`                                               | `{ room: RoomView }`                  | roomJoin            |
-| `room:leave`          | `{}`                                                     | `{}`                                  | roomAdmin           |
-| `room:setGame`        | `{ gameId }`                                             | `{}` (host, LOBBY)                    | roomAdmin           |
-| `room:updateSettings` | `{ settings }`                                           | `{}` (host, LOBBY)                    | roomAdmin           |
-| `room:addBot`         | `{}`                                                     | `{}` (host, LOBBY)                    | roomAdmin           |
-| `room:removeBot`      | `{ botId }`                                              | `{}` (host, LOBBY)                    | roomAdmin           |
-| `room:kick`           | `{ playerId }`                                           | `{}` (host)                           | roomAdmin           |
-| `room:start`          | `{}`                                                     | `{}` (host, LOBBY)                    | roomAdmin           |
-| `room:playAgain`      | `{}`                                                     | `{}` (host, RESULTS → STARTING)       | roomAdmin           |
-| `room:backToLobby`    | `{}`                                                     | `{}` (host, RESULTS → LOBBY)          | roomAdmin           |
-| `room:reclaimSeat`    | `{}`                                                     | `{}` (take your seat back from a bot) | roomAdmin           |
-| `match:action`        | `{ matchId, version, actionId, action }`                 | `{ version }`                         | matchAction         |
-| `match:resync`        | `{ matchId }`                                            | `{ update: MatchUpdate }`             | matchAction         |
-| `chat:send`           | `{ text }`                                               | `{}`                                  | chat (own cooldown) |
-| `report:submit`       | `{ playerId, reason: CHAT \| DRAWING \| NAME \| OTHER }` | `{}`                                  | report              |
-| `time:ping`           | `{ clientTs }`                                           | `{ clientTs, serverNow }`             | ping                |
+| Event                 | Payload                                                  | Success result                        | Rate bucket          |
+| --------------------- | -------------------------------------------------------- | ------------------------------------- | -------------------- |
+| `session:setNickname` | `{ nickname }`                                           | `{ nickname }` (normalised)           | nickname             |
+| `room:create`         | `{ gameId }`                                             | `{ room: RoomView }`                  | roomCreate           |
+| `room:join`           | `{ code }`                                               | `{ room: RoomView }`                  | roomJoin             |
+| `room:leave`          | `{}`                                                     | `{}`                                  | roomAdmin            |
+| `room:setGame`        | `{ gameId }`                                             | `{}` (host, LOBBY)                    | roomAdmin            |
+| `room:updateSettings` | `{ settings }`                                           | `{}` (host, LOBBY)                    | roomAdmin            |
+| `room:addBot`         | `{}`                                                     | `{}` (host, LOBBY)                    | roomAdmin            |
+| `room:removeBot`      | `{ botId }`                                              | `{}` (host, LOBBY)                    | roomAdmin            |
+| `room:kick`           | `{ playerId }`                                           | `{}` (host)                           | roomAdmin            |
+| `room:start`          | `{}`                                                     | `{}` (host, LOBBY)                    | roomAdmin            |
+| `room:playAgain`      | `{}`                                                     | `{}` (host, RESULTS → STARTING)       | roomAdmin            |
+| `room:backToLobby`    | `{}`                                                     | `{}` (host, RESULTS → LOBBY)          | roomAdmin            |
+| `room:reclaimSeat`    | `{}`                                                     | `{}` (take your seat back from a bot) | roomAdmin            |
+| `match:action`        | `{ matchId, version, actionId, action }`                 | `{ version }`                         | matchAction          |
+| `match:resync`        | `{ matchId }`                                            | `{ update: MatchUpdate }`             | matchAction          |
+| `chat:send`           | `{ text }`                                               | `{}`                                  | chat (own cooldown)  |
+| `chat:react`          | `{ reactionId }` (one of the 8 `REACTION_IDS`)           | `{}`                                  | reaction (1 / 1.5 s) |
+| `report:submit`       | `{ playerId, reason: CHAT \| DRAWING \| NAME \| OTHER }` | `{}`                                  | report               |
+| `time:ping`           | `{ clientTs }`                                           | `{ clientTs, serverNow }`             | ping                 |
 
 A coarse per-socket flood guard (burst 40, 20/s) silently drops excess packets before any
 handler runs.
@@ -52,6 +53,10 @@ per intent. Each id executes at most once per match; a repeat gets `DUPLICATE_AC
 (whatever happened to the first attempt). `version` is the view version the player acted
 on: a version the server never issued gets `STALE_VERSION` (and does not use up the id);
 older issued versions are fine — the game decides legality against the current state.
+
+**`chat:react` details:** only from a seated human while the room's match is running
+(`NOT_IN_ROOM` / `INVALID_PHASE` otherwise); unknown ids are `INVALID_PAYLOAD`; more than one
+per 1.5 s is `RATE_LIMITED` with `retryAfterMs`. Bots never react.
 
 ## Server → client
 
@@ -65,6 +70,7 @@ older issued versions are fine — the game decides legality against the current
 | `match:end`         | `{ matchId, results }`                                         | Match finished.                                                                                                 |
 | `chat:message`      | `ChatMessage`                                                  | A (moderated) message you may see.                                                                              |
 | `chat:history`      | `{ messages }`                                                 | On joining or reconnecting to a room (last 50 room-channel messages).                                           |
+| `chat:reaction`     | `{ fromId, seat, reactionId, sentAt }`                         | A player in your room's running match sent a quick reaction ([ADR-018](decisions/ADR-018-quick-reactions.md)).  |
 | `system:notice`     | `{ code: 'SERVER_RESTARTING' }`                                | Graceful shutdown started.                                                                                      |
 
 ## Key types
@@ -99,4 +105,4 @@ or `SERVER_BUSY`.
 ## Not implemented yet
 
 `mm:quickPlay`, `mm:cancel`, `lobby:watch`, `lobby:unwatch`, `lobby:rooms` (Phase 6),
-`match:stream` (Phase 4), `chat:react` / `chat:reaction` (quick reactions, with 16 Parchi).
+`match:stream` (Phase 4).

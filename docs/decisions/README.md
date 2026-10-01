@@ -21,3 +21,6 @@ Consequences. Status is `Accepted`, `Proposed` (waiting for approval) or `Supers
 | [014](ADR-014-lenient-action-versions.md)        | Lenient action versions + unique action ids                          | Accepted                                    |
 | [015](ADR-015-shared-ui-package.md)              | Shared design system package (`@cg/ui`)                              | Accepted                                    |
 | [016](ADR-016-animation-director.md)             | Animation director and effects modes                                 | Accepted                                    |
+| [017](ADR-017-sixteen-parchi-engine.md)          | 16 Parchi engine: simultaneous passing, re-keyed slips, claim races  | Accepted                                    |
+| [018](ADR-018-quick-reactions.md)                | Quick reactions as a platform feature                                | Accepted                                    |
+| [019](ADR-019-category-content-packs.md)         | Category content packs with original icons                           | Accepted                                    |

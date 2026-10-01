@@ -89,6 +89,8 @@ interface GameClientModule<V, A, E, Settings> {
   Settings?: LazyComponent<SettingsProps>; // host settings form in the lobby
   eventDuration?(event: E, effects: EffectsMode): number; // ms, paces the animation director
   resultStats?: { key: string; labelKey: string }[]; // results-screen columns from GameResults.stats
+  reactions?: boolean; // board draws quick-reaction bubbles → platform shows the picker
+  liteConfetti?: boolean; // podium confetti in lite mode too (default true)
 }
 ```
 
@@ -96,13 +98,17 @@ interface GameClientModule<V, A, E, Settings> {
 hold the newest one back while the current one animates), `version`, `me` (seat), `seats`
 (names/controllers), `send(action) → Promise<boolean>` (the platform attaches an
 `actionId`, coalesces double taps and shows any error), `effects` (`full` / `lite` /
-`reduced`), `msUntil(serverTs)`.
+`reduced`), `msUntil(serverTs)`, `reactions` (quick reactions on screen right now —
+`{ key, seat, emoji, label }`, already filtered for muted players; empty unless the module
+sets `reactions: true`).
 
 Boards build their UI from the shared design system (`@cg/ui`: `Avatar`, `PaperChit`,
-`CountdownRing`, `RollingNumber`, `Stamp`, `ConfettiBurst`, `durationFor`) and Motion.
+`CountdownRing`, `RollingNumber`, `Stamp`, `ConfettiBurst`, `ReactionBubble`,
+`durationFor`) and Motion.
 
 **Results screen:** the platform shows a podium and a ranking table; each entry in
-`resultStats` adds a column read from `getResults(s).stats[seat][key]` (RMCS: `score`).
+`resultStats` adds a column read from `getResults(s).stats[seat][key]` (RMCS: `score`;
+16 Parchi has placements only).
 
 ## The fixture game ("Count Up")
 

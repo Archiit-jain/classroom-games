@@ -5,7 +5,7 @@ One document per **shipped** game, describing the rules exactly as implemented.
 | Game                        | Document                                                 | Status               |
 | --------------------------- | -------------------------------------------------------- | -------------------- |
 | Raja Mantri Chor Sipahi     | [RAJA_MANTRI_CHOR_SIPAHI.md](RAJA_MANTRI_CHOR_SIPAHI.md) | Shipped (Phase 2)    |
-| 16 Parchi                   | `16_PARCHI.md`                                           | Arrives with Phase 3 |
+| 16 Parchi (flagship)        | [16_PARCHI.md](16_PARCHI.md)                             | Shipped (Phase 3)    |
 | Draw & Guess (working name) | `DRAW_AND_GUESS.md`                                      | Arrives with Phase 4 |
 | Pen Fight                   | `PEN_FIGHT.md`                                           | Arrives with Phase 5 |
 
