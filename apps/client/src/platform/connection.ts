@@ -21,6 +21,8 @@ export type ClientAck<T> = Ack<T> | { ok: false; code: ClientErrorCode; retryAft
 
 const REQUEST_TIMEOUT_MS = 8000;
 const SLOW_CONNECT_MS = 3000;
+/** Matches the waking-up message's promise of "up to a minute". */
+const UNREACHABLE_MS = 60_000;
 const MAX_CHAT = 100;
 
 function loadHidden(): string[] {
@@ -43,9 +45,12 @@ export class GameConnection {
   private readonly socket: ClientSocket;
   private clockOffset = 0;
   private toastSeq = 0;
-  private slowTimer: ReturnType<typeof setTimeout> | null = null;
+  private connectTimers: ReturnType<typeof setTimeout>[] = [];
+  /** The game server this client talks to (shown when it cannot be reached). */
+  readonly url: string;
 
   constructor(url: string) {
+    this.url = url;
     this.socket = io(url, {
       auth: (cb) => {
         const token = storage.get(KEYS.token);
@@ -53,7 +58,7 @@ export class GameConnection {
       },
       reconnectionDelayMax: 5000,
     });
-    this.armSlowTimer();
+    this.armConnectTimers();
     this.wire();
   }
 
@@ -152,11 +157,16 @@ export class GameConnection {
 
   // ─────────────────────────── wiring ───────────────────────────
 
-  private armSlowTimer(): void {
-    if (this.slowTimer) clearTimeout(this.slowTimer);
-    this.slowTimer = setTimeout(() => {
-      if (this.store.get().connection !== 'connected') this.store.set({ slow: true });
-    }, SLOW_CONNECT_MS);
+  /** Marks a connection attempt as slow, then as unreachable, while it keeps retrying. */
+  private armConnectTimers(): void {
+    for (const timer of this.connectTimers) clearTimeout(timer);
+    const mark = (patch: Pick<AppState, 'slow'> | Pick<AppState, 'unreachable'>) => () => {
+      if (this.store.get().connection !== 'connected') this.store.set(patch);
+    };
+    this.connectTimers = [
+      setTimeout(mark({ slow: true }), SLOW_CONNECT_MS),
+      setTimeout(mark({ unreachable: true }), UNREACHABLE_MS),
+    ];
   }
 
   private async syncClock(): Promise<void> {
@@ -174,7 +184,12 @@ export class GameConnection {
     const { socket, store } = this;
 
     socket.on('connect', () => {
-      store.set({ connection: 'connected', slow: false, serverRestarting: false });
+      store.set({
+        connection: 'connected',
+        slow: false,
+        unreachable: false,
+        serverRestarting: false,
+      });
       void this.syncClock();
     });
 
@@ -188,7 +203,7 @@ export class GameConnection {
     socket.on('disconnect', (reason) => {
       if (store.get().connection === 'displaced') return;
       store.set({ connection: 'reconnecting' });
-      this.armSlowTimer();
+      this.armConnectTimers();
       // A server-initiated disconnect is not retried automatically by Socket.IO.
       if (reason === 'io server disconnect') socket.connect();
     });

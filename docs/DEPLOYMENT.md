@@ -52,7 +52,9 @@ PORT=<platform port>
 - One instance only; scaling requires room affinity + sticky sessions + Redis adapter
   ([ADR-005](decisions/ADR-005-in-memory-room-store.md)).
 - Free hosting tiers that sleep will make the first visitor wait; the client shows
-  "Waking up the game server…".
+  "Waking up the game server…" after 3 s and, if the server still has not answered after a
+  minute, "The game server isn't responding…". It keeps retrying throughout and connects
+  without a reload as soon as the server is up.
 
 ## Still to do (Phase 9)
 

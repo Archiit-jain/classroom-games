@@ -136,7 +136,7 @@ See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) and [docs/GAME_SYSTEM.md](doc
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md). Current suite: 214 unit/integration tests and 7
+See [docs/TESTING.md](docs/TESTING.md). Current suite: 219 unit/integration tests and 7
 end-to-end runs (desktop + mobile), including a full RMCS match on a phone profile.
 
 ## Known limitations

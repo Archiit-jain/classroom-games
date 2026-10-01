@@ -66,6 +66,10 @@ export const en = {
   connection: {
     connecting: 'Connecting…',
     waking: 'Waking up the game server… this can take up to a minute.',
+    unreachable:
+      'The game server isn’t responding. Still trying — check your internet connection or come back a bit later.',
+    devServerDown:
+      'Can’t reach the game server at {url} — it isn’t running. Start it with “pnpm dev” in the Classroom Games folder; this page reconnects by itself.',
     reconnecting: 'Connection lost. Reconnecting…',
     restarting: 'The server is restarting. You’ll be reconnected shortly.',
     displaced: 'You opened Classroom Games in another tab.',

@@ -17,7 +17,13 @@ pnpm dev
 - Server: http://localhost:3001 (`tsx watch` — restarts on file changes)
 - Health check: http://localhost:3001/healthz
 
-`pnpm dev:server` and `pnpm dev:client` run them separately.
+`pnpm dev:server` and `pnpm dev:client` run them separately. Run these from the
+`Classroom Games` folder (the repository root), not its parent.
+
+If the page shows **"Can't reach the game server … it isn't running"**, only the client is
+up: start the server (`pnpm dev` or `pnpm dev:server`). The page reconnects by itself — no
+reload needed. Development builds show this message instead of the production
+"Waking up the game server…", because a local server is never asleep.
 
 > Every server restart (including automatic restarts in watch mode) ends all rooms and
 > sessions — they live in memory. Open clients reconnect with a new session and return to

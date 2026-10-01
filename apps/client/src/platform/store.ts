@@ -22,6 +22,8 @@ export interface AppState {
   connection: ConnectionStatus;
   /** True when connecting takes long enough that the server is probably waking up. */
   slow: boolean;
+  /** True when still not connected after the server's maximum wake-up time. */
+  unreachable: boolean;
   serverRestarting: boolean;
   session: { playerId: string; nickname: string | null } | null;
   games: GameInfo[];
@@ -37,6 +39,7 @@ export interface AppState {
 export const initialState: AppState = {
   connection: 'connecting',
   slow: false,
+  unreachable: false,
   serverRestarting: false,
   session: null,
   games: [],
