@@ -1,28 +1,5 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
-
-/** Each browser context has its own storage, so each is a separate anonymous player. */
-async function newPlayer(browser: Browser, nickname: string): Promise<Page> {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto('/');
-  const nameInput = page.getByLabel('Your nickname');
-  await expect(nameInput).toBeVisible();
-  await nameInput.fill(nickname);
-  return page;
-}
-
-async function createRoom(host: Page): Promise<string> {
-  await host.getByRole('button', { name: 'Create private room' }).click();
-  const code = host.getByTestId('room-code');
-  await expect(code).toHaveText(/^[A-Z0-9]{6}$/);
-  return (await code.textContent()) ?? '';
-}
-
-async function joinRoom(page: Page, code: string): Promise<void> {
-  await page.getByLabel('Room code').fill(code);
-  await page.getByRole('button', { name: 'Join room' }).click();
-  await expect(page.getByTestId('room-code')).toHaveText(code);
-}
+import { expect, test, type Page } from '@playwright/test';
+import { FIXTURE, createRoom, joinRoom, newPlayer } from './helpers';
 
 /** Clicks "+3" whenever it is this player's turn, until the results screen appears. */
 async function playUntilResults(pages: Page[]): Promise<void> {
@@ -43,12 +20,12 @@ test('two players and a bot play a full private match', async ({ browser }) => {
   const host = await newPlayer(browser, 'Archit');
   const guest = await newPlayer(browser, 'Priya');
 
-  const code = await createRoom(host);
+  const code = await createRoom(host, FIXTURE);
   await joinRoom(guest, code);
-  await expect(host.getByText('Priya')).toBeVisible();
+  await expect(host.locator('.member', { hasText: 'Priya' })).toBeVisible();
 
   await host.getByRole('button', { name: 'Add bot' }).click();
-  await expect(guest.getByText('Bot Tiku')).toBeVisible();
+  await expect(guest.locator('.member', { hasText: 'Bot Tiku' })).toBeVisible();
 
   // Chat is censored before the other player sees it.
   await host.getByPlaceholder('Say something nice…').fill('you are stupid');
@@ -73,7 +50,7 @@ test('two players and a bot play a full private match', async ({ browser }) => {
 test('a guest who reloads the page returns to the same room', async ({ browser }) => {
   const host = await newPlayer(browser, 'Host');
   const guest = await newPlayer(browser, 'Guest');
-  const code = await createRoom(host);
+  const code = await createRoom(host, FIXTURE);
   await joinRoom(guest, code);
 
   await guest.reload();
@@ -83,22 +60,24 @@ test('a guest who reloads the page returns to the same room', async ({ browser }
 
 test('friendly errors for a wrong code and a disallowed nickname', async ({ browser }) => {
   const page = await newPlayer(browser, 'Tester');
-  await page.getByLabel('Room code').fill('ZZZZZZ');
-  await page.getByRole('button', { name: 'Join room' }).click();
+  await page.getByLabel('Room code', { exact: true }).fill('ZZZZZZ');
+  await page.getByRole('button', { name: 'Join', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText(
     'No room with that code. Check the code and try again.',
   );
 
   await page.getByLabel('Your nickname').fill('Bot Fake');
-  await page.getByRole('button', { name: 'Create private room' }).click();
+  await page.getByRole('button', { name: `Create room: ${FIXTURE}` }).click();
   await expect(page.getByRole('alert')).toHaveText('That nickname isn’t allowed. Try another one.');
 });
 
-test('the home screen fits a phone without horizontal scrolling', async ({ browser }) => {
+test('the home screen fits a 360 px phone without horizontal scrolling @mobile', async ({
+  browser,
+}) => {
   const context = await browser.newContext({ viewport: { width: 360, height: 740 } });
   const page = await context.newPage();
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Create private room' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Create room: / }).first()).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   );

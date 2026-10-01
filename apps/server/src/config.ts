@@ -14,6 +14,8 @@ export interface ServerConfig {
   allowedOrigins: string[];
   trustProxy: boolean;
   enableFixtureGame: boolean;
+  /** Multiplies game phase timers (dev/e2e speed-ups). Always 1 in production. */
+  gameTimeScale: number;
   logLevel: LogLevel;
   timing: {
     reconnectGraceMs: number;
@@ -59,6 +61,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
   allowedOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://*.localhost:5173'],
   trustProxy: false,
   enableFixtureGame: true,
+  gameTimeScale: 1,
   logLevel: 'info',
   timing: {
     reconnectGraceMs: 30_000,
@@ -132,6 +135,7 @@ const EnvSchema = z.object({
   ALLOWED_ORIGINS: z.string().optional(),
   TRUST_PROXY: bool.optional(),
   ENABLE_FIXTURE_GAME: bool.optional(),
+  GAME_TIME_SCALE: z.coerce.number().min(0.05).max(10).optional(),
   LOG_LEVEL: z.enum(['silent', 'error', 'warn', 'info', 'debug']).optional(),
 });
 
@@ -151,6 +155,7 @@ export function loadConfig(
     trustProxy: parsed.TRUST_PROXY,
     // The fixture game is a test/dev tool and is never registered in production.
     enableFixtureGame: isProduction ? false : (parsed.ENABLE_FIXTURE_GAME ?? true),
+    gameTimeScale: isProduction ? 1 : parsed.GAME_TIME_SCALE,
     logLevel: parsed.LOG_LEVEL,
   };
   return merge(merge(DEFAULT_CONFIG, fromEnv), overrides);

@@ -1,0 +1,51 @@
+import type { MessageCatalog } from '@cg/game-sdk/client';
+
+/** English text for Raja Mantri Chor Sipahi. */
+export const rmcsMessages = {
+  name: 'Raja Mantri Chor Sipahi',
+  description: 'Four secret chits. The Mantri must catch the Chor. 10 rounds — highest score wins.',
+  players: '4 players',
+
+  roleRAJA: 'Raja',
+  roleMANTRI: 'Mantri',
+  roleSIPAHI: 'Sipahi',
+  roleCHOR: 'Chor',
+  subRAJA: 'The King',
+  subMANTRI: 'The Minister',
+  subSIPAHI: 'The Soldier',
+  subCHOR: 'The Thief',
+  pointsRAJA: '1000 points',
+  pointsMANTRI: '800 if you catch the Chor',
+  pointsSIPAHI: '500 points',
+  pointsCHOR: '800 if you escape',
+  hintRAJA: 'Sit back, Your Majesty — 1000 points are yours this round.',
+  hintMANTRI: 'Find the Chor between the other two players to keep your 800.',
+  hintSIPAHI: 'You get 500 either way. Keep a straight face!',
+  hintCHOR: 'Stay cool! If the Mantri picks wrong, you steal the 800.',
+
+  round: 'Round {round}/{total}',
+  yourChit: 'Your chit',
+  dealing: 'Shuffling the chits…',
+  rajaIs: '{name} is the Raja!',
+  rajaIsYou: 'You are the Raja!',
+  mantriIs: '{name} is the Mantri!',
+  mantriIsYou: 'You are the Mantri!',
+  whoIsChor: 'Who is the Chor?',
+  youHunt: 'Find the Chor! Tap a suspect.',
+  mantriHunting: '{name} is hunting for the Chor…',
+  accuse: 'Accuse {name}!',
+  choose: 'Suspect {name}',
+  suspect: 'Suspect',
+  cancel: 'Cancel',
+  caught: 'Chor caught!',
+  escaped: 'Chor escaped!',
+  accused: '{mantri} accused {target}',
+  autoAccused: 'Time’s up! {mantri} pointed at {target} at random',
+  finalScores: 'Final scores!',
+  you: 'You',
+  bot: 'Bot',
+  hiddenChit: 'Folded chit',
+  score: 'Score',
+} satisfies MessageCatalog;
+
+export type RmcsMessageKey = keyof typeof rmcsMessages;

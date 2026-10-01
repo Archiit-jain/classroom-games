@@ -1,0 +1,403 @@
+/* Raja Mantri Chor Sipahi — Color Burst Arcade board. */
+
+.rmcs {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rmcs-top {
+  display: flex;
+  justify-content: center;
+}
+.rmcs-round {
+  padding: 4px 16px 2px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--cb-yellow);
+  background: var(--cb-night-950);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-pill);
+}
+
+/* The desk: a classroom chalkboard in a wooden frame. */
+.rmcs-table {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 1.15fr) minmax(0, 1fr);
+  grid-template-areas:
+    '. top .'
+    'left desk right'
+    '. bottom .';
+  align-items: center;
+  justify-items: center;
+  gap: 8px 4px;
+  padding: 16px 6px;
+  border-radius: 26px;
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(255, 255, 255, 0.07), transparent 60%),
+    radial-gradient(ellipse at 50% 50%, #1e5c56 0%, #164541 55%, #0f302e 100%);
+  border: var(--edge) solid var(--cb-outline);
+  box-shadow:
+    inset 0 0 0 6px #7a5230,
+    inset 0 0 0 9px var(--cb-outline),
+    0 8px 0 var(--cb-outline),
+    var(--float);
+}
+.rmcs-table::after {
+  content: '';
+  position: absolute;
+  inset: 20px;
+  border: 2px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  pointer-events: none;
+}
+
+.rmcs-seat {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.rmcs-seat--top {
+  grid-area: top;
+}
+.rmcs-seat--bottom {
+  grid-area: bottom;
+}
+.rmcs-seat--left {
+  grid-area: left;
+}
+.rmcs-seat--right {
+  grid-area: right;
+}
+
+.rmcs-seat__who {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+.rmcs-seat__name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+.rmcs-seat__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rmcs-seat__name .badge {
+  font-size: 0.6rem;
+  padding: 0 5px;
+}
+.rmcs-seat__score {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--cb-yellow);
+  text-shadow: 0 2px 0 var(--cb-outline);
+}
+.rmcs-delta {
+  position: absolute;
+  top: 0;
+  right: -10px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: var(--color-success);
+  text-shadow:
+    0 2px 0 var(--cb-outline),
+    0 0 12px rgba(62, 224, 143, 0.6);
+  pointer-events: none;
+}
+.rmcs-delta--zero {
+  color: var(--color-text-muted);
+  text-shadow: 0 2px 0 var(--cb-outline);
+}
+
+.rmcs-seat__chit {
+  position: relative;
+}
+.rmcs-seat.is-suspect .cb-chit {
+  filter: drop-shadow(0 0 10px rgba(45, 226, 230, 0.75));
+}
+.rmcs-seat.is-selected .cb-chit {
+  filter: drop-shadow(0 0 14px var(--cb-pink));
+  translate: 0 -5px;
+  transition: translate var(--dur-fast);
+}
+.rmcs-seat.is-accused .rmcs-seat__chit .cb-chit {
+  animation: rmcs-shake 0.45s ease-in-out 2;
+}
+[data-effects='reduced'] .rmcs-seat.is-accused .rmcs-seat__chit .cb-chit,
+[data-effects='lite'] .rmcs-seat.is-accused .rmcs-seat__chit .cb-chit {
+  animation: none;
+}
+@keyframes rmcs-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px) rotate(-3deg);
+  }
+  75% {
+    transform: translateX(5px) rotate(3deg);
+  }
+}
+/* Points at the accused chit from its top-left corner, clear of the name and score. */
+.rmcs-pointer {
+  position: absolute;
+  top: -16px;
+  left: -20px;
+  z-index: 2;
+  rotate: -45deg;
+  filter: drop-shadow(0 3px 0 var(--cb-outline));
+}
+
+.rmcs-chitface {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  border-top: 7px solid var(--role);
+  border-radius: 9px;
+}
+.rmcs-chitface__name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.78rem;
+  line-height: 1;
+  color: var(--cb-ink);
+}
+
+/* Centre of the desk */
+.rmcs-desk {
+  grid-area: desk;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 150px;
+  text-align: center;
+}
+.rmcs-desk__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+.rmcs-desk__text {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.02rem;
+  line-height: 1.15;
+  color: #fff;
+  text-shadow: 0 2px 0 var(--cb-outline);
+  overflow-wrap: anywhere;
+}
+.rmcs-desk__sub {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.25;
+  color: #d8f3ef;
+  overflow-wrap: anywhere;
+}
+.rmcs-desk .cb-stamp {
+  font-size: clamp(1.05rem, 5vw, 1.8rem);
+  padding: 4px 10px 1px;
+  border-width: 4px;
+}
+.rmcs-deal {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+.rmcs-deal__chit {
+  position: absolute;
+  left: 16px;
+  top: 6px;
+  width: 34px;
+  height: 46px;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 7px, var(--cb-paper-line) 7px 8px),
+    var(--cb-paper-shade);
+  border: 2px solid var(--cb-outline);
+  border-radius: 6px;
+  box-shadow: 0 3px 0 var(--cb-outline);
+}
+
+/* Mantri's accusation bar — sticks to the bottom of the screen so the Mantri never
+   has to scroll to accuse on a phone. */
+.rmcs-accuse {
+  position: sticky;
+  bottom: 12px;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: rgba(12, 7, 32, 0.86);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-radius: 22px;
+  backdrop-filter: blur(6px);
+  box-shadow: var(--float);
+}
+.rmcs-accuse__hint {
+  margin: 0;
+  padding: 8px 16px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--cb-ink);
+  background: var(--cb-cyan);
+  border: var(--edge) solid var(--cb-outline);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--pop-sm);
+}
+
+/* Your own chit, big */
+.rmcs-mycard {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px 14px 44px;
+  border-left: 12px solid var(--role);
+  transform-origin: center;
+}
+.rmcs-mycard__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 74px;
+  height: 74px;
+  background: #fff;
+  border: var(--edge) solid var(--cb-outline);
+  border-radius: 50%;
+  box-shadow: 0 3px 0 var(--cb-outline);
+}
+.rmcs-mycard__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rmcs-mycard__label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cb-pencil);
+}
+.rmcs-mycard__role {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1;
+}
+.rmcs-mycard__sub {
+  font-weight: 700;
+  color: var(--cb-pencil);
+}
+.rmcs-mycard__points {
+  align-self: flex-start;
+  padding: 1px 10px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.9rem;
+  background: var(--role);
+  border: 2px solid var(--cb-outline);
+  border-radius: var(--radius-pill);
+}
+.rmcs-mycard__hint {
+  margin: 4px 0 0;
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
+/* Phones: tighter seats so the whole table fits on one screen. */
+@media (max-width: 699px) {
+  .rmcs-table {
+    gap: 4px 2px;
+    padding: 12px 4px;
+  }
+  .rmcs-seat {
+    gap: 3px;
+  }
+  .rmcs-seat .cb-avatar {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 18px !important;
+  }
+  .rmcs-seat .cb-chit {
+    width: 44px !important;
+    height: 56px !important;
+  }
+  .rmcs-seat__name {
+    font-size: 0.82rem;
+  }
+  .rmcs-seat__score {
+    font-size: 1rem;
+  }
+  .rmcs-chitface__name {
+    font-size: 0.66rem;
+  }
+  .rmcs-desk {
+    min-height: 120px;
+  }
+  /* The verdict stamp must stay inside the narrow centre column. */
+  .rmcs-desk .cb-stamp {
+    max-width: 100%;
+    font-size: clamp(0.9rem, 4.2vw, 1.4rem);
+    white-space: normal;
+    text-align: center;
+  }
+  .rmcs-mycard {
+    padding: 10px 12px 10px 40px;
+  }
+  .rmcs-mycard__icon {
+    width: 58px;
+    height: 58px;
+  }
+  .rmcs-mycard__role {
+    font-size: 1.6rem;
+  }
+}
+
+@media (min-width: 700px) {
+  .rmcs-table {
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 1.25fr) minmax(0, 1fr);
+    min-height: 430px;
+    padding: 28px 18px;
+    gap: 16px 10px;
+  }
+  .rmcs-seat__name {
+    font-size: 1.05rem;
+  }
+  .rmcs-desk__text {
+    font-size: 1.3rem;
+  }
+}

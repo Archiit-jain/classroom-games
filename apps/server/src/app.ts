@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AnyGameModule } from '@cg/game-sdk';
 import { fixtureGame } from '@cg/game-sdk/fixture';
+import { createRmcsGame } from '@cg/game-rmcs/server';
 import { createModerator, type Moderator } from '@cg/moderation';
 import { NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH } from '@cg/protocol';
 import { Server } from 'socket.io';
@@ -23,7 +24,7 @@ import { TimerService } from './util/TimerService';
 
 export interface GameServerOptions {
   config: ServerConfig;
-  /** Games to register. Defaults to the fixture game when enabled (never in production). */
+  /** Games to register. Defaults to `defaultGames(config)`. */
   games?: AnyGameModule[];
   moderator?: Moderator;
   reportSink?: ReportSink;
@@ -51,14 +52,21 @@ export interface GameServer {
   close(): Promise<void>;
 }
 
+/** Product games (in menu order), plus the fixture game outside production. */
+export function defaultGames(config: ServerConfig): AnyGameModule[] {
+  return [
+    createRmcsGame({ timeScale: config.gameTimeScale }),
+    ...(config.enableFixtureGame ? [fixtureGame] : []),
+  ];
+}
+
 export function createGameServer(options: GameServerOptions): GameServer {
   const { config } = options;
   const log = options.log ?? createLogger(config.logLevel);
   let shuttingDown = false;
 
   const registry = new GameRegistry();
-  for (const game of options.games ?? (config.enableFixtureGame ? [fixtureGame] : []))
-    registry.register(game);
+  for (const game of options.games ?? defaultGames(config)) registry.register(game);
 
   const moderator =
     options.moderator ??

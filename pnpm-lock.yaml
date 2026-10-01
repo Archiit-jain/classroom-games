@@ -41,6 +41,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@cg/game-rmcs':
+        specifier: workspace:*
+        version: link:../../games/rmcs
       '@cg/game-sdk':
         specifier: workspace:*
         version: link:../../packages/game-sdk
@@ -78,6 +81,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@cg/game-rmcs':
+        specifier: workspace:*
+        version: link:../../games/rmcs
       '@cg/game-sdk':
         specifier: workspace:*
         version: link:../../packages/game-sdk
@@ -103,6 +109,31 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+
+  games/rmcs:
+    dependencies:
+      '@cg/game-sdk':
+        specifier: workspace:*
+        version: link:../../packages/game-sdk
+      '@cg/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@cg/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      motion:
+        specifier: ^13.4.6
+        version: 13.4.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      react:
+        specifier: ^19.3.0
+        version: 19.3.0
 
   packages/game-sdk:
     dependencies:
