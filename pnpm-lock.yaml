@@ -47,6 +47,9 @@ importers:
       '@cg/game-sdk':
         specifier: workspace:*
         version: link:../../packages/game-sdk
+      '@cg/game-sixteen-parchi':
+        specifier: workspace:*
+        version: link:../../games/sixteen-parchi
       '@cg/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -87,6 +90,9 @@ importers:
       '@cg/game-sdk':
         specifier: workspace:*
         version: link:../../packages/game-sdk
+      '@cg/game-sixteen-parchi':
+        specifier: workspace:*
+        version: link:../../games/sixteen-parchi
       '@cg/moderation':
         specifier: workspace:*
         version: link:../../packages/moderation
@@ -128,6 +134,34 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
     devDependencies:
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      react:
+        specifier: ^19.3.0
+        version: 19.3.0
+
+  games/sixteen-parchi:
+    dependencies:
+      '@cg/game-sdk':
+        specifier: workspace:*
+        version: link:../../packages/game-sdk
+      '@cg/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@cg/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      motion:
+        specifier: ^13.4.6
+        version: 13.4.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@cg/moderation':
+        specifier: workspace:*
+        version: link:../../packages/moderation
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0

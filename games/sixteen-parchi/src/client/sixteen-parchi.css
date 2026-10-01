@@ -1,0 +1,571 @@
+/* 16 Parchi — Color Burst Arcade board: a wooden school desk, paper slips, sticker seats. */
+
+.sp {
+  --slip-w: 70px;
+  --slip-h: 92px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ───────── Top strip ───────── */
+.sp-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sp-category,
+.sp-pass {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px 1px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: var(--cb-night-950);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-pill);
+}
+.sp-category {
+  min-width: 0;
+  color: var(--color-text);
+}
+.sp-category__icons {
+  display: inline-flex;
+  gap: 1px;
+}
+.sp-pass {
+  color: var(--cb-pink);
+  white-space: nowrap;
+}
+
+/* ───────── The desk ───────── */
+.sp-table {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(128px, 1.3fr) minmax(0, 1fr);
+  grid-template-areas:
+    '. top .'
+    'left desk right'
+    '. bottom .';
+  align-items: center;
+  justify-items: center;
+  gap: 6px 4px;
+  padding: 14px 6px 10px;
+  border-radius: 26px;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(255, 236, 200, 0.16), transparent 62%),
+    repeating-linear-gradient(
+      100deg,
+      rgba(0, 0, 0, 0) 0 22px,
+      rgba(60, 28, 6, 0.12) 22px 24px,
+      rgba(0, 0, 0, 0) 24px 51px
+    ),
+    linear-gradient(160deg, #b8773f 0%, #9a5e2c 55%, #7b4520 100%);
+  border: var(--edge) solid var(--cb-outline);
+  box-shadow:
+    inset 0 0 0 5px #5b3216,
+    inset 0 0 0 8px var(--cb-outline),
+    0 8px 0 var(--cb-outline),
+    var(--float);
+}
+
+/* ───────── Seats ───────── */
+.sp-seat {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+}
+.sp-seat--top {
+  grid-area: top;
+}
+.sp-seat--bottom {
+  grid-area: bottom;
+}
+.sp-seat--left {
+  grid-area: left;
+}
+.sp-seat--right {
+  grid-area: right;
+}
+.sp-seat__who {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+.sp-seat--bottom .sp-seat__who {
+  flex-direction: row;
+  gap: 6px;
+}
+.sp-seat__avatar {
+  position: relative;
+  display: inline-grid;
+}
+.sp-seat__name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.92rem;
+  line-height: 1.1;
+  color: var(--cb-paper);
+  text-shadow: 0 2px 0 var(--cb-outline);
+}
+.sp-seat__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-seat__name .badge {
+  font-size: 0.6rem;
+  padding: 0 5px;
+  text-shadow: none;
+}
+.sp-seat.is-done .sp-seat__who {
+  opacity: 0.6;
+  filter: saturate(0.4);
+}
+
+/* Opponents' four folded slips, fanned. */
+.sp-seat__stack {
+  position: relative;
+  width: 70px;
+  height: 44px;
+}
+.sp-seat__mini {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  margin-left: -13px;
+  transform-origin: 50% 90%;
+}
+.sp-seat__mini:nth-child(1) {
+  left: calc(50% - 15px);
+}
+.sp-seat__mini:nth-child(2) {
+  left: calc(50% - 5px);
+}
+.sp-seat__mini:nth-child(3) {
+  left: calc(50% + 5px);
+}
+.sp-seat__mini:nth-child(4) {
+  left: calc(50% + 15px);
+}
+.sp-seat.is-selected .sp-seat__mini:nth-child(4) .sp-slip__back {
+  box-shadow:
+    0 0 0 2px var(--cb-cyan),
+    0 0 12px rgba(45, 226, 230, 0.7);
+}
+
+/* A finished player's medal + revealed set */
+.sp-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.sp-done__medal {
+  display: inline-grid;
+  filter: drop-shadow(0 3px 0 var(--cb-outline));
+}
+.sp-done__set {
+  display: flex;
+  gap: 2px;
+}
+
+/* ───────── Desk centre ───────── */
+.sp-desk {
+  position: relative;
+  z-index: 3;
+  grid-area: desk;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 150px;
+  text-align: center;
+}
+.sp-desk__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+}
+.sp-desk__text {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.98rem;
+  line-height: 1.15;
+  color: var(--cb-paper);
+  text-shadow: 0 2px 0 var(--cb-outline);
+}
+.sp-desk__big {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.45rem;
+  line-height: 1.05;
+  color: var(--cb-yellow);
+  text-shadow:
+    0 2px 0 var(--cb-outline),
+    0 0 18px rgba(255, 210, 63, 0.45);
+}
+.sp-desk__big.is-hot {
+  color: var(--cb-pink);
+  text-shadow:
+    0 2px 0 var(--cb-outline),
+    0 0 18px rgba(255, 62, 138, 0.6);
+}
+.sp-desk__sub {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: #ffe9c8;
+  text-shadow: 0 1px 0 var(--cb-outline);
+}
+
+/* The pass spot (inside the selection countdown ring) */
+.sp-spot {
+  display: grid;
+  place-items: center;
+  width: 82px;
+  height: 82px;
+  border: 2px dashed rgba(255, 247, 227, 0.5);
+  border-radius: 50%;
+}
+.sp-spot.is-filled {
+  border-color: transparent;
+}
+.sp-spot__slip {
+  display: inline-grid;
+}
+.sp-spot__slip .sp-slip {
+  --slip-w: 46px;
+  --slip-h: 60px;
+}
+.sp-spot__arrow {
+  width: 26px;
+  height: 26px;
+  border-left: 5px solid rgba(255, 247, 227, 0.75);
+  border-bottom: 5px solid rgba(255, 247, 227, 0.75);
+  border-radius: 3px;
+  rotate: 45deg;
+  translate: 4px 0;
+}
+
+/* The clockwise ring */
+.sp-ring {
+  position: absolute;
+  inset: 6px;
+  z-index: 1;
+  pointer-events: none;
+}
+.sp-ring svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.sp-ring path {
+  fill: none;
+  stroke: rgba(255, 247, 227, 0.35);
+  stroke-width: 2.5;
+  stroke-dasharray: 7 7;
+}
+.sp-ring__arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  translate: -50% -50%;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 13px solid rgba(255, 247, 227, 0.6);
+}
+
+/* Slips in flight */
+.sp-flights {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.sp-flight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: -24px 0 0 -18px;
+  filter: drop-shadow(0 8px 6px rgba(40, 16, 2, 0.45));
+}
+.sp-flight .sp-slip--mini {
+  width: 36px;
+  height: 48px;
+}
+
+/* ───────── Slips ───────── */
+.sp-slip {
+  display: inline-block;
+  width: var(--slip-w);
+  height: var(--slip-h);
+  perspective: 600px;
+}
+.sp-slip--mini {
+  width: 26px;
+  height: 34px;
+}
+.sp-slip__inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.sp-slip__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 3px 4px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border: var(--edge) solid var(--cb-outline);
+  border-radius: 9px;
+  box-shadow: 0 4px 0 var(--cb-outline);
+}
+.sp-slip__front {
+  color: var(--cb-ink);
+  background:
+    linear-gradient(to bottom, transparent 49%, rgba(31, 22, 71, 0.14) 50%, transparent 52%),
+    repeating-linear-gradient(to bottom, transparent 0 10px, var(--cb-paper-line) 10px 11px),
+    var(--cb-paper);
+  border-top-width: 8px;
+  border-top-color: var(--slip-accent, var(--cb-outline));
+}
+.sp-slip__back {
+  transform: rotateX(180deg);
+  background:
+    linear-gradient(
+      135deg,
+      transparent 47%,
+      rgba(31, 22, 71, 0.2) 48%,
+      rgba(31, 22, 71, 0.2) 52%,
+      transparent 53%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 48%,
+      rgba(31, 22, 71, 0.25) 49%,
+      rgba(31, 22, 71, 0.25) 51%,
+      transparent 52%
+    ),
+    var(--cb-paper-shade);
+}
+.sp-slip--mini .sp-slip__face {
+  padding: 2px;
+  border-width: 2px;
+  border-radius: 5px;
+  box-shadow: 0 2px 0 var(--cb-outline);
+}
+.sp-slip--mini .sp-slip__front {
+  border-top-width: 4px;
+}
+.sp-slip__label {
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.74rem;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-slip.is-glow .sp-slip__front {
+  box-shadow:
+    0 4px 0 var(--cb-outline),
+    0 0 0 3px var(--cb-yellow),
+    0 0 20px rgba(255, 210, 63, 0.85);
+}
+
+/* ───────── Your hand ───────── */
+.sp-hand {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 12px;
+  min-height: calc(var(--slip-h) + 26px);
+  padding: 14px 0 4px;
+}
+.sp-group {
+  position: relative;
+  display: flex;
+}
+.sp-group > .sp-hand__slip + .sp-hand__slip {
+  margin-left: calc(var(--slip-w) * -0.17);
+}
+.sp-group > .sp-hand__slip:nth-child(2) {
+  rotate: 4deg;
+}
+.sp-group > .sp-hand__slip:nth-child(3) {
+  rotate: 8deg;
+}
+.sp-group__count {
+  position: absolute;
+  top: -12px;
+  right: -8px;
+  z-index: 2;
+  padding: 0 7px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: var(--cb-ink);
+  background: var(--cb-yellow);
+  border: 2px solid var(--cb-outline);
+  border-radius: var(--radius-pill);
+}
+.sp-hand__slip {
+  display: inline-grid;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 10px;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.sp-hand__slip:disabled {
+  cursor: default;
+}
+.sp-hand__slip:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+}
+.sp-hand__slip:not(:disabled):hover .sp-slip__front {
+  border-top-width: 10px;
+}
+
+/* ───────── Claim ───────── */
+.sp-claim {
+  position: sticky;
+  bottom: 12px;
+  z-index: 8;
+  display: flex;
+  justify-content: center;
+}
+.sp-claim__btn {
+  min-width: 220px;
+  font-size: 1.7rem;
+  letter-spacing: 0.08em;
+}
+.sp-claim__btn.is-pulsing {
+  animation: sp-pulse 0.9s ease-in-out infinite;
+}
+[data-effects='full'] .sp .cb-ring--urgent {
+  animation: sp-pulse 0.5s ease-in-out infinite;
+}
+@keyframes sp-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+}
+
+/* Your finish */
+.sp-mine-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 12px;
+  text-align: center;
+  background: var(--color-surface);
+  border: var(--edge) solid var(--cb-outline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--pop);
+}
+.sp-mine-done__text {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.5rem;
+  color: var(--cb-yellow);
+}
+.sp-mine-done__sub {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* Settings preview */
+.sp-settings__preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+}
+.sp-settings__random {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.sp-desk__text,
+.sp-desk__big {
+  text-wrap: balance;
+}
+
+@media (max-width: 699px) {
+  .sp-desk__big {
+    font-size: 1.15rem;
+  }
+  /* Side seats are narrow on phones: show a finished set as 2 × 2. */
+  .sp-seat--left .sp-done__set,
+  .sp-seat--right .sp-done__set {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+  }
+  .sp-group > .sp-hand__slip + .sp-hand__slip {
+    margin-left: calc(var(--slip-w) * -0.1);
+  }
+}
+
+/* ───────── Wider screens ───────── */
+@media (min-width: 700px) {
+  .sp {
+    --slip-w: 92px;
+    --slip-h: 120px;
+  }
+  .sp-table {
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 1.4fr) minmax(0, 1fr);
+    padding: 22px 12px 16px;
+  }
+  .sp-desk {
+    min-height: 190px;
+  }
+  .sp-slip--mini {
+    width: 30px;
+    height: 40px;
+  }
+  .sp-seat__stack {
+    width: 84px;
+    height: 52px;
+  }
+  .sp-slip__label {
+    font-size: 0.86rem;
+  }
+}

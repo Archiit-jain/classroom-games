@@ -1,5 +1,6 @@
 import { rmcsClient } from '@cg/game-rmcs/client';
 import type { AnyGameClientModule } from '@cg/game-sdk/client';
+import { sixteenParchiClient } from '@cg/game-sixteen-parchi/client';
 import { fixtureClient } from './fixture';
 
 /**
@@ -12,6 +13,7 @@ export const gameClients: ReadonlyMap<string, AnyGameClientModule> = new Map<
   AnyGameClientModule
 >([
   [rmcsClient.id, rmcsClient],
+  [sixteenParchiClient.id, sixteenParchiClient],
   ...(import.meta.env.DEV ? [[fixtureClient.id, fixtureClient] as const] : []),
 ]);
 

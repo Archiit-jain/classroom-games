@@ -13,6 +13,7 @@
   "dependencies": {
     "@cg/game-rmcs": "workspace:*",
     "@cg/game-sdk": "workspace:*",
+    "@cg/game-sixteen-parchi": "workspace:*",
     "@cg/protocol": "workspace:*",
     "@cg/ui": "workspace:*",
     "motion": "^13.4.6",

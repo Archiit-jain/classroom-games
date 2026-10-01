@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { AnyGameModule } from '@cg/game-sdk';
 import { fixtureGame } from '@cg/game-sdk/fixture';
 import { createRmcsGame } from '@cg/game-rmcs/server';
+import { createSixteenParchiGame } from '@cg/game-sixteen-parchi/server';
 import { createModerator, type Moderator } from '@cg/moderation';
 import { NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH } from '@cg/protocol';
 import { Server } from 'socket.io';
@@ -56,6 +57,7 @@ export interface GameServer {
 export function defaultGames(config: ServerConfig): AnyGameModule[] {
   return [
     createRmcsGame({ timeScale: config.gameTimeScale }),
+    createSixteenParchiGame({ timeScale: config.gameTimeScale }),
     ...(config.enableFixtureGame ? [fixtureGame] : []),
   ];
 }
