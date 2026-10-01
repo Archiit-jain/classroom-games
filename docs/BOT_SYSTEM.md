@@ -12,7 +12,7 @@ module (`createMemory`, `observe`, `decide`).
 | Idle player             | the engine requests `MARK_IDLE` after repeated timeouts → takeover, reason `IDLE`    |
 | Player leaves mid-match | immediate takeover, reason `LEFT`, for the rest of the match                         |
 
-Public-room bot fill arrives in Phase 6.
+Public-room bot fill arrives in Phase 9.
 
 ## Fairness rules
 

@@ -77,4 +77,4 @@ No user-facing string is hard-coded in components: platform text goes through `t
 ## Not built yet
 
 Per-game sound (excluded from v1), Motion bundle trimming and a measured low-end device pass
-(Phase 8).
+(Phase 11).

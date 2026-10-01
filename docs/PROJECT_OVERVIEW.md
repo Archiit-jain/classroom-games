@@ -6,6 +6,10 @@ A public, browser-based multiplayer platform for quick classroom and childhood g
 built so anyone can join with only a nickname. The platform (rooms, sessions, reconnect,
 chat, bots, runtime) is shared; each game is a self-contained module plugged into it.
 
+**Seven core games:** Raja Mantri Chor Sipahi · 16 Parchi (flagship) · Draw & Guess
+(working name) · Pen Fight · Dots & Boxes · Business (working title) · Name Place Animal
+Thing. See the [game catalogue](GAME_SYSTEM.md#game-catalogue).
+
 Core flow: **Open → Enter name → Play → Results → Play again.**
 
 ## Who it is for
@@ -36,8 +40,9 @@ Expandability → Security → Performance → Documentation.
 ## Current status
 
 Phases 1–3 are complete: the platform (with quick reactions) plus Raja Mantri Chor Sipahi
-and the flagship 16 Parchi in the Color Burst Arcade design. See the README
-[roadmap](../README.md#roadmap).
+and the flagship 16 Parchi in the Color Burst Arcade design. Dots & Boxes, Name Place
+Animal Thing and Business have design-verification documents in [design/](design/). The
+12-phase plan is in the README [roadmap](../README.md#roadmap).
 
 ## Roles
 

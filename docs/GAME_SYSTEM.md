@@ -77,6 +77,26 @@ Audience helpers: `toAll(e)`, `toSeats([1], e)`, `toAllExcept([1], e)`.
 | `STREAMED`   | Also has a high-frequency stream (drawing strokes)       | Contract only; runtime wiring in Phase 4 |
 | `SIMULATED`  | Server simulates physics and sends keyframes in an event | Uses the normal path; physics in Phase 5 |
 
+## Game catalogue
+
+Every game is a `GameModule` (server) + `GameClientModule` (client) pair registered in
+`apps/server/src/app.ts` (`defaultGames`) and `apps/client/src/games/registry.ts`. All seven
+games use this same server-authoritative runtime — none has its own networking.
+
+| Game                        | Id                        | Players | Sync         | Status                       | Rules / design                                                         |
+| --------------------------- | ------------------------- | ------- | ------------ | ---------------------------- | ---------------------------------------------------------------------- |
+| Raja Mantri Chor Sipahi     | `rmcs`                    | 4       | `TURN_PHASE` | Shipped (Phase 2)            | [rules](GAME_RULES/RAJA_MANTRI_CHOR_SIPAHI.md)                         |
+| 16 Parchi                   | `sixteen-parchi`          | 4       | `TURN_PHASE` | Shipped (Phase 3)            | [rules](GAME_RULES/16_PARCHI.md), [design](design/16_PARCHI_DESIGN.md) |
+| Draw & Guess (working name) | `draw-and-guess`          | 3–6     | `STREAMED`   | Phase 4                      | spec §12                                                               |
+| Pen Fight                   | `pen-fight`               | 2–4     | `SIMULATED`  | Phase 5                      | spec §13                                                               |
+| Dots & Boxes                | `dots-and-boxes`          | 2–4     | `TURN_PHASE` | Designed (Phase 6, proposed) | [design](design/DOTS_AND_BOXES_DESIGN.md)                              |
+| Name Place Animal Thing     | `name-place-animal-thing` | 2–8     | `TURN_PHASE` | Designed (Phase 7, proposed) | [design](design/NAME_PLACE_ANIMAL_THING_DESIGN.md)                     |
+| Business (working title)    | `business`                | 2–6     | `TURN_PHASE` | Designed (Phase 8, proposed) | [design](design/BUSINESS_DESIGN.md)                                    |
+| Count Up (fixture)          | `fixture`                 | 2–4     | `TURN_PHASE` | Dev/test only                | [below](#the-fixture-game-count-up)                                    |
+
+Ids of games not yet built are planned names. Room capacity always comes from the game's
+`manifest.players`, so 6- and 8-player games need no platform change.
+
 ## The client-side contract: `GameClientModule`
 
 ```ts

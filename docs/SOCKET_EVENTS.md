@@ -104,5 +104,5 @@ or `SERVER_BUSY`.
 
 ## Not implemented yet
 
-`mm:quickPlay`, `mm:cancel`, `lobby:watch`, `lobby:unwatch`, `lobby:rooms` (Phase 6),
+`mm:quickPlay`, `mm:cancel`, `lobby:watch`, `lobby:unwatch`, `lobby:rooms` (Phase 9),
 `match:stream` (Phase 4).

@@ -21,4 +21,4 @@ animation. Vanilla TypeScript would mean hand-building a component/state system.
 - Game boards are lazy-loaded React components (`GameClientModule.Board`).
 - React escapes text by default, which also helps security.
 - Bundle size: Phase 1 ≈ 89 KB gzipped; Phase 2 ≈ 142 KB gzipped, mostly Motion. Trimming it
-  (e.g. Motion's `LazyMotion`/`m` components, splitting the home screen) is a Phase 8 task.
+  (e.g. Motion's `LazyMotion`/`m` components, splitting the home screen) is a Phase 11 task.

@@ -70,7 +70,7 @@ project (Pixel 7 emulation, touch).
 
 - Visual review with `tools/screenshots.mjs` (RMCS) and `tools/screenshots-parchi.mjs`
   (16 Parchi), desktop and Pixel 7.
-- Product-owner device checklist (Phase 8): a real mid/low-range Android phone on Chrome —
+- Product-owner device checklist (Phase 11): a real mid/low-range Android phone on Chrome —
   frame rate, touch, lite mode, and the feel of each game.
 
 ## Not yet

@@ -17,7 +17,7 @@ fair, without enterprise-grade machinery. This page describes what is implemente
 | Cross-site WebSocket use                                                         | `Origin` allowlist on both the HTTP long-polling CORS check and the connection request (`allowRequest`); non-browser clients (no Origin) are allowed but gain nothing a browser couldn't do              |
 | Offensive content / sharing contact details                                      | Moderation pipeline (see [CHAT_AND_MODERATION.md](CHAT_AND_MODERATION.md))                                                                                                                               |
 | Client IP spoofing via headers                                                   | `X-Forwarded-For` is ignored unless `TRUST_PROXY=true`; then only the last entry (added by our proxy) is used                                                                                            |
-| Script injection (stealing the token from storage)                               | React escapes all text; no `dangerouslySetInnerHTML`; user text is never interpreted as HTML. A strict Content-Security-Policy will be set by the static host in Phase 9                                 |
+| Script injection (stealing the token from storage)                               | React escapes all text; no `dangerouslySetInnerHTML`; user text is never interpreted as HTML. A strict Content-Security-Policy will be set by the static host in Phase 12                                |
 
 ## Privacy
 

@@ -11,7 +11,7 @@ A public product should load instantly even when the game server is cold.
 
 Deploy the client as static files (CDN/static host) and the server separately on a host
 that supports long-lived WebSockets. The client reads the server URL from
-`VITE_SERVER_URL`. Provider choice happens in Phase 9.
+`VITE_SERVER_URL`. Provider choice happens in Phase 12.
 
 ## Consequences
 

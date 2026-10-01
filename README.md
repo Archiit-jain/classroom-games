@@ -3,11 +3,12 @@
 Quick multiplayer classroom and childhood games in the browser. No accounts, no login:
 pick a nickname, create or join a room, play.
 
-> **Status: Phase 3 of 9 — two games playable.** The multiplayer platform (sessions,
-> private rooms, reconnect, bots, chat moderation, quick reactions, game runtime) is built,
-> and **Raja Mantri Chor Sipahi** and the flagship **16 Parchi** are fully playable with
-> friends and bots in the **Color Burst Arcade** design. Draw & Guess and Pen Fight arrive in
-> Phases 4–5. See the [roadmap](#roadmap).
+> **Status: Phase 3 of 12 — two of seven games playable.** The multiplayer platform
+> (sessions, private rooms, reconnect, bots, chat moderation, quick reactions, game runtime)
+> is built, and **Raja Mantri Chor Sipahi** and the flagship **16 Parchi** are fully playable
+> with friends and bots in the **Color Burst Arcade** design. Five more games are planned:
+> Draw & Guess, Pen Fight, Dots & Boxes, Name Place Animal Thing and Business. See the
+> [roadmap](#roadmap).
 
 ## Why
 
@@ -46,15 +47,21 @@ server, not the browser, decides every outcome.
 
 ## Games
 
-| Game                        | Status                                     |
-| --------------------------- | ------------------------------------------ |
-| Raja Mantri Chor Sipahi     | ✅ Playable (Phase 2)                      |
-| 16 Parchi (flagship)        | ✅ Playable (Phase 3)                      |
-| Draw & Guess (working name) | Planned — Phase 4                          |
-| Pen Fight                   | Planned — Phase 5                          |
-| Count Up (fixture)          | Development/test only, never in production |
+| Game                        | Players | Status                                                                                 |
+| --------------------------- | ------- | -------------------------------------------------------------------------------------- |
+| Raja Mantri Chor Sipahi     | 4       | ✅ Playable (Phase 2)                                                                  |
+| 16 Parchi (flagship)        | 4       | ✅ Playable (Phase 3)                                                                  |
+| Draw & Guess (working name) | 3–6     | Planned — Phase 4                                                                      |
+| Pen Fight                   | 2–4     | Planned — Phase 5                                                                      |
+| Dots & Boxes                | 2–4     | Designed — Phase 6 (proposed); [design](docs/design/DOTS_AND_BOXES_DESIGN.md)          |
+| Name Place Animal Thing     | 2–8     | Designed — Phase 7 (proposed); [design](docs/design/NAME_PLACE_ANIMAL_THING_DESIGN.md) |
+| Business (working title)    | 2–6     | Designed — Phase 8 (proposed); [design](docs/design/BUSINESS_DESIGN.md)                |
+| Count Up (fixture)          | 2–4     | Development/test only, never in production                                             |
 
-The agreed rules for every game are in [docs/specs/PHASE_0_SPEC.md](docs/specs/PHASE_0_SPEC.md).
+The agreed rules for the first four games are in [docs/specs/PHASE_0_SPEC.md](docs/specs/PHASE_0_SPEC.md);
+the three newer games are specified by their design-verification documents in
+[docs/design/](docs/design/). "Business" is a working title: its public name needs a
+trademark / name-availability check before launch.
 
 ## Tech stack
 
@@ -131,7 +138,7 @@ same action path as humans. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md
 
 ## Deployment
 
-Planned for Phase 9. The client is a static site; the server needs a host that supports
+Planned for Phase 12. The client is a static site; the server needs a host that supports
 long-lived WebSocket connections (serverless platforms do not). What exists today —
 build outputs, environment variables, health check, graceful shutdown — is described in
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
@@ -151,9 +158,9 @@ profile and a 16 Parchi match with reduced motion.
 
 - All rooms and sessions live in server memory: a restart or deploy ends every game.
 - One server instance only (scaling path documented, not built).
-- Two of the four games so far; public lobby and matchmaking arrive in Phase 6.
+- Two of the seven games so far; public lobby and matchmaking arrive in Phase 9.
 - Client bundle is ≈ 144 KB gzipped (Motion; game boards load separately); trimming is
-  planned for Phase 8.
+  planned for Phase 11.
 - No sound (excluded from v1). English only (the UI is translation-ready).
 
 ## Roadmap
@@ -161,12 +168,20 @@ profile and a 16 Parchi match with reduced motion.
 1. ✅ Infrastructure and private rooms
 2. ✅ Raja Mantri Chor Sipahi + Color Burst Arcade design system
 3. ✅ 16 Parchi + quick reactions
-4. Draw & Guess
+4. Draw & Guess (working name)
 5. Pen Fight
-6. Public lobby, Quick Play, bot fill, "Play with Bots"
-7. Moderation hardening and abuse testing
-8. Performance, mobile and animation polish
-9. Production deployment
+6. Dots & Boxes _(proposed order)_
+7. Name Place Animal Thing _(proposed order)_
+8. Business (working title) _(proposed order)_
+9. Public lobby, Quick Play, bot fill, "Play with Bots"
+10. Moderation hardening and abuse testing
+11. Performance, mobile and animation polish
+12. Production deployment
+
+Phases 6–12 follow the order proposed after Phase 3 and await the product owner's approval.
+
+**Launch blockers (not implementation blockers):** an original public name for Draw & Guess
+(spec C9) and a trademark / name-availability check for Business's final public name.
 
 ## Documentation
 

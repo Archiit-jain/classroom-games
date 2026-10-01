@@ -1,7 +1,7 @@
 # Room system
 
 Implementation: `apps/server/src/rooms/` (`RoomManager`, `RoomStore`, `policies.ts`,
-`naming.ts`). Phase 1 implements **private rooms**; public rooms arrive in Phase 6 (see
+`naming.ts`). Phase 1 implements **private rooms**; public rooms arrive in Phase 9 (see
 [PUBLIC_LOBBY_SYSTEM.md](PUBLIC_LOBBY_SYSTEM.md)).
 
 ## Room model

@@ -39,23 +39,23 @@ flowchart LR
   Conn <-- "Socket.IO<br/>acked intents ↑ · filtered updates ↓" --> T
 ```
 
-| Component       | Location                             | Responsibility                                                                                                                                                   |
-| --------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Transport       | `apps/server/src/transport/`         | Origin check, per-IP connection cap, handshake → session, per-socket flood guard, per-event rate limit, zod validation, acknowledgements, fan-out via `Notifier` |
-| SessionManager  | `apps/server/src/session/`           | Anonymous identities, secret tokens (stored hashed), one active socket per session, nicknames                                                                    |
-| RoomManager     | `apps/server/src/rooms/`             | Room lifecycle, membership, host, bots, reconnect grace, bot takeover/reclaim, match start/finish/abort                                                          |
-| RoomStore       | `apps/server/src/rooms/RoomStore.ts` | Storage interface; v1 = in memory                                                                                                                                |
-| GameRuntime     | `apps/server/src/runtime/`           | Hosts one match: runs the pure engine, schedules its timers, fans out per-seat views/events                                                                      |
-| GameRegistry    | `apps/server/src/runtime/`           | `gameId → GameModule`, manifest sanity checks                                                                                                                    |
-| BotManager      | `apps/server/src/bots/`              | Drives bot seats through the same action path as humans                                                                                                          |
-| ChatService     | `apps/server/src/chat/`              | Room chat pipeline and quick reactions (validated, rate-limited, fanned out with the sender's seat)                                                              |
-| ReportService   | `apps/server/src/reports/`           | Player reports → `ReportSink` (v1: bounded in-memory flags)                                                                                                      |
-| Moderator       | `packages/moderation`                | Text normalisation, profanity censoring, contact-detail removal, nickname checks                                                                                 |
-| Protocol        | `packages/protocol`                  | Event names/payload types, error codes, view types; zod schemas at `@cg/protocol/schemas` (server only)                                                          |
-| Game SDK        | `packages/game-sdk`                  | Game contract, seeded RNG, audience helpers, test harness, fixture game, client module types                                                                     |
-| Client platform | `apps/client/src/platform/`          | `GameConnection` (socket + store), clock offset, storage, action sender (ids, double-tap coalescing), animation director, effects controller                     |
-| Design system   | `packages/ui`                        | Color Burst Arcade tokens/styles + animated primitives shared by screens and game boards ([ADR-015](decisions/ADR-015-shared-ui-package.md))                     |
-| Games           | `games/<id>`                         | Each game's shared types, pure engine + bot (server) and board (client) — `games/rmcs`, `games/sixteen-parchi`                                                   |
+| Component       | Location                             | Responsibility                                                                                                                                                                 |
+| --------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Transport       | `apps/server/src/transport/`         | Origin check, per-IP connection cap, handshake → session, per-socket flood guard, per-event rate limit, zod validation, acknowledgements, fan-out via `Notifier`               |
+| SessionManager  | `apps/server/src/session/`           | Anonymous identities, secret tokens (stored hashed), one active socket per session, nicknames                                                                                  |
+| RoomManager     | `apps/server/src/rooms/`             | Room lifecycle, membership, host, bots, reconnect grace, bot takeover/reclaim, match start/finish/abort                                                                        |
+| RoomStore       | `apps/server/src/rooms/RoomStore.ts` | Storage interface; v1 = in memory                                                                                                                                              |
+| GameRuntime     | `apps/server/src/runtime/`           | Hosts one match: runs the pure engine, schedules its timers, fans out per-seat views/events                                                                                    |
+| GameRegistry    | `apps/server/src/runtime/`           | `gameId → GameModule`, manifest sanity checks                                                                                                                                  |
+| BotManager      | `apps/server/src/bots/`              | Drives bot seats through the same action path as humans                                                                                                                        |
+| ChatService     | `apps/server/src/chat/`              | Room chat pipeline and quick reactions (validated, rate-limited, fanned out with the sender's seat)                                                                            |
+| ReportService   | `apps/server/src/reports/`           | Player reports → `ReportSink` (v1: bounded in-memory flags)                                                                                                                    |
+| Moderator       | `packages/moderation`                | Text normalisation, profanity censoring, contact-detail removal, nickname checks                                                                                               |
+| Protocol        | `packages/protocol`                  | Event names/payload types, error codes, view types; zod schemas at `@cg/protocol/schemas` (server only)                                                                        |
+| Game SDK        | `packages/game-sdk`                  | Game contract, seeded RNG, audience helpers, test harness, fixture game, client module types                                                                                   |
+| Client platform | `apps/client/src/platform/`          | `GameConnection` (socket + store), clock offset, storage, action sender (ids, double-tap coalescing), animation director, effects controller                                   |
+| Design system   | `packages/ui`                        | Color Burst Arcade tokens/styles + animated primitives shared by screens and game boards ([ADR-015](decisions/ADR-015-shared-ui-package.md))                                   |
+| Games           | `games/<id>`                         | Each game's shared types, pure engine + bot (server) and board (client) — `games/rmcs`, `games/sixteen-parchi`; five more planned ([catalogue](GAME_SYSTEM.md#game-catalogue)) |
 
 ## Request path (one game action)
 

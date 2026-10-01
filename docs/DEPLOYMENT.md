@@ -1,6 +1,6 @@
 # Deployment
 
-> **Status:** production deployment is **Phase 9**; no hosting provider has been chosen and
+> **Status:** production deployment is **Phase 12**; no hosting provider has been chosen and
 > nothing is deployed. This page documents what the code already supports.
 
 ## Shape
@@ -56,7 +56,7 @@ PORT=<platform port>
   minute, "The game server isn't responding…". It keeps retrying throughout and connects
   without a reload as soon as the server is up.
 
-## Still to do (Phase 9)
+## Still to do (Phase 12)
 
 Choose providers after checking current pricing and sleep behaviour; set CSP and security
 headers on the static host; production smoke test; staging environment.
