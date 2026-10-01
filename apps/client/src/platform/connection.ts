@@ -11,9 +11,10 @@ import type {
 import { io, type Socket } from 'socket.io-client';
 import type { ClientErrorCode } from '../i18n/en';
 import { errorMessage, t } from '../i18n';
+import { createActionSender } from './actions';
 import { estimateOffset, type PingSample } from './clock';
 import { KEYS, storage } from './storage';
-import { Store, initialState, type AppState, type Toast } from './store';
+import { Store, initialState, type AppState, type MatchState, type Toast } from './store';
 
 type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export type ClientAck<T> = Ack<T> | { ok: false; code: ClientErrorCode; retryAfterMs?: number };
@@ -74,11 +75,26 @@ export class GameConnection {
       .catch(() => ({ ok: false as const, code: 'TIMEOUT' as const }));
   }
 
-  /** Sends a game action for the current match. */
+  private readonly actionSender = createActionSender((payload) =>
+    this.request('match:action', payload),
+  );
+
+  private readonly updateListeners = new Set<(update: MatchState) => void>();
+
+  /** Receive every match update in arrival order (used by the animation director). */
+  subscribeUpdates(listener: (update: MatchState) => void): () => void {
+    this.updateListeners.add(listener);
+    return () => this.updateListeners.delete(listener);
+  }
+
+  /**
+   * Sends a game action for the current match with a fresh action id. An
+   * identical action still waiting for its ack is not sent twice (double taps).
+   */
   sendAction(action: unknown): Promise<ClientAck<{ version: number }>> {
     const match = this.store.get().match;
     if (!match) return Promise.resolve({ ok: false, code: 'MATCH_NOT_FOUND' });
-    return this.request('match:action', { matchId: match.matchId, version: match.version, action });
+    return this.actionSender(match, action);
   }
 
   async setNickname(nickname: string): Promise<ClientAck<{ nickname: string }>> {
@@ -210,21 +226,22 @@ export class GameConnection {
     socket.on('room:event', (event) => this.onRoomEvent(event));
 
     socket.on('match:update', (update) => {
-      store.set((s) => {
-        // Ignore out-of-order deliveries for the same match. Every update carries a
-        // complete view, so a skipped version only means skipped animations.
-        if (s.match?.matchId === update.matchId && update.version <= s.match.version) return {};
-        return {
-          match: {
-            matchId: update.matchId,
-            gameId: update.gameId,
-            version: update.version,
-            you: update.you,
-            view: update.view,
-            events: update.events,
-          },
-        };
-      });
+      const current = store.get().match;
+      // Ignore out-of-order deliveries for the same match. Every update carries a
+      // complete view, so a skipped version only means skipped animations.
+      if (current?.matchId === update.matchId && update.version <= current.version) return;
+      const match = {
+        matchId: update.matchId,
+        gameId: update.gameId,
+        version: update.version,
+        you: update.you,
+        view: update.view,
+        events: update.events,
+      };
+      store.set({ match });
+      // Every update also goes straight to the animation director, so updates
+      // arriving within one render frame are never coalesced away.
+      for (const listener of this.updateListeners) listener(match);
     });
 
     socket.on('match:end', (end) => store.set({ results: end }));

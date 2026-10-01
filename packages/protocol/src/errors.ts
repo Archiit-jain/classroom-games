@@ -34,6 +34,7 @@ export const ERROR_CODES = [
   // Matches
   'MATCH_NOT_FOUND',
   'STALE_VERSION',
+  'DUPLICATE_ACTION',
   'NOT_YOUR_TURN',
   'ILLEGAL_ACTION',
   'NOT_ELIGIBLE',

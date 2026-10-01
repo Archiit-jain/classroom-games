@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { AnyGameModule } from '@cg/game-sdk';
 import { createFixtureGame } from '@cg/game-sdk/fixture';
 import type {
@@ -18,6 +19,9 @@ import type { ReportSink } from '../src/reports/ReportService';
 type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export type S2CName = keyof ServerToClientEvents;
 export type S2CPayload<K extends S2CName> = Parameters<ServerToClientEvents[K]>[0];
+
+/** A fresh client-style action id (unique per intent). */
+export const newActionId = (): string => `t_${randomBytes(9).toString('base64url')}`;
 
 /** Fast fixture for integration tests: short turns, quick bots. */
 export const testFixture = (options: Parameters<typeof createFixtureGame>[0] = {}) =>
@@ -151,6 +155,20 @@ export class TestClient {
     );
   }
 
+  /** Sends a game action for the match/version in `ref`, with a fresh (or given) action id. */
+  act(
+    ref: { matchId: string; version: number },
+    action: unknown,
+    actionId: string = newActionId(),
+  ): Promise<Ack<C2SResults['match:action']>> {
+    return this.emit('match:action', {
+      matchId: ref.matchId,
+      version: ref.version,
+      actionId,
+      action,
+    });
+  }
+
   all<K extends S2CName>(event: K): S2CPayload<K>[] {
     return (this.received.get(event) ?? []) as S2CPayload<K>[];
   }
@@ -244,7 +262,15 @@ export async function eventually(
 
 /** Host creates a private room; guests join it. Returns the room code. */
 export async function setupRoom(host: TestClient, ...guests: TestClient[]): Promise<string> {
-  const created = await host.emit('room:create', { gameId: 'fixture' });
+  return setupGameRoom('fixture', host, ...guests);
+}
+
+export async function setupGameRoom(
+  gameId: string,
+  host: TestClient,
+  ...guests: TestClient[]
+): Promise<string> {
+  const created = await host.emit('room:create', { gameId });
   if (!created.ok) throw new Error(`create failed: ${created.code}`);
   const code = created.room.code as string;
   for (const guest of guests) {
@@ -259,13 +285,7 @@ export function autoPlay(client: TestClient, amount: 1 | 2 | 3 = 3): void {
   client.socket.on('match:update', (update) => {
     const view = update.view as { phase: string; turn: number };
     if (view.phase === 'PLAYING' && view.turn === update.you) {
-      void client
-        .emit('match:action', {
-          matchId: update.matchId,
-          version: update.version,
-          action: { type: 'ADD', amount },
-        })
-        .catch(() => undefined);
+      void client.act(update, { type: 'ADD', amount }).catch(() => undefined);
     }
   });
 }

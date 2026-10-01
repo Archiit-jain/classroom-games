@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CHAT_MAX_LENGTH, REPORT_REASONS } from './limits';
+import { ACTION_ID_PATTERN, CHAT_MAX_LENGTH, REPORT_REASONS } from './limits';
 
 /**
  * Client → server payload schemas (server-side validation). Kept in their own
@@ -30,6 +30,8 @@ export const C2S = {
   'match:action': z.strictObject({
     matchId: id,
     version: z.number().int().nonnegative(),
+    /** Client-generated, unique per intent. A repeated id is rejected (DUPLICATE_ACTION). */
+    actionId: z.string().regex(ACTION_ID_PATTERN),
     action: z.unknown(),
   }),
   'match:resync': z.strictObject({ matchId: id }),

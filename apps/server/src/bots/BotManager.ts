@@ -101,7 +101,7 @@ export class BotManager {
       const decision = this.decide(entry, entry.runtime.viewFor(entry.seat).view);
       if (!decision) return;
       if (decision.kind === 'ACTION') {
-        const result = entry.runtime.submitAction(entry.seat, null, decision.action);
+        const result = entry.runtime.submitAction(entry.seat, null, null, decision.action);
         if (!result.ok) {
           this.deps.log.warn('bot action rejected', {
             matchId: entry.runtime.matchId,

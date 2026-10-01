@@ -183,7 +183,7 @@ function onConnection(io: IoServer, socket: IoSocket, session: Session, deps: Tr
   bind('room:backToLobby', 'roomAdmin', () => rooms.backToLobby(session));
   bind('room:reclaimSeat', 'roomAdmin', () => rooms.reclaimSeat(session));
   bind('match:action', 'matchAction', (p) =>
-    rooms.submitAction(session, p.matchId, p.version, p.action),
+    rooms.submitAction(session, p.matchId, p.version, p.actionId, p.action),
   );
   bind('match:resync', 'matchAction', (p) => rooms.resync(session, p.matchId));
   // Chat and reports apply their own limits (cooldowns, per-report budget).

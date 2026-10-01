@@ -4,6 +4,7 @@ import type { MatchUpdate } from '@cg/protocol';
 import {
   autoPlay,
   eventually,
+  newActionId,
   setupRoom,
   startServer,
   testFixture,
@@ -106,51 +107,81 @@ describe('server authority and hidden information', () => {
     const notTurn = first.view.turn === 0 ? guest : host;
     const onTurn = first.view.turn === 0 ? host : guest;
 
-    expect(
-      await notTurn.emit('match:action', { matchId, version, action: { type: 'ADD', amount: 1 } }),
-    ).toEqual({
+    const add = (amount: number) => ({ type: 'ADD', amount });
+    expect(await notTurn.act({ matchId, version }, add(1))).toEqual({
       ok: false,
       code: 'NOT_YOUR_TURN',
     });
-    expect(
-      await onTurn.emit('match:action', { matchId, version, action: { type: 'ADD', amount: 7 } }),
-    ).toEqual({
+    expect(await onTurn.act({ matchId, version }, add(7))).toEqual({
       ok: false,
       code: 'INVALID_PAYLOAD',
     });
-    expect(
-      await onTurn.emit('match:action', {
-        matchId: 'm_other',
-        version,
-        action: { type: 'ADD', amount: 1 },
-      }),
-    ).toEqual({
+    expect(await onTurn.act({ matchId: 'm_other', version }, add(1))).toEqual({
       ok: false,
       code: 'MATCH_NOT_FOUND',
     });
-    expect(
-      await onTurn.emit('match:action', {
-        matchId,
-        version: version + 50,
-        action: { type: 'ADD', amount: 1 },
-      }),
-    ).toEqual({
+    expect(await onTurn.act({ matchId, version: version + 50 }, add(1))).toEqual({
       ok: false,
       code: 'STALE_VERSION',
     });
+    // Missing or malformed action ids never reach the game.
     expect(
-      await onTurn.emit('match:action', { matchId, version, action: { type: 'ADD', amount: 2 } }),
-    ).toEqual({
+      await onTurn.emitRaw('match:action', { matchId, version, action: add(1) }),
+    ).toMatchObject({ ok: false, code: 'INVALID_PAYLOAD' });
+    expect(
+      await onTurn.emitRaw('match:action', { matchId, version, actionId: 'short', action: add(1) }),
+    ).toMatchObject({ ok: false, code: 'INVALID_PAYLOAD' });
+    expect(await onTurn.act({ matchId, version }, add(2))).toEqual({
       ok: true,
       version: version + 1,
     });
-    // A double-tap of the same move is rejected by the rules (the turn has passed).
-    expect(
-      await onTurn.emit('match:action', { matchId, version, action: { type: 'ADD', amount: 2 } }),
-    ).toEqual({
+    // A double-tap sent as a new intent is still rejected by the rules (the turn has passed).
+    expect(await onTurn.act({ matchId, version }, add(2))).toEqual({
       ok: false,
       code: 'NOT_YOUR_TURN',
     });
+  });
+
+  it('never executes the same action id twice (double tap, replay)', async () => {
+    t = await startServer({}, { games: [testFixture({ turnMs: 60_000 })] });
+    const host = await t.player('Archit');
+    const guest = await t.player('Priya');
+    await setupRoom(host, guest);
+    const first = await startMatch(host, guest);
+    const [onTurn, other] = first.view.turn === 0 ? [host, guest] : [guest, host];
+    const add = (amount: number) => ({ type: 'ADD', amount });
+
+    // Double tap: the identical message arrives twice.
+    const tapId = newActionId();
+    const [a, b] = await Promise.all([
+      onTurn.act(first, add(1), tapId),
+      onTurn.act(first, add(1), tapId),
+    ]);
+    expect([a, b]).toContainEqual({ ok: true, version: first.version + 1 });
+    expect([a, b]).toContainEqual({ ok: false, code: 'DUPLICATE_ACTION' });
+
+    // The other player moves; now it is legal for the first player to act again…
+    const afterTap = (await other.waitFor(
+      'match:update',
+      (u) => u.version === first.version + 1,
+    )) as Update;
+    expect((await other.act(afterTap, add(1))).ok).toBe(true);
+    const backToFirst = (await onTurn.waitFor(
+      'match:update',
+      (u) => u.version === first.version + 2,
+    )) as Update;
+    expect(backToFirst.view.turn).toBe(backToFirst.you);
+    // …but replaying the old message is refused, while a new intent is accepted.
+    expect(await onTurn.act(backToFirst, add(1), tapId)).toEqual({
+      ok: false,
+      code: 'DUPLICATE_ACTION',
+    });
+    expect(await onTurn.act(backToFirst, add(1))).toEqual({
+      ok: true,
+      version: backToFirst.version + 1,
+    });
+    const counters = (onTurn.last('match:update') as Update).view.counter;
+    expect(counters).toBe(3); // 1 + 1 + 1: each intent counted exactly once
   });
 
   it('resync returns the player’s current view', async () => {
@@ -210,13 +241,10 @@ describe('disconnects, bot takeover and reclaiming', () => {
       4000,
     );
     const current = idler.last('match:update') as Update;
-    expect(
-      await idler.emit('match:action', {
-        matchId: current.matchId,
-        version: current.version,
-        action: { type: 'ADD', amount: 1 },
-      }),
-    ).toEqual({ ok: false, code: 'SEAT_CONTROLLED_BY_BOT' });
+    expect(await idler.act(current, { type: 'ADD', amount: 1 })).toEqual({
+      ok: false,
+      code: 'SEAT_CONTROLLED_BY_BOT',
+    });
     expect((await idler.emit('room:reclaimSeat', {})).ok).toBe(true);
     await idler.waitFor('room:event', (e) => e.type === 'SEAT_RECLAIMED');
     await host.waitForRoom((r) => r?.match?.seats[1]?.controller === 'HUMAN');

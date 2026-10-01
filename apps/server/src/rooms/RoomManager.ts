@@ -309,6 +309,7 @@ export class RoomManager {
     session: Session,
     matchId: string,
     version: number,
+    actionId: string,
     action: unknown,
   ): Result<{ version: number }> {
     const ctx = this.context(session);
@@ -319,7 +320,7 @@ export class RoomManager {
     const seat = seatOf(match, session.id);
     if (!seat) return fail('MATCH_NOT_FOUND');
     if (seat.takeover) return fail('SEAT_CONTROLLED_BY_BOT');
-    return match.runtime.submitAction(seat.seat, version, action);
+    return match.runtime.submitAction(seat.seat, version, actionId, action);
   }
 
   resync(session: Session, matchId: string): Result<{ update: MatchUpdate }> {

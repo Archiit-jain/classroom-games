@@ -10,6 +10,7 @@ import { GameRuntime } from '../src/runtime/GameRuntime';
 import { RateLimiter } from '../src/util/RateLimiter';
 import { isOriginAllowed } from '../src/transport/origins';
 import { TimerService } from '../src/util/TimerService';
+import { simultaneousGame } from './simultaneousGame';
 
 const log = createLogger('silent');
 
@@ -169,24 +170,116 @@ describe('GameRuntime', () => {
   it('validates actions: turn order, schema, versions', () => {
     const { runtime } = makeRuntime();
     runtime.start();
-    expect(runtime.submitAction(1, 1, { type: 'ADD', amount: 1 })).toEqual({
+    expect(runtime.submitAction(1, 1, null, { type: 'ADD', amount: 1 })).toEqual({
       ok: false,
       code: 'NOT_YOUR_TURN',
     });
-    expect(runtime.submitAction(0, 1, { type: 'ADD', amount: 9 })).toEqual({
+    expect(runtime.submitAction(0, 1, null, { type: 'ADD', amount: 9 })).toEqual({
       ok: false,
       code: 'INVALID_PAYLOAD',
     });
-    expect(runtime.submitAction(0, 99, { type: 'ADD', amount: 1 })).toEqual({
+    expect(runtime.submitAction(0, 99, null, { type: 'ADD', amount: 1 })).toEqual({
       ok: false,
       code: 'STALE_VERSION',
     });
-    expect(runtime.submitAction(0, 1, { type: 'ADD', amount: 2 })).toEqual({
+    expect(runtime.submitAction(0, 1, null, { type: 'ADD', amount: 2 })).toEqual({
       ok: true,
       value: { version: 2 },
     });
     // Acting on an older (but issued) version is fine: legality is checked against the current state.
-    expect(runtime.submitAction(1, 1, { type: 'ADD', amount: 2 }).ok).toBe(true);
+    expect(runtime.submitAction(1, 1, null, { type: 'ADD', amount: 2 }).ok).toBe(true);
+  });
+
+  describe('action versions and action ids (ADR-014)', () => {
+    const pick = (value: number) => ({ type: 'PICK', value });
+    const state = (runtime: GameRuntime) =>
+      (runtime as unknown as { state: { picks: Record<number, number | null>; round: number } })
+        .state;
+
+    it('rejects a duplicate action id and applies the action once', () => {
+      const { runtime } = makeRuntime(simultaneousGame, 3);
+      runtime.start();
+      expect(runtime.submitAction(0, 1, 'dup-aaaaaaaa', pick(4))).toEqual({
+        ok: true,
+        value: { version: 2 },
+      });
+      expect(runtime.submitAction(0, 2, 'dup-aaaaaaaa', pick(4))).toEqual({
+        ok: false,
+        code: 'DUPLICATE_ACTION',
+      });
+      expect(runtime.version).toBe(2);
+      expect(state(runtime).picks).toEqual({ 0: 4, 1: null, 2: null });
+    });
+
+    it('accepts valid actions from different players that were sent from slightly old versions', () => {
+      const { runtime } = makeRuntime(simultaneousGame, 3);
+      runtime.start();
+      const seen = runtime.version; // all three players look at the same view
+      expect(runtime.submitAction(0, seen, 'p0-aaaaaaaa', pick(1)).ok).toBe(true);
+      expect(runtime.submitAction(1, seen, 'p1-aaaaaaaa', pick(2)).ok).toBe(true);
+      expect(runtime.submitAction(2, seen, 'p2-aaaaaaaa', pick(3)).ok).toBe(true);
+      expect(state(runtime).round).toBe(2);
+      expect(runtime.version).toBe(seen + 3);
+    });
+
+    it('accepts a stale-but-valid action and still rejects a stale-and-illegal one', () => {
+      const { runtime } = makeRuntime(simultaneousGame, 3);
+      runtime.start();
+      runtime.submitAction(0, 1, 'a0-aaaaaaaa', pick(1));
+      runtime.submitAction(1, 2, 'a1-aaaaaaaa', pick(1));
+      // Seat 2 acts on version 1 although the match is now at version 3: still legal.
+      expect(runtime.submitAction(2, 1, 'a2-aaaaaaaa', pick(1)).ok).toBe(true);
+      // Seat 0 acts on an old version in round 2 again: legal (new round) → accepted.
+      expect(runtime.submitAction(0, 1, 'a3-aaaaaaaa', pick(2)).ok).toBe(true);
+      // Seat 0 tries to pick twice in the same round from an old view: the rules refuse.
+      expect(runtime.submitAction(0, 2, 'a4-aaaaaaaa', pick(3))).toEqual({
+        ok: false,
+        code: 'ILLEGAL_ACTION',
+      });
+    });
+
+    it('rejects future/unknown versions without consuming the action id', () => {
+      const { runtime } = makeRuntime(simultaneousGame, 2);
+      runtime.start();
+      expect(runtime.submitAction(0, runtime.version + 1, 'fut-aaaaaaaa', pick(1))).toEqual({
+        ok: false,
+        code: 'STALE_VERSION',
+      });
+      expect(runtime.submitAction(0, 10_000, 'fut-aaaaaaaa', pick(1))).toEqual({
+        ok: false,
+        code: 'STALE_VERSION',
+      });
+      expect(runtime.submitAction(0, runtime.version, 'fut-aaaaaaaa', pick(1)).ok).toBe(true);
+    });
+
+    it('refuses a replayed action id even when the replayed move would be legal again', () => {
+      const { runtime } = makeRuntime(simultaneousGame, 2);
+      runtime.start();
+      expect(runtime.submitAction(0, 1, 'rep-aaaaaaaa', pick(5)).ok).toBe(true);
+      expect(runtime.submitAction(1, 2, 'rep-bbbbbbbb', pick(6)).ok).toBe(true);
+      expect(state(runtime).round).toBe(2); // seat 0 may legally pick again now
+      expect(runtime.submitAction(0, runtime.version, 'rep-aaaaaaaa', pick(5))).toEqual({
+        ok: false,
+        code: 'DUPLICATE_ACTION',
+      });
+      expect(state(runtime).picks[0]).toBeNull();
+      expect(runtime.submitAction(0, runtime.version, 'rep-cccccccc', pick(5)).ok).toBe(true);
+    });
+
+    it('treats an id as used even when its first attempt was illegal', () => {
+      const { runtime } = makeRuntime(simultaneousGame, 2);
+      runtime.start();
+      runtime.submitAction(0, 1, 'ill-aaaaaaaa', pick(1));
+      expect(runtime.submitAction(0, 2, 'ill-bbbbbbbb', pick(2))).toEqual({
+        ok: false,
+        code: 'ILLEGAL_ACTION',
+      });
+      runtime.submitAction(1, 2, 'ill-cccccccc', pick(3)); // round 2 begins
+      expect(runtime.submitAction(0, runtime.version, 'ill-bbbbbbbb', pick(2))).toEqual({
+        ok: false,
+        code: 'DUPLICATE_ACTION',
+      });
+    });
   });
 
   it('runs engine timers and forwards idle requests', () => {
@@ -206,12 +299,14 @@ describe('GameRuntime', () => {
     runtime.start();
     let seat = 0;
     while (!runtime.isOver) {
-      expect(runtime.submitAction(seat, runtime.version, { type: 'ADD', amount: 3 }).ok).toBe(true);
+      expect(runtime.submitAction(seat, runtime.version, null, { type: 'ADD', amount: 3 }).ok).toBe(
+        true,
+      );
       seat = 1 - seat;
     }
     expect(over).toHaveLength(1);
     expect(timers.size).toBe(0);
-    expect(runtime.submitAction(0, runtime.version, { type: 'ADD', amount: 1 })).toEqual({
+    expect(runtime.submitAction(0, runtime.version, null, { type: 'ADD', amount: 1 })).toEqual({
       ok: false,
       code: 'INVALID_PHASE',
     });
@@ -227,7 +322,7 @@ describe('GameRuntime', () => {
     };
     const { runtime, crashes } = makeRuntime(broken, 2);
     runtime.start();
-    expect(runtime.submitAction(0, 1, { type: 'ADD', amount: 1 }).ok).toBe(true);
+    expect(runtime.submitAction(0, 1, null, { type: 'ADD', amount: 1 }).ok).toBe(true);
     expect(crashes).toHaveLength(1);
   });
 

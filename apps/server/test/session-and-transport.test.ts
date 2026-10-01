@@ -86,9 +86,14 @@ describe('transport hardening', () => {
     expect(await c.emitRaw('room:create', { gameId: 'fixture', extra: true })).toEqual(invalid);
     expect(await c.emitRaw('room:join', 'ABCDEF')).toEqual(invalid);
     expect(await c.emitRaw('room:kick', null)).toEqual(invalid);
-    expect(await c.emitRaw('match:action', { matchId: 'm_1', version: -1, action: {} })).toEqual(
-      invalid,
-    );
+    expect(
+      await c.emitRaw('match:action', {
+        matchId: 'm_1',
+        version: -1,
+        actionId: 'abcdefgh',
+        action: {},
+      }),
+    ).toEqual(invalid);
     expect(await c.emitRaw('chat:send', { text: 42 })).toEqual(invalid);
     expect(await c.emitRaw('report:submit', { playerId: 'p_x', reason: 'SPAM' })).toEqual(invalid);
     // Rate limiting happens before validation, so floods of junk stay cheap.

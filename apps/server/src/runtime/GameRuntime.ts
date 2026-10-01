@@ -39,6 +39,8 @@ export interface RuntimeOptions {
 
 type Producer = () => Transition<unknown, unknown> | null;
 
+const MAX_REMEMBERED_ACTION_IDS = 10_000;
+
 /**
  * Hosts one match: owns the authoritative state, feeds inputs to the pure
  * engine, schedules engine timers and fans out per-seat views + events.
@@ -65,6 +67,8 @@ export class GameRuntime {
   private currentVersion = 0;
   private readonly queue: Producer[] = [];
   private busy = false;
+  /** Action ids already processed in this match (insertion-ordered, bounded). */
+  private readonly seenActionIds = new Set<string>();
 
   constructor(options: RuntimeOptions) {
     this.matchId = options.matchId;
@@ -97,18 +101,27 @@ export class GameRuntime {
   }
 
   /**
-   * Validates and applies a player's (or bot's) action. `version` is the view
-   * version the client acted on; `null` for server-side bots. Older versions are
-   * accepted — legality is decided by the engine against the CURRENT state —
-   * but a version the server never issued is rejected.
+   * Validates and applies a player's (or bot's) action (ADR-014).
+   *
+   * - `version` is the view version the client acted on (`null` for server-side
+   *   bots). Versions the server never issued are rejected; older ones are
+   *   accepted, because legality is decided by the engine against the CURRENT state.
+   * - `actionId` is unique per client intent (`null` for bots). Each id is
+   *   processed at most once per match, so double taps and replays cannot
+   *   execute twice — whatever the outcome of the first attempt.
    */
   submitAction(
     seat: SeatIndex,
     version: number | null,
+    actionId: string | null,
     rawAction: unknown,
   ): Result<{ version: number }> {
     if (!this.started || this.over || this.stopped) return fail('INVALID_PHASE');
     if (version !== null && version > this.currentVersion) return fail('STALE_VERSION');
+    if (actionId !== null) {
+      if (this.seenActionIds.has(actionId)) return fail('DUPLICATE_ACTION');
+      this.rememberActionId(actionId);
+    }
     const parsed = this.game.actionSchema.safeParse(rawAction);
     if (!parsed.success) return fail('INVALID_PAYLOAD');
     const verdict = this.game.validateAction(this.state, seat, parsed.data);
@@ -119,6 +132,15 @@ export class GameRuntime {
       return again.ok ? this.game.applyAction(this.state, seat, parsed.data, this.ctx()) : null;
     });
     return ok({ version: this.currentVersion });
+  }
+
+  private rememberActionId(actionId: string): void {
+    this.seenActionIds.add(actionId);
+    // Far above any real match's action count; only guards memory against abuse.
+    if (this.seenActionIds.size > MAX_REMEMBERED_ACTION_IDS) {
+      const oldest = this.seenActionIds.values().next().value as string;
+      this.seenActionIds.delete(oldest);
+    }
   }
 
   seatChanged(seat: SeatIndex, change: SeatChange): void {

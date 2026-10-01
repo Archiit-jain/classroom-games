@@ -31,6 +31,7 @@ const errors = {
   CANNOT_TARGET_SELF: 'You can’t do that to yourself.',
   MATCH_NOT_FOUND: 'That game is no longer running.',
   STALE_VERSION: 'The game moved on. Try again.',
+  DUPLICATE_ACTION: 'That move was already sent.',
   NOT_YOUR_TURN: 'It’s not your turn.',
   ILLEGAL_ACTION: 'That move isn’t allowed.',
   NOT_ELIGIBLE: 'You can’t do that yet.',
