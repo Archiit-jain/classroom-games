@@ -7,6 +7,16 @@ export type EffectsMode = 'full' | 'lite' | 'reduced';
 /** Color Burst Arcade accent colours (see @cg/ui tokens). */
 export type Accent = 'pink' | 'yellow' | 'cyan' | 'lime' | 'orange' | 'violet';
 
+/** A quick reaction to show as a bubble over a seat (already filtered for muted players). */
+export interface BoardReaction {
+  /** Unique per reaction — a new key means a new bubble. */
+  key: string;
+  seat: number;
+  emoji: string;
+  /** Accessible, translated description ("Laughing"). */
+  label: string;
+}
+
 export interface BoardProps<V, A, E> {
   /** The view currently being presented (may briefly lag the newest one while animations play). */
   view: V;
@@ -21,6 +31,8 @@ export interface BoardProps<V, A, E> {
   effects: EffectsMode;
   /** Converts a server timestamp into milliseconds remaining on this device's clock. */
   msUntil(serverTs: number): number;
+  /** Reactions on screen right now, oldest first (only for games with `reactions: true`). */
+  reactions: readonly BoardReaction[];
 }
 
 export interface SettingsProps<Settings> {
@@ -56,6 +68,13 @@ export interface GameClientModule<V, A, E, Settings> {
   eventDuration?(event: E, effects: EffectsMode): number;
   /** Game-specific columns for the results screen (e.g. total score). */
   resultStats?: ResultStat[];
+  /**
+   * The board draws quick-reaction bubbles over its seats, so the platform
+   * shows the reaction picker during matches of this game.
+   */
+  reactions?: boolean;
+  /** Confetti on the podium in lite mode too (default true; full mode always has it). */
+  liteConfetti?: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

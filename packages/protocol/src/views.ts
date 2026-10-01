@@ -1,3 +1,5 @@
+import type { ReactionId } from './limits';
+
 /** Read-only shapes the server sends to clients. */
 
 export type RoomKind = 'PRIVATE' | 'PUBLIC';
@@ -95,6 +97,14 @@ export interface MatchUpdate<View = unknown, Event = unknown> {
 export interface MatchEnd {
   matchId: string;
   results: GameResults;
+}
+
+/** A quick reaction, shown as a bubble over the sender's seat. */
+export interface Reaction {
+  fromId: string;
+  seat: number;
+  reactionId: ReactionId;
+  sentAt: number;
 }
 
 export interface ChatMessage {

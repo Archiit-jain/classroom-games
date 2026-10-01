@@ -1,4 +1,4 @@
-import type { ChatMessage, GameInfo, MatchEnd, RoomView } from '@cg/protocol';
+import type { ChatMessage, GameInfo, MatchEnd, ReactionId, RoomView } from '@cg/protocol';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'displaced';
 
@@ -10,6 +10,14 @@ export interface MatchState {
   view: unknown;
   /** Events from the latest update, for animations. */
   events: unknown[];
+}
+
+/** A quick reaction currently on screen (removed again after a couple of seconds). */
+export interface ReactionEntry {
+  key: number;
+  fromId: string;
+  seat: number;
+  reactionId: ReactionId;
 }
 
 export interface Toast {
@@ -33,6 +41,8 @@ export interface AppState {
   chat: ChatMessage[];
   /** Players this device has muted or reported (hidden locally). */
   hidden: string[];
+  /** Reactions being shown right now, oldest first. */
+  reactions: ReactionEntry[];
   toasts: Toast[];
 }
 
@@ -48,6 +58,7 @@ export const initialState: AppState = {
   results: null,
   chat: [],
   hidden: [],
+  reactions: [],
   toasts: [],
 };
 

@@ -1,5 +1,7 @@
+import type { BoardReaction } from '@cg/game-sdk/client';
 import type { RoomView } from '@cg/protocol';
-import { Suspense } from 'react';
+import { Suspense, useMemo } from 'react';
+import { ReactionBar } from '../components/ReactionBar';
 import { gameClients } from '../games/registry';
 import { t } from '../i18n';
 import {
@@ -8,9 +10,10 @@ import {
   useEffectsSetting,
   usePresentedMatch,
 } from '../platform/context';
+import { REACTION_EMOJI } from '../platform/reactions';
 
 export function MatchView({ room }: { room: RoomView }) {
-  const { session } = useAppState();
+  const { session, reactions } = useAppState();
   const conn = useConnection();
   const { mode } = useEffectsSetting();
   const module = gameClients.get(room.gameId);
@@ -21,6 +24,16 @@ export function MatchView({ room }: { room: RoomView }) {
   );
   const Board = module?.Board;
   const current = match && room.match && match.matchId === room.match.matchId ? match : null;
+  const boardReactions = useMemo<BoardReaction[]>(
+    () =>
+      reactions.map((r) => ({
+        key: String(r.key),
+        seat: r.seat,
+        emoji: REACTION_EMOJI[r.reactionId],
+        label: t(`reactions.${r.reactionId}`),
+      })),
+    [reactions],
+  );
 
   const reclaim = async () => {
     const res = await conn.request('room:reclaimSeat', {});
@@ -47,6 +60,7 @@ export function MatchView({ room }: { room: RoomView }) {
             seats={room.match.seats}
             effects={mode}
             msUntil={conn.msUntil}
+            reactions={module?.reactions ? boardReactions : []}
             send={async (action) => {
               const res = await conn.sendAction(action);
               // A duplicate means this exact intent was already sent: nothing to report.
@@ -58,6 +72,7 @@ export function MatchView({ room }: { room: RoomView }) {
       ) : (
         <p className="muted">{t('match.loadingBoard')}</p>
       )}
+      {module?.reactions && mySeat && current && <ReactionBar />}
     </div>
   );
 }

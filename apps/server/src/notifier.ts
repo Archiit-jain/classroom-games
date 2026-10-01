@@ -1,4 +1,11 @@
-import type { ChatMessage, MatchEnd, MatchUpdate, RoomEvent, RoomView } from '@cg/protocol';
+import type {
+  ChatMessage,
+  MatchEnd,
+  MatchUpdate,
+  Reaction,
+  RoomEvent,
+  RoomView,
+} from '@cg/protocol';
 
 /**
  * Outbound messages, addressed by player id. The transport layer implements
@@ -12,4 +19,5 @@ export interface Notifier {
   matchEnd(playerIds: readonly string[], end: MatchEnd): void;
   chatMessage(playerIds: readonly string[], message: ChatMessage): void;
   chatHistory(playerId: string, messages: readonly ChatMessage[]): void;
+  reaction(playerIds: readonly string[], reaction: Reaction): void;
 }

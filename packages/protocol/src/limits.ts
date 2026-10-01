@@ -13,6 +13,21 @@ export const ROOM_CODE_LENGTH = 6;
 export const ACTION_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 
 export const REPORT_REASONS = ['CHAT', 'DRAWING', 'NAME', 'OTHER'] as const;
+
+/** Quick reactions (spec §8): a fixed set of emotes, only ever sent by a player. */
+export const REACTION_IDS = [
+  'LOL',
+  'SHOCK',
+  'ANGRY',
+  'PLEASE',
+  'CLAP',
+  'FIRE',
+  'CRY',
+  'SHH',
+] as const;
+export type ReactionId = (typeof REACTION_IDS)[number];
+/** At most one reaction per player per 1.5 s (spec Appendix A). */
+export const REACTION_INTERVAL_MS = 1500;
 export type ReportReason = (typeof REPORT_REASONS)[number];
 
 /** Largest Socket.IO message the server accepts (bytes). */

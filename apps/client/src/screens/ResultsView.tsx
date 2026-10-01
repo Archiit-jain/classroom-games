@@ -49,7 +49,7 @@ export function ResultsView({ room }: { room: RoomView }) {
   return (
     <section className="results" aria-labelledby="results-title">
       <div className="results__burst">
-        <ConfettiBurst burstKey={placements.length} />
+        <ConfettiBurst burstKey={placements.length} lite={module?.liteConfetti ?? true} />
       </div>
       <motion.h2
         id="results-title"

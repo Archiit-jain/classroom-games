@@ -13,12 +13,21 @@ const COLORS = [
 ];
 
 /**
- * A burst of paper confetti. Full: `count` pieces; lite: a third; reduced: none.
- * Change `burstKey` to fire again. Deterministic per key (no Math.random in render).
+ * A burst of paper confetti. Full: `count` pieces; lite: a third (or none when
+ * `lite` is false); reduced: none. Change `burstKey` to fire again.
+ * Deterministic per key (no Math.random in render).
  */
-export function ConfettiBurst({ burstKey = 1, count = 40 }: { burstKey?: number; count?: number }) {
+export function ConfettiBurst({
+  burstKey = 1,
+  count = 40,
+  lite = true,
+}: {
+  burstKey?: number;
+  count?: number;
+  lite?: boolean;
+}) {
   const mode = useEffects();
-  const n = mode === 'full' ? count : mode === 'lite' ? Math.round(count / 3) : 0;
+  const n = mode === 'full' ? count : mode === 'lite' && lite ? Math.round(count / 3) : 0;
   const pieces = useMemo(() => {
     const rng = createRng(burstKey * 7919 + n);
     return Array.from({ length: n }, (_, i) => {

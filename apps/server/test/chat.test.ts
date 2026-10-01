@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { AnyGameModule } from '@cg/game-sdk';
 import { REMOVED_MARKER } from '@cg/moderation';
 import { InMemoryFlagStore } from '../src/reports/ReportService';
-import { setupRoom, sleep, startServer, testFixture, type TestServer } from './helpers';
+import { autoPlay, setupRoom, sleep, startServer, testFixture, type TestServer } from './helpers';
 
 let t: TestServer;
 afterEach(async () => {
@@ -129,5 +129,72 @@ describe('game chat interception', () => {
     expect(whisper.text).toBe('whisper');
     expect(c.all('chat:message').map((m) => m.text)).toEqual(['hello all']);
     expect(a.all('chat:message').map((m) => m.text)).toEqual(['whisper', 'hello all']);
+  });
+});
+
+describe('quick reactions', () => {
+  async function inMatch() {
+    // Long turns, so the match is still running when the reaction cooldown ends.
+    t = await startServer({}, { games: [testFixture({ turnMs: 20_000 })] });
+    const a = await t.player('Archit');
+    const b = await t.player('Priya');
+    await setupRoom(a, b);
+    expect((await a.emit('room:start', {})).ok).toBe(true);
+    const room = await a.waitForRoom((r) => r?.phase === 'IN_GAME');
+    const seatOf = (id: string) => room?.match?.seats.find((s) => s.memberId === id)?.seat;
+    return { a, b, seatOf };
+  }
+
+  it('shows a reaction over the sender’s seat for everyone in the match', async () => {
+    const { a, b, seatOf } = await inMatch();
+    expect(await a.emit('chat:react', { reactionId: 'FIRE' })).toEqual({ ok: true });
+    for (const client of [a, b]) {
+      expect(await client.waitFor('chat:reaction')).toMatchObject({
+        fromId: a.playerId,
+        seat: seatOf(a.playerId as string),
+        reactionId: 'FIRE',
+      });
+    }
+  });
+
+  it('allows one reaction per 1.5 s', async () => {
+    const { a } = await inMatch();
+    expect((await a.emit('chat:react', { reactionId: 'LOL' })).ok).toBe(true);
+    const again = await a.emit('chat:react', { reactionId: 'LOL' });
+    expect(again).toMatchObject({ ok: false, code: 'RATE_LIMITED' });
+    expect(again.ok === false && again.retryAfterMs).toBeGreaterThan(1000);
+    await sleep(1550);
+    expect(await a.emit('chat:react', { reactionId: 'CLAP' })).toEqual({ ok: true });
+  });
+
+  it('only accepts the fixed emotes, only from seated players in a running match', async () => {
+    t = await startServer();
+    const outside = await t.player('Archit');
+    expect(await outside.emit('chat:react', { reactionId: 'LOL' })).toEqual({
+      ok: false,
+      code: 'NOT_IN_ROOM',
+    });
+    const host = await t.player('Priya');
+    await setupRoom(host);
+    expect(await host.emit('chat:react', { reactionId: 'LOL' })).toEqual({
+      ok: false,
+      code: 'INVALID_PHASE',
+    });
+    const other = await t.player('Kabir');
+    expect(await other.emit('chat:react', { reactionId: '💩' } as never)).toEqual({
+      ok: false,
+      code: 'INVALID_PAYLOAD',
+    });
+  });
+
+  it('never comes from a bot', async () => {
+    t = await startServer();
+    const host = await t.player('Archit');
+    await setupRoom(host);
+    await host.emit('room:addBot', {});
+    autoPlay(host);
+    expect((await host.emit('room:start', {})).ok).toBe(true);
+    await host.waitFor('match:end', () => true, 10_000);
+    expect(host.all('chat:reaction')).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { CHAT_MAX_LENGTH, MAX_MESSAGE_BYTES } from '@cg/protocol';
+import { CHAT_MAX_LENGTH, MAX_MESSAGE_BYTES, REACTION_INTERVAL_MS } from '@cg/protocol';
 import { z } from 'zod';
 import type { LogLevel } from './log';
 
@@ -49,6 +49,7 @@ export interface ServerConfig {
     roomAdmin: BucketSpec;
     matchAction: BucketSpec;
     report: BucketSpec;
+    reaction: BucketSpec;
     ping: BucketSpec;
   };
 }
@@ -95,6 +96,8 @@ export const DEFAULT_CONFIG: ServerConfig = {
     roomAdmin: { burst: 10, perSecond: 2 },
     matchAction: { burst: 20, perSecond: 10 },
     report: { burst: 3, perSecond: 5 / 60 },
+    // Quick reactions: one per 1.5 s (spec Appendix A).
+    reaction: { burst: 1, perSecond: 1000 / REACTION_INTERVAL_MS },
     ping: { burst: 10, perSecond: 2 },
   },
 };

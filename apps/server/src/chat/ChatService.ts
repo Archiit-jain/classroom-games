@@ -1,5 +1,5 @@
 import type { Moderator } from '@cg/moderation';
-import { fail, ok, type ChatMessage, type Result } from '@cg/protocol';
+import { fail, ok, type ChatMessage, type ReactionId, type Result } from '@cg/protocol';
 import type { ServerConfig } from '../config';
 import type { Notifier } from '../notifier';
 import type { RoomManager } from '../rooms/RoomManager';
@@ -82,6 +82,25 @@ export class ChatService {
       if (room.chat.length > this.deps.config.chat.bufferSize) room.chat.shift();
     }
     this.deps.notifier.chatMessage(recipients, message);
+    return ok({});
+  }
+
+  /**
+   * Quick reaction (spec §8): a fixed emote shown over the sender's seat for
+   * everyone in the room. Only while a match is running; the transport applies
+   * the 1-per-1.5 s limit. Players only — bots never react.
+   */
+  react(session: Session, reactionId: ReactionId): Result<Empty> {
+    const ctx = this.deps.rooms.context(session);
+    if (!ctx) return fail('NOT_IN_ROOM');
+    const seat = this.deps.rooms.seatOfPlayer(ctx.room, session.id);
+    if (seat === undefined) return fail('INVALID_PHASE');
+    this.deps.notifier.reaction(this.deps.rooms.humanIds(ctx.room), {
+      fromId: session.id,
+      seat,
+      reactionId,
+      sentAt: this.now(),
+    });
     return ok({});
   }
 

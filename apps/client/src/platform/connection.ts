@@ -4,6 +4,7 @@ import type {
   C2SPayload,
   C2SResults,
   ClientToServerEvents,
+  ReactionId,
   ReportReason,
   RoomEvent,
   ServerToClientEvents,
@@ -24,6 +25,8 @@ const SLOW_CONNECT_MS = 3000;
 /** Matches the waking-up message's promise of "up to a minute". */
 const UNREACHABLE_MS = 60_000;
 const MAX_CHAT = 100;
+/** How long a reaction bubble stays on screen. */
+export const REACTION_SHOW_MS = 2400;
 
 function loadHidden(): string[] {
   try {
@@ -45,6 +48,7 @@ export class GameConnection {
   private readonly socket: ClientSocket;
   private clockOffset = 0;
   private toastSeq = 0;
+  private reactionSeq = 0;
   private connectTimers: ReturnType<typeof setTimeout>[] = [];
   /** The game server this client talks to (shown when it cannot be reached). */
   readonly url: string;
@@ -125,6 +129,11 @@ export class GameConnection {
       storage.set(KEYS.hidden, JSON.stringify(hidden), 'session');
       return { hidden };
     });
+  }
+
+  /** Sends a quick reaction (shown over your seat for everyone in the match). */
+  react(reactionId: ReactionId): Promise<ClientAck<C2SResults['chat:react']>> {
+    return this.request('chat:react', { reactionId });
   }
 
   async report(playerId: string, reason: ReportReason): Promise<void> {
@@ -266,6 +275,19 @@ export class GameConnection {
     });
 
     socket.on('chat:history', ({ messages }) => store.set({ chat: messages.slice(-MAX_CHAT) }));
+
+    socket.on('chat:reaction', ({ fromId, seat, reactionId }) => {
+      // Muted / reported players' reactions are hidden like their chat.
+      if (store.get().hidden.includes(fromId)) return;
+      const key = ++this.reactionSeq;
+      store.set((s) => ({
+        reactions: [...s.reactions, { key, fromId, seat, reactionId }].slice(-12),
+      }));
+      setTimeout(
+        () => store.set((s) => ({ reactions: s.reactions.filter((r) => r.key !== key) })),
+        REACTION_SHOW_MS,
+      );
+    });
 
     socket.on('system:notice', ({ code }) => {
       if (code === 'SERVER_RESTARTING') store.set({ serverRestarting: true });

@@ -6,6 +6,7 @@ import type {
   GameInfo,
   MatchEnd,
   MatchUpdate,
+  Reaction,
   RoomView,
   TakeoverReason,
 } from './views';
@@ -33,6 +34,7 @@ export interface C2SResults {
   'match:action': { version: number };
   'match:resync': { update: MatchUpdate };
   'chat:send': Empty;
+  'chat:react': Empty;
   'report:submit': Empty;
   'time:ping': { clientTs: number; serverNow: number };
 }
@@ -73,6 +75,7 @@ export interface ServerToClientEvents {
   'match:update': (payload: MatchUpdate) => void;
   'match:end': (payload: MatchEnd) => void;
   'chat:message': (payload: ChatMessage) => void;
+  'chat:reaction': (payload: Reaction) => void;
   'chat:history': (payload: { messages: ChatMessage[] }) => void;
   'system:notice': (payload: { code: SystemNoticeCode }) => void;
 }

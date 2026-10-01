@@ -168,3 +168,43 @@
     0.05em 0.07em 0 var(--cb-pink),
     0.09em 0.12em 0 var(--cb-outline);
 }
+
+/* Quick-reaction bubble (anchored by the board over a seat) */
+.cb-reaction {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  z-index: 5;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.cb-reaction__bubble {
+  position: absolute;
+  left: 0;
+  bottom: 6px;
+  translate: -50% 0;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  font-size: 1.7rem;
+  line-height: 1;
+  background: var(--cb-paper);
+  border: var(--edge) solid var(--cb-outline);
+  border-radius: 50%;
+  box-shadow: var(--pop-sm);
+}
+.cb-reaction__bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  width: 12px;
+  height: 12px;
+  translate: -50% 0;
+  rotate: 45deg;
+  background: var(--cb-paper);
+  border-right: var(--edge) solid var(--cb-outline);
+  border-bottom: var(--edge) solid var(--cb-outline);
+}

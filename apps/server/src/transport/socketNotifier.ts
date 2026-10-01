@@ -20,5 +20,6 @@ export function createSocketNotifier(io: IoServer, sessions: SessionManager): No
     matchEnd: (ids, end) => to(ids)?.emit('match:end', end),
     chatMessage: (ids, message) => to(ids)?.emit('chat:message', message),
     chatHistory: (id, messages) => to([id])?.emit('chat:history', { messages: [...messages] }),
+    reaction: (ids, reaction) => to(ids)?.emit('chat:reaction', reaction),
   };
 }

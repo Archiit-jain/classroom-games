@@ -3,6 +3,7 @@ export { Avatar, type AvatarProps } from './components/Avatar';
 export { ConfettiBurst } from './components/ConfettiBurst';
 export { CountdownRing, type CountdownRingProps } from './components/CountdownRing';
 export { PaperChit, type PaperChitProps } from './components/PaperChit';
+export { ReactionBubble } from './components/ReactionBubble';
 export { RollingNumber } from './components/RollingNumber';
 export { Stamp } from './components/Stamp';
 export { Wordmark } from './components/Wordmark';

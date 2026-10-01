@@ -127,6 +127,11 @@ export class RoomManager {
       .filter((id) => findHuman(room, id));
   }
 
+  /** The seat a human plays in the room's running match, if any. */
+  seatOfPlayer(room: Room, playerId: string): number | undefined {
+    return room.phase === 'IN_GAME' ? seatOf(room.match, playerId)?.seat : undefined;
+  }
+
   humanIds(room: Room): string[] {
     return room.members.filter((m): m is HumanMember => m.kind === 'HUMAN').map((m) => m.id);
   }

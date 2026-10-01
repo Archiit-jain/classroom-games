@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ACTION_ID_PATTERN, CHAT_MAX_LENGTH, REPORT_REASONS } from './limits';
+import { ACTION_ID_PATTERN, CHAT_MAX_LENGTH, REACTION_IDS, REPORT_REASONS } from './limits';
 
 /**
  * Client → server payload schemas (server-side validation). Kept in their own
@@ -38,6 +38,7 @@ export const C2S = {
 
   // Raw text may be longer than the limit before trimming; the service enforces the real limit.
   'chat:send': z.strictObject({ text: z.string().max(CHAT_MAX_LENGTH * 2) }),
+  'chat:react': z.strictObject({ reactionId: z.enum(REACTION_IDS) }),
   'report:submit': z.strictObject({ playerId: id, reason: z.enum(REPORT_REASONS) }),
 
   'time:ping': z.strictObject({ clientTs: z.number().finite() }),
