@@ -2,13 +2,21 @@ import { expect, test, type Page } from '@playwright/test';
 import { PARCHI, createRoom, joinRoom, newPlayer } from './helpers';
 
 /**
+ * Deals are random, so match length varies a lot (a long match can run dozens of passes),
+ * and CI machines are slower than a laptop. The play budget leaves room for that; each test
+ * using it gets its own longer timeout (the global default is 120 s).
+ */
+const PLAY_BUDGET_MS = 220_000;
+const PARCHI_TEST_TIMEOUT_MS = 240_000;
+
+/**
  * Plays like a person: whenever this page may pass a slip it taps the last one
  * (the hand is grouped biggest first), and it claims a full set as soon as the
  * CLAIM button appears. Stops when the results screen appears.
  */
 async function playUntilResults(pages: Page[]): Promise<{ picks: number; claims: number }> {
   const done = { picks: 0, claims: 0 };
-  const deadline = Date.now() + 100_000;
+  const deadline = Date.now() + PLAY_BUDGET_MS;
   while (Date.now() < deadline) {
     for (const page of pages) {
       if (await page.getByRole('heading', { name: 'Results' }).isVisible()) return done;
@@ -40,6 +48,7 @@ async function playUntilResults(pages: Page[]): Promise<{ picks: number; claims:
 test('16 Parchi: two humans and two bots pass, claim and reach the podium @mobile', async ({
   browser,
 }, testInfo) => {
+  test.setTimeout(PARCHI_TEST_TIMEOUT_MS);
   const mobile = testInfo.project.name === 'mobile';
   const host = await newPlayer(browser, 'Archit');
   const guest = await newPlayer(browser, 'Priya');
@@ -100,6 +109,7 @@ test('16 Parchi: two humans and two bots pass, claim and reach the podium @mobil
 });
 
 test('16 Parchi is fully playable with reduced motion', async ({ browser }) => {
+  test.setTimeout(PARCHI_TEST_TIMEOUT_MS);
   const host = await newPlayer(browser, 'Meera', { reducedMotion: 'reduce' });
   await createRoom(host, PARCHI);
   for (let i = 0; i < 3; i++) await host.getByRole('button', { name: 'Add bot' }).click();
