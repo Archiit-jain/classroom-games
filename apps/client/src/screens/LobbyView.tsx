@@ -1,4 +1,6 @@
 import type { RoomView } from '@cg/protocol';
+import { durationFor, useEffects } from '@cg/ui';
+import { AnimatePresence, motion } from 'motion/react';
 import { Suspense, useState } from 'react';
 import { MemberList } from '../components/MemberList';
 import { gameClients, gameName } from '../games/registry';
@@ -15,6 +17,7 @@ export function LobbyView({ room }: { room: RoomView }) {
   const info = games.find((g) => g.id === room.gameId);
   const playable = games.filter((g) => gameClients.has(g.id));
   const canStart = room.members.length >= room.minPlayers;
+  const exact = room.minPlayers === room.capacity;
 
   const act = async (run: () => ReturnType<typeof conn.request>) => {
     const res = await run();
@@ -34,17 +37,17 @@ export function LobbyView({ room }: { room: RoomView }) {
   return (
     <div className="lobby">
       {room.code && (
-        <section className="panel room-code">
-          <span className="field__label">{t('room.codeLabel')}</span>
-          <div className="room-code__row">
-            <strong className="room-code__value" data-testid="room-code">
+        <section className="ticket lobby__ticket" aria-label={t('room.codeLabel')}>
+          <span className="lobby__ticket-label">{t('room.codeLabel')}</span>
+          <div className="lobby__ticket-row">
+            <strong className="lobby__code" data-testid="room-code">
               {room.code}
             </strong>
             <button type="button" className="btn btn--small" onClick={() => void copyCode()}>
               {copied ? t('room.copied') : t('room.copy')}
             </button>
           </div>
-          <p className="field__hint">{t('room.shareHint')}</p>
+          <p className="lobby__ticket-hint">{t('room.shareHint')}</p>
         </section>
       )}
 
@@ -54,6 +57,7 @@ export function LobbyView({ room }: { room: RoomView }) {
           <select
             className="field__input"
             value={room.gameId}
+            aria-label={t('room.game')}
             onChange={(e) =>
               void act(() => conn.request('room:setGame', { gameId: e.target.value }))
             }
@@ -99,7 +103,7 @@ export function LobbyView({ room }: { room: RoomView }) {
           room.members.length < room.capacity && (
             <button
               type="button"
-              className="btn"
+              className="btn btn--cyan"
               onClick={() => void act(() => conn.request('room:addBot', {}))}
             >
               {t('room.addBot')}
@@ -107,7 +111,7 @@ export function LobbyView({ room }: { room: RoomView }) {
           )}
       </section>
 
-      <section className="panel lobby__start">
+      <section className="lobby__start">
         {isHost ? (
           <>
             <button
@@ -119,28 +123,57 @@ export function LobbyView({ room }: { room: RoomView }) {
               {t('room.start')}
             </button>
             {!canStart && (
-              <p className="muted">{t('room.needPlayers', { min: room.minPlayers })}</p>
+              <p className="muted">
+                {exact
+                  ? t('room.needExactly', { count: room.capacity })
+                  : t('room.needPlayers', { min: room.minPlayers })}
+              </p>
             )}
           </>
         ) : (
-          <p className="muted">{t('room.waitingForHost')}</p>
+          <p className="lobby__waiting">{t('room.waitingForHost')}</p>
         )}
       </section>
 
-      {room.phase === 'STARTING' && room.startsAt !== null && (
-        <StartingOverlay startsAt={room.startsAt} />
-      )}
+      <AnimatePresence>
+        {room.phase === 'STARTING' && room.startsAt !== null && (
+          <StartingOverlay startsAt={room.startsAt} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 function StartingOverlay({ startsAt }: { startsAt: number }) {
   const conn = useConnection();
+  const effects = useEffects();
   useTick(100);
   const seconds = Math.max(1, Math.ceil(conn.msUntil(startsAt) / 1000));
+  const d = durationFor(effects, 450, 200) / 1000;
   return (
-    <div className="overlay" role="status" aria-live="assertive">
-      <div className="overlay__card">{t('room.startingIn', { seconds })}</div>
-    </div>
+    <motion.div
+      className="overlay"
+      role="status"
+      aria-live="assertive"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: d / 2 }}
+    >
+      <span className="sr-only">{t('room.startingIn', { seconds })}</span>
+      <AnimatePresence mode="popLayout">
+        <motion.span
+          key={seconds}
+          className="countdown-number"
+          aria-hidden="true"
+          initial={effects === 'reduced' ? false : { scale: 2.4, opacity: 0, rotate: -12 }}
+          animate={{ scale: 1, opacity: 1, rotate: 0 }}
+          exit={{ scale: 0.4, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 18 }}
+        >
+          {seconds}
+        </motion.span>
+      </AnimatePresence>
+    </motion.div>
   );
 }

@@ -1,17 +1,19 @@
+import '@cg/ui/styles.css';
+import './ui/app.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { GameConnection, defaultServerUrl } from './platform/connection';
-import { ConnectionProvider } from './platform/context';
-import './ui/tokens.css';
-import './ui/global.css';
+import { PlatformProvider } from './platform/context';
+import { EffectsController } from './platform/effects';
 
 const connection = new GameConnection(defaultServerUrl());
+const effects = new EffectsController();
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
-    <ConnectionProvider connection={connection}>
+    <PlatformProvider connection={connection} effects={effects}>
       <App />
-    </ConnectionProvider>
+    </PlatformProvider>
   </StrictMode>,
 );

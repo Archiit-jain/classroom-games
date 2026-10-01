@@ -1,6 +1,8 @@
 import type { RoomView } from '@cg/protocol';
+import { accentVar } from '@cg/ui';
+import type { CSSProperties } from 'react';
 import { ChatPanel } from '../components/ChatPanel';
-import { gameName } from '../games/registry';
+import { gameClients, gameName } from '../games/registry';
 import { t } from '../i18n';
 import { useConnection } from '../platform/context';
 import { LobbyView } from './LobbyView';
@@ -10,6 +12,7 @@ import { ResultsView } from './ResultsView';
 export function RoomScreen({ room }: { room: RoomView }) {
   const conn = useConnection();
   const inMatch = room.phase === 'IN_GAME';
+  const module = gameClients.get(room.gameId);
 
   const leave = async () => {
     if (!window.confirm(inMatch ? t('match.confirmLeave') : t('room.confirmLeave'))) return;
@@ -18,10 +21,20 @@ export function RoomScreen({ room }: { room: RoomView }) {
   };
 
   return (
-    <main className="room">
+    <main
+      className="room"
+      style={module ? ({ '--game-accent': accentVar(module.accent) } as CSSProperties) : undefined}
+    >
       <header className="room__header">
-        <h1 className="room__title">{gameName(room.gameId)}</h1>
-        <button type="button" className="btn btn--ghost" onClick={() => void leave()}>
+        <h1 className="room__title">
+          {module && (
+            <span className="room__icon" aria-hidden="true">
+              <module.Icon size={34} />
+            </span>
+          )}
+          {gameName(room.gameId)}
+        </h1>
+        <button type="button" className="btn btn--small btn--ghost" onClick={() => void leave()}>
           {inMatch ? t('match.leave') : t('room.leave')}
         </button>
       </header>

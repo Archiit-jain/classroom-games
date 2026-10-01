@@ -1,3 +1,5 @@
+import { formatMessage } from '@cg/game-sdk/client';
+import type { MessageCatalog } from '@cg/game-sdk/client';
 import type { ErrorCode } from '@cg/protocol';
 import { en, type ClientErrorCode, type MessageKey } from './en';
 
@@ -5,11 +7,11 @@ export type { MessageKey } from './en';
 type Params = Record<string, string | number>;
 
 /** Replaces {name} placeholders. Unknown placeholders are left visible so they get noticed. */
-export function format(template: string, params?: Params): string {
-  if (!params) return template;
-  return template.replace(/\{(\w+)\}/g, (match, name: string) =>
-    name in params ? String(params[name]) : match,
-  );
+export const format = formatMessage;
+
+/** Text from a game's own catalog (falls back to the key, so gaps are visible). */
+export function gameText(messages: MessageCatalog, key: string, params?: Params): string {
+  return format(messages[key] ?? key, params);
 }
 
 function lookup(key: string): string | undefined {

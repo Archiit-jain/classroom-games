@@ -28,4 +28,5 @@ export const KEYS = {
   token: 'cg.token',
   nickname: 'cg.nickname',
   hidden: 'cg.hiddenPlayers',
+  effects: 'cg.effects',
 } as const;

@@ -1,0 +1,170 @@
+/* Styles for the React primitives in src/components. */
+
+/* Avatar */
+.cb-avatar {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--cb-ink);
+  background: var(--avatar-bg, var(--cb-cyan));
+  border: var(--edge) solid var(--cb-outline);
+  border-radius: 50%;
+  box-shadow:
+    0 3px 0 var(--cb-outline),
+    inset 0 3px 0 rgba(255, 255, 255, 0.45);
+}
+.cb-avatar__bot {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  padding: 0 4px;
+  font-size: 0.55rem;
+  letter-spacing: 0.05em;
+  color: var(--cb-ink);
+  background: #fff;
+  border: 2px solid var(--cb-outline);
+  border-radius: 6px;
+}
+
+/* Countdown ring */
+.cb-ring {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+.cb-ring svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+.cb-ring__track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.12);
+}
+.cb-ring__bar {
+  fill: none;
+  stroke: var(--ring-color, var(--cb-yellow));
+  stroke-linecap: round;
+}
+.cb-ring--urgent .cb-ring__bar {
+  stroke: var(--cb-pink);
+}
+.cb-ring__label {
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+/* Rubber stamp */
+.cb-stamp {
+  display: inline-block;
+  padding: 6px 16px 2px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1.4rem, 6vw, 2.2rem);
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  color: var(--stamp-color, var(--color-success));
+  border: 5px solid currentColor;
+  border-radius: 12px;
+  background: rgba(12, 7, 32, 0.55);
+  text-shadow: 0 0 18px currentColor;
+  mix-blend-mode: normal;
+  white-space: nowrap;
+}
+
+/* Confetti */
+.cb-confetti {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.cb-confetti__piece {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+}
+
+/* Paper chit (flip card) */
+.cb-chit {
+  position: relative;
+  perspective: 700px;
+  flex: none;
+}
+.cb-chit__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.cb-chit__face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border: var(--edge) solid var(--cb-outline);
+  border-radius: 12px;
+  box-shadow: 0 4px 0 var(--cb-outline);
+}
+.cb-chit__back {
+  color: var(--cb-pencil);
+  background:
+    linear-gradient(
+      135deg,
+      transparent 48%,
+      rgba(31, 22, 71, 0.18) 49%,
+      rgba(31, 22, 71, 0.18) 51%,
+      transparent 52%
+    ),
+    repeating-linear-gradient(to bottom, transparent 0 11px, var(--cb-paper-line) 11px 12px),
+    var(--cb-paper-shade);
+}
+.cb-chit__back span {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.6em;
+  transform: rotate(-8deg);
+}
+.cb-chit__front {
+  color: var(--cb-ink);
+  background: var(--cb-paper);
+  transform: rotateY(180deg);
+}
+
+/* Wordmark */
+.cb-wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 0.9;
+  text-align: center;
+}
+.cb-wordmark__top {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.32em;
+  letter-spacing: 0.38em;
+  margin-right: -0.38em;
+  color: var(--cb-cyan);
+}
+.cb-wordmark__main {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1em;
+  letter-spacing: 0.02em;
+  color: var(--cb-yellow);
+  -webkit-text-stroke: 0.035em var(--cb-outline);
+  paint-order: stroke fill;
+  text-shadow:
+    0.05em 0.07em 0 var(--cb-pink),
+    0.09em 0.12em 0 var(--cb-outline);
+}

@@ -1,0 +1,109 @@
+/*
+ * COLOR BURST ARCADE — design tokens.
+ * Nostalgic classroom games × modern multiplayer arcade: a deep "arcade night"
+ * stage, bursts of saturated colour, chunky sticker-like surfaces with hard
+ * outlines, and warm notebook paper for game pieces (chits, cards, name tags).
+ * Components use these tokens, never raw values.
+ */
+:root {
+  /* Stage */
+  --cb-night-950: #0c0720;
+  --cb-night-900: #130b2e;
+  --cb-night-800: #1c1244;
+  --cb-night-700: #281a5c;
+  --cb-night-600: #352677;
+  --cb-outline: #07041a;
+
+  /* Bursts (each with a deeper shade for edges/pressed states) */
+  --cb-pink: #ff3e8a;
+  --cb-pink-deep: #c9195f;
+  --cb-yellow: #ffd23f;
+  --cb-yellow-deep: #e39b00;
+  --cb-cyan: #2de2e6;
+  --cb-cyan-deep: #0f9fb0;
+  --cb-lime: #9cf04a;
+  --cb-lime-deep: #58ae15;
+  --cb-orange: #ff8a3d;
+  --cb-orange-deep: #d9570b;
+  --cb-violet: #9b7bff;
+  --cb-violet-deep: #6440ea;
+
+  /* Classroom paper */
+  --cb-paper: #fff7e3;
+  --cb-paper-shade: #efdfb8;
+  --cb-paper-line: #bcd3ff;
+  --cb-paper-margin: #ff9fae;
+  --cb-ink: #1f1647;
+  --cb-pencil: #6b5fa3;
+
+  /* Semantic */
+  --color-bg: var(--cb-night-900);
+  --color-surface: var(--cb-night-800);
+  --color-surface-2: var(--cb-night-700);
+  --color-surface-3: var(--cb-night-600);
+  --color-text: #fbf8ff;
+  --color-text-muted: #b9afe8;
+  --color-text-on-bright: var(--cb-ink);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-primary: var(--cb-yellow);
+  --color-accent: var(--cb-pink);
+  --color-focus: var(--cb-cyan);
+  --color-success: #3ee08f;
+  --color-danger: #ff4d6a;
+  --color-danger-deep: #c92244;
+
+  /* Type */
+  --font-display: 'Baloo 2 Variable', 'Baloo 2', ui-rounded, system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
+  --text-xs: 0.78rem;
+  --text-sm: 0.9rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.4rem;
+  --text-hero: clamp(2.6rem, 11vw, 4.6rem);
+
+  /* Shape & depth */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+  --edge: 3px;
+  --pop: 0 6px 0 var(--cb-outline);
+  --pop-sm: 0 4px 0 var(--cb-outline);
+  --float: 0 18px 40px rgba(4, 2, 18, 0.45);
+  --glow-focus: 0 0 0 3px rgba(45, 226, 230, 0.35), 0 0 22px rgba(45, 226, 230, 0.35);
+
+  /* Space */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --page-gutter: 16px;
+  --layout-max: 1120px;
+  --touch-target: 48px;
+
+  /* Motion */
+  --dur-fast: 110ms;
+  --dur-med: 240ms;
+  --dur-slow: 480ms;
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-med: 0ms;
+    --dur-slow: 0ms;
+  }
+}
+
+/* Platform "reduced" effects mode (user or OS) turns CSS motion off too. */
+[data-effects='reduced'] {
+  --dur-fast: 0ms;
+  --dur-med: 0ms;
+  --dur-slow: 0ms;
+}

@@ -28,14 +28,19 @@ export default defineConfig([
     },
   },
   {
-    files: ['apps/client/src/**/*.{ts,tsx}'],
+    // Everything that runs in the browser: the client app, the design system, game boards.
+    files: [
+      'apps/client/src/**/*.{ts,tsx}',
+      'packages/ui/src/**/*.{ts,tsx}',
+      'games/*/src/client/**/*.{ts,tsx}',
+    ],
     languageOptions: { globals: { ...globals.browser } },
     plugins: { 'react-hooks': reactHooks },
     rules: reactHooks.configs.recommended.rules,
   },
   {
-    // The server logger is the one place allowed to write to stdout.
-    files: ['apps/server/src/log.ts'],
+    // The server logger and command-line tools are allowed to write to stdout.
+    files: ['apps/server/src/log.ts', 'tools/**/*.mjs'],
     rules: { 'no-console': 'off' },
   },
 ]);
