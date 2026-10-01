@@ -1,6 +1,6 @@
-# ADR-002: React + Vite for the client
+# ADR-002: React + Vite + Motion for the client
 
-**Status:** Accepted (Phase 0 spec §2)
+**Status:** Accepted (Phase 0 spec §2; Motion added in Phase 2)
 
 ## Context
 
@@ -9,13 +9,16 @@ animation. Vanilla TypeScript would mean hand-building a component/state system.
 
 ## Decision
 
-React 19 + TypeScript + Vite. State comes from one external store read with
-`useSyncExternalStore`; no state-management library. Motion (for animations) is added with
-the first animated game, not before.
+- React 19 + TypeScript + Vite. State comes from one external store read with
+  `useSyncExternalStore`; no state-management library.
+- **Motion** (`motion/react`, MIT) for animations that communicate game state: flips,
+  deals, stamps, rolling numbers, entrances, podium. Plain CSS for trivial effects.
+  Motion is configured from the platform effects mode (`EffectsRoot`), so reduced motion is
+  honoured everywhere.
 
 ## Consequences
 
 - Game boards are lazy-loaded React components (`GameClientModule.Board`).
 - React escapes text by default, which also helps security.
-- Bundle size is watched: server-only code (zod schemas, fixture game) is kept out of the
-  client build (production bundle ≈ 89 KB gzipped in Phase 1).
+- Bundle size: Phase 1 ≈ 89 KB gzipped; Phase 2 ≈ 142 KB gzipped, mostly Motion. Trimming it
+  (e.g. Motion's `LazyMotion`/`m` components, splitting the home screen) is a Phase 8 task.

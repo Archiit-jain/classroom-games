@@ -55,11 +55,12 @@ Audience helpers: `toAll(e)`, `toSeats([1], e)`, `toAllExcept([1], e)`.
 
 1. Validates actions (`actionSchema` → `validateAction`) and rejects illegal ones with an
    error code. The engine decides legality against the **current** state.
-2. **Action versions:** clients send the `version` of the view they acted on. Versions the
-   server never issued (from the future) are rejected with `STALE_VERSION`; older versions
-   are accepted because legality is re-checked against the current state. This keeps
-   simultaneous games (and claim races) working. See
-   [ADR-014](decisions/ADR-014-lenient-action-versions.md) — _pending product-owner approval_.
+2. **Action versions and ids** ([ADR-014](decisions/ADR-014-lenient-action-versions.md)):
+   clients send the `version` of the view they acted on plus a unique `actionId`. Versions
+   the server never issued are rejected with `STALE_VERSION`; older versions are accepted
+   because legality is re-checked against the current state (simultaneous games and claim
+   races keep working). Each `actionId` executes at most once per match — repeats get
+   `DUPLICATE_ACTION`, so double taps and replays can never count twice.
 3. Commits transitions one at a time (queue), bumps `version`, schedules timers under
    `match:<matchId>:<timerId>`, and delivers to **every seat** a `MatchUpdate`:
    `{matchId, gameId, version, you, events, view, serverNow}`.
@@ -82,14 +83,26 @@ Audience helpers: `toAll(e)`, `toSeats([1], e)`, `toAllExcept([1], e)`.
 interface GameClientModule<V, A, E, Settings> {
   id: string;
   messages: MessageCatalog; // game UI strings ("name", "description" required)
+  accent: Accent; // pink | yellow | cyan | lime | orange | violet (game card, header)
+  Icon: ComponentType<{ size?: number }>; // small inline-SVG game icon
   Board: LazyComponent<BoardProps>; // renders view, animates events
   Settings?: LazyComponent<SettingsProps>; // host settings form in the lobby
+  eventDuration?(event: E, effects: EffectsMode): number; // ms, paces the animation director
+  resultStats?: { key: string; labelKey: string }[]; // results-screen columns from GameResults.stats
 }
 ```
 
-`BoardProps`: `view`, `events` (from the latest update), `version`, `me` (seat), `seats`
-(names/controllers), `send(action) → Promise<boolean>` (errors are shown by the platform),
-`effects` (`full` / `lite` / `reduced`), `msUntil(serverTs)`.
+`BoardProps`: `view` and `events` of the **presented** update (the animation director may
+hold the newest one back while the current one animates), `version`, `me` (seat), `seats`
+(names/controllers), `send(action) → Promise<boolean>` (the platform attaches an
+`actionId`, coalesces double taps and shows any error), `effects` (`full` / `lite` /
+`reduced`), `msUntil(serverTs)`.
+
+Boards build their UI from the shared design system (`@cg/ui`: `Avatar`, `PaperChit`,
+`CountdownRing`, `RollingNumber`, `Stamp`, `ConfettiBurst`, `durationFor`) and Motion.
+
+**Results screen:** the platform shows a podium and a ranking table; each entry in
+`resultStats` adds a column read from `getResults(s).stats[seat][key]` (RMCS: `score`).
 
 ## The fixture game ("Count Up")
 

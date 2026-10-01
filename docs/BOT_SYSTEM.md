@@ -22,7 +22,7 @@ Public-room bot fill arrives in Phase 6.
   human moves; an illegal bot move is rejected and logged, never forced through.
 - Bots are always labelled: bot members have obviously-bot names and a "Bot" badge;
   takeover seats show `controller: 'BOT'` with the bot's name. Human nicknames may not
-  start with "Bot".
+  start with "Bot" (kept by product owner decision, Phase 2 review).
 - Bots never chat or react (the only planned exception is Draw & Guess guessing, which
   uses chat as its input).
 
@@ -46,4 +46,7 @@ sequenceDiagram
   view, so it never acts on stale information.
 - Each bot seat has its own seeded RNG.
 - When a human reclaims the seat the bot is detached and its memory discarded.
-- Bot delays are game-defined (the fixture uses 0.6–1.2 s; tests use 20–60 ms).
+- Bot delays are game-defined (RMCS: 0.8–2.5 s, scaled by `GAME_TIME_SCALE`; fixture 0.6–1.2 s;
+  tests 20–60 ms).
+- **RMCS bot:** the only decision is the Mantri's guess between two players it knows nothing
+  about, so it guesses uniformly at random — honest, and it never sees hidden roles.

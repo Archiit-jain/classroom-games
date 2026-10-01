@@ -1,32 +1,71 @@
-# UI / UX
+# UI / UX — Color Burst Arcade
 
-> **Status:** Phase 1 ships a **foundation UI** only — functional, responsive and
-> translation-ready, but deliberately plain. Per spec change C10, the final visual
-> direction (colourful, energetic, premium, playful, nostalgic, visually catchy, not
-> childish; strong game-specific animation) must be established and approved **before**
-> the polished game UI is built.
+**Visual direction (approved for Phase 2):** _nostalgic classroom games × modern
+multiplayer arcade_ — colourful, energetic, premium, playful, nostalgic, highly animated,
+catchy, **not childish, not a dashboard.** Raja Mantri Chor Sipahi is the first full
+demonstration. Implementation: `packages/ui` ([ADR-015](decisions/ADR-015-shared-ui-package.md)).
 
-## What exists
+## Design language
 
-- Screens: Home (nickname, create room, join by code), Room (lobby, match, results) with a
-  chat panel, connection banner, toasts, "starting in…" overlay, "a bot is playing for you
-  / I'm back" banner.
-- **Design tokens** in `apps/client/src/ui/tokens.css` (colours, type scale, spacing,
-  radii, shadows, touch-target size, motion durations). Components use tokens only, so
-  the future visual direction is mostly a token + component-style change.
-- **Phone first:** single column below 900 px (chat under the game), two columns above;
-  no horizontal scrolling at 360 px (covered by an end-to-end test); touch targets ≥ 44 px.
-- **Reduced motion:** CSS durations drop to 0 under `prefers-reduced-motion`; boards receive
-  an `effects` prop (`full` / `reduced`; `lite` arrives with the first animated game).
-- **Accessibility basics:** real buttons and labels, visible focus outlines, `aria-live`
-  regions for chat, toasts and turn changes, alerts for errors.
+| Element   | Treatment                                                                                                                                                                                                                                      |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stage     | Deep "arcade night" indigo with soft pink / cyan / yellow / violet colour bursts and a faint arcade dot grid (fixed layer, no repaint on scroll).                                                                                              |
+| Accents   | Pink `#ff3e8a`, Yellow `#ffd23f`, Cyan `#2de2e6`, Lime `#9cf04a`, Orange `#ff8a3d`, Violet `#9b7bff`, each with a deeper shade for edges/pressed states. Seats get a stable accent each.                                                       |
+| Surfaces  | Chunky "sticker" panels: gradient fill, thick dark outline, hard offset shadow + soft float shadow.                                                                                                                                            |
+| Nostalgia | Notebook paper (ruled lines + red margin) for chits and your role card, a "HELLO my name is" name tag for the nickname, a ticket stub for the room code, rubber stamps for verdicts, a chalkboard desk with a wooden frame for the RMCS table. |
+| Buttons   | "Arcade keys": bright fill, thick outline, 5 px hard shadow that compresses on press. Yellow = primary, pink = decisive (accuse, send, join), cyan = secondary.                                                                                |
+| Type      | **Baloo 2** (variable, OFL, self-hosted; has Devanagari for future Hindi) for display, buttons and numbers; the system UI font for body text.                                                                                                  |
+| Icons     | Original inline SVGs (crown, scroll, shield, mask, arrow); no third-party artwork.                                                                                                                                                             |
+
+Tokens live in `packages/ui/src/styles/tokens.css`; components never use raw colours.
+
+## Motion principles
+
+Animations communicate **server-confirmed** state changes; they are not decoration.
+
+| Moment          | Animation                                                                      |
+| --------------- | ------------------------------------------------------------------------------ |
+| Screen entrance | Staggered rise-in of home cards; players slide into the lobby list.            |
+| Match start     | Big bouncing 3-2-1 countdown over a blurred lobby.                             |
+| Deal            | Folded chits fly from the desk centre to each seat; your role card flips in.   |
+| Reveal          | Chits flip in 3D; the revealed Raja/Mantri chit pops.                          |
+| Thinking        | Countdown ring around the acting player's avatar (turns pink in the last 5 s). |
+| Accusation      | Two-step Suspect → Accuse; an arrow lands on the accused chit, which shakes.   |
+| Verdict         | A rubber stamp thumps onto the desk; score changes float up; totals roll.      |
+| Results         | Podium rises in place order; confetti burst; scores roll up.                   |
+
+Pacing is handled by the **animation director** and three **effects modes**
+([ADR-016](decisions/ADR-016-animation-director.md)):
+
+- **Full** — everything above.
+- **Lite** — shorter, simpler motion (no 3D flourishes on low-end devices, a third of the
+  confetti, no shake). Chosen automatically on low-end devices.
+- **Reduced** — no motion; states change instantly. Forced when the OS asks for reduced
+  motion.
+
+Players can switch **Effects: Auto / Full / Lite** from the header.
+
+## Layout
+
+- **Phone first.** Single column below 960 px (chat under the game); two columns above.
+- No horizontal scrolling at 360 px (end-to-end tested); the RMCS table compacts its seats
+  below 700 px so the whole table fits; the Mantri's accuse bar sticks to the bottom of the
+  screen.
+- Touch targets ≥ 48 px (small buttons 36 px with generous spacing).
+- RMCS seats are always relative to you: you at the bottom, play clockwise.
+
+## Accessibility
+
+Real buttons with labels (e.g. "Suspect Priya"), visible focus rings, `aria-live` for
+desk messages, chat and toasts, alerts for errors, reduced motion honoured everywhere,
+colour never the only signal (roles have icons and names; bots have badges and names).
 
 ## Text and translation
 
-No user-facing string is hard-coded in components: everything goes through `t()` and
-`apps/client/src/i18n/en.ts` (typed keys). Game text lives in each game's `messages`.
+No user-facing string is hard-coded in components: platform text goes through `t()` and
+`apps/client/src/i18n/en.ts` (typed keys); game text lives in each game's `messages`.
 
 ## Not built yet
 
-Final visual identity, Motion-based animations, the event-driven animation director, the
-automatic lite-effects mode, quick reactions, sound (excluded from v1), per-game layouts.
+Quick reactions (with 16 Parchi), per-game sound (excluded from v1), Motion bundle trimming
+and a measured low-end device pass (Phase 8).

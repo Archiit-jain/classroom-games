@@ -22,5 +22,7 @@ Latin script; naive substring filters censor innocent words ("Classroom").
 ## Consequences
 
 - Word lists need ongoing curation; every change needs a test case.
-- Known trade-off: `bc`/`mc` are blocked as whole words (also hits "BC"/"MC" abbreviations).
+- `bc`/`mc` stay whole-word only, with no blanket abbreviation block (product owner,
+  Phase 2 review). Accepted trade-off: a standalone "BC"/"MC" is censored too.
+- Nicknames starting with "Bot" stay reserved (product owner, Phase 2 review).
 - A stronger moderator can replace this one without touching the server.

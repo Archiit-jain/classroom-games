@@ -3,8 +3,9 @@
 This is the checklist a developer follows to add a game. The platform (rooms, sessions,
 reconnect, chat, bots, transport) does not need to change.
 
-Worked example: the fixture game in `packages/game-sdk/src/fixture/` and its client board in
-`apps/client/src/games/fixture/`. Product games will live under `games/<id>/`.
+**Reference implementation: `games/rmcs`** (Raja Mantri Chor Sipahi) — shared types,
+pure engine + bot, board, rules doc and tests. The smaller fixture game lives in
+`packages/game-sdk/src/fixture/` with its board in `apps/client/src/games/fixture/`.
 
 ## 1. Agree the rules
 
@@ -90,13 +91,23 @@ Required:
 
 ## 8. Build the client module
 
-Create `messages` (`name`, `description`, …), a lazy `Board`, and optionally a lazy
-`Settings` form. Use `t()`-style catalogs for all text — no hard-coded strings. The board
-receives `view`, `events`, `me`, `seats`, `send`, `effects`, `msUntil`.
+Create the `GameClientModule` (see `games/rmcs/src/client/index.ts`):
+
+- `messages` (`name`, `description`, …) — all game text, no hard-coded strings;
+- `accent` (a Color Burst Arcade accent) and `Icon` (small inline SVG) for the game card;
+- a lazy `Board` and, optionally, a lazy `Settings` form;
+- `eventDuration(event, effects)` — how long each event animates (use `durationFor` from
+  `@cg/ui`, so lite/reduced modes shorten or skip it); the animation director uses it to pace
+  updates, so keep it shorter than the server's phase holds;
+- `resultStats` — columns for the results screen, read from `getResults(s).stats`.
+
+The board receives `view`, `events`, `version`, `me`, `seats`, `send`, `effects`, `msUntil`.
+Build it from `@cg/ui` primitives (`Avatar`, `PaperChit`, `CountdownRing`, `RollingNumber`,
+`Stamp`, `ConfettiBurst`) and Motion; check it on a 360 px phone and in reduced motion.
 
 ## 9. Register the game
 
-- Server: add it to the list passed to `createGameServer` (the registry wiring in
+- Server: add it to `defaultGames()` (the registry wiring in
   `apps/server/src/app.ts`).
 - Client: add it to `apps/client/src/games/registry.ts`.
 

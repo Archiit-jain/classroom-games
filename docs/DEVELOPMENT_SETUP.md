@@ -56,6 +56,7 @@ another tab".
 | `TRUST_PROXY`         | `false`                                                               | Read the client IP from the last `X-Forwarded-For` entry (only behind a trusted proxy)                                       |
 | `ENABLE_FIXTURE_GAME` | `true`                                                                | Register the fixture game. Always forced off when `NODE_ENV=production`.                                                     |
 | `LOG_LEVEL`           | `info`                                                                | `silent`, `error`, `warn`, `info`, `debug`                                                                                   |
+| `GAME_TIME_SCALE`     | `1`                                                                   | Multiplies game phase timers (e.g. `0.3` for quick test games; e2e uses `0.25`). Always `1` when `NODE_ENV=production`.      |
 | `NODE_ENV`            | —                                                                     | `production` disables the fixture game                                                                                       |
 
 All other tunables (timers, limits, rate limits) are in `apps/server/src/config.ts`

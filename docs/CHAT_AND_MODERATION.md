@@ -52,16 +52,18 @@ risky Hinglish words are deliberately _not_ blocked ("chod do", "saala", "kutta"
 "chakka" — a six in cricket). A `!` not followed by a letter is treated as punctuation, not
 leetspeak "i" (so "stupid!" is still censored while "sh!t" is still caught).
 
-**Known trade-offs for the product owner:** `bc` and `mc` are blocked as whole words, which
-also censors "BC" meaning _before Christ_ and "MC" meaning _master of ceremonies_; the
+**`bc` / `mc` (product owner decision, Phase 2 review):** these are matched as whole words
+only — there is deliberately no blanket abbreviation block. Words that merely contain them
+pass untouched ("abc", "mcq", "BCom", "BCA", "B.C."); the accepted trade-off is that a
+standalone "BC" (_before Christ_) or "MC" (_master of ceremonies_) is censored too. The
 insult list follows the brief's own example ("you are stupid" → "you are ******").
 
 ## Nicknames
 
 Nicknames use the same moderator but are **rejected** rather than censored:
 2–16 characters after trimming, letters/numbers/spaces/`_ . - '`/emoji only, at least one
-letter or number, no names starting with "Bot" (so a human can never pass as a bot), no
-profanity or contact details. Uniqueness inside a room uses a look-alike key ("Archit",
+letter or number, no names starting with "Bot" (so a human can never pass as a bot —
+confirmed by the product owner in the Phase 2 review), no profanity or contact details. Uniqueness inside a room uses a look-alike key ("Archit",
 "Archít", "ARCH1T", "A r c h i t" collide).
 
 ## Mute and report

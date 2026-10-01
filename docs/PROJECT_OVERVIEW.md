@@ -35,7 +35,8 @@ Expandability → Security → Performance → Documentation.
 
 ## Current status
 
-Phase 1 (infrastructure and private rooms) is complete. See the README
+Phases 1–2 are complete: the platform plus Raja Mantri Chor Sipahi in the Color Burst
+Arcade design. See the README
 [roadmap](../README.md#roadmap).
 
 ## Roles

@@ -53,7 +53,9 @@ flowchart LR
 | Moderator       | `packages/moderation`                | Text normalisation, profanity censoring, contact-detail removal, nickname checks                                                                                 |
 | Protocol        | `packages/protocol`                  | Event names/payload types, error codes, view types; zod schemas at `@cg/protocol/schemas` (server only)                                                          |
 | Game SDK        | `packages/game-sdk`                  | Game contract, seeded RNG, audience helpers, test harness, fixture game, client module types                                                                     |
-| Client platform | `apps/client/src/platform/`          | `GameConnection` (socket + store), clock offset, storage, effects mode                                                                                           |
+| Client platform | `apps/client/src/platform/`          | `GameConnection` (socket + store), clock offset, storage, action sender (ids, double-tap coalescing), animation director, effects controller                     |
+| Design system   | `packages/ui`                        | Color Burst Arcade tokens/styles + animated primitives shared by screens and game boards ([ADR-015](decisions/ADR-015-shared-ui-package.md))                     |
+| Games           | `games/<id>`                         | Each game's shared types, pure engine + bot (server) and board (client) — `games/rmcs` so far                                                                    |
 
 ## Request path (one game action)
 
@@ -66,11 +68,12 @@ sequenceDiagram
   participant E as Game engine (pure)
   participant O as Other players / bots
 
-  P->>T: match:action {matchId, version, action} + ack
+  P->>T: match:action {matchId, version, actionId, action} + ack
   T->>T: socket flood guard, rate limit, zod schema
   T->>R: submitAction(session, …)
   R->>R: is this player seated? is a bot playing for them?
-  R->>RT: submitAction(seat, version, action)
+  R->>RT: submitAction(seat, version, actionId, action)
+  RT->>RT: version issued? actionId never seen before? (else STALE_VERSION / DUPLICATE_ACTION)
   RT->>E: actionSchema.parse · validateAction(state, seat, action)
   alt illegal
     RT-->>P: ack {ok:false, code}
@@ -116,9 +119,15 @@ sequenceDiagram
   offered only if both the server (`session:ready.games`) and the client registry know it.
 - **Clock sync:** 5 `time:ping` round trips; the median offset converts server deadlines
   into local countdowns (`connection.msUntil(serverTs)`).
-- **Effects mode** (`full` / `reduced`) follows the OS reduced-motion setting and is passed
-  to boards. The automatic `lite` mode and the animation director arrive with the first
-  animated game.
+- **Game actions** go through `connection.sendAction`, which attaches a fresh `actionId`
+  and coalesces an identical action still awaiting its ack (double taps).
+- **Animation director:** match updates reach the director directly from the connection;
+  it presents them one at a time, waiting for each update's event animations (declared by
+  the game's `eventDuration`) and fast-forwarding when more than 1.5 s would pile up
+  ([ADR-016](decisions/ADR-016-animation-director.md)).
+- **Effects modes** `full` / `lite` / `reduced`: OS reduced motion → reduced; otherwise the
+  player's Auto/Full/Lite choice (header toggle); Auto picks lite on low-end devices. The
+  mode feeds Motion (`EffectsRoot`), CSS (`html[data-effects]`) and every board.
 
 ## Internationalisation
 

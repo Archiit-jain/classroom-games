@@ -6,7 +6,7 @@ Consequences. Status is `Accepted`, `Proposed` (waiting for approval) or `Supers
 | ADR                                              | Title                                                                | Status                                      |
 | ------------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------- |
 | [001](ADR-001-pnpm-monorepo.md)                  | pnpm monorepo, packages consumed as TypeScript source                | Accepted                                    |
-| [002](ADR-002-react-vite.md)                     | React + Vite for the client (Motion later)                           | Accepted                                    |
+| [002](ADR-002-react-vite.md)                     | React + Vite + Motion for the client                                 | Accepted                                    |
 | [003](ADR-003-socketio-view-event-sync.md)       | Socket.IO with acked intents; full per-player view + filtered events | Accepted                                    |
 | [004](ADR-004-pure-engines-seeded-rng.md)        | Pure game engines with a seeded RNG                                  | Accepted                                    |
 | [005](ADR-005-in-memory-room-store.md)           | In-memory RoomStore; documented scaling path                         | Accepted                                    |
@@ -18,4 +18,6 @@ Consequences. Status is `Accepted`, `Proposed` (waiting for approval) or `Supers
 | [011](ADR-011-report-flags-no-auto-punish.md)    | Reports create flags; no automatic punishment                        | Accepted                                    |
 | [012](ADR-012-typescript-6.md)                   | Pin TypeScript 6.0 (not 7)                                           | Accepted                                    |
 | [013](ADR-013-node-http-no-express.md)           | Plain `node:http`, no Express                                        | Accepted                                    |
-| [014](ADR-014-lenient-action-versions.md)        | Lenient action versions                                              | **Proposed — needs product-owner approval** |
+| [014](ADR-014-lenient-action-versions.md)        | Lenient action versions + unique action ids                          | Accepted                                    |
+| [015](ADR-015-shared-ui-package.md)              | Shared design system package (`@cg/ui`)                              | Accepted                                    |
+| [016](ADR-016-animation-director.md)             | Animation director and effects modes                                 | Accepted                                    |
