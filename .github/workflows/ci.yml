@@ -61,3 +61,37 @@ jobs:
             test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  smoke:
+    name: Production build smoke test (Function bundle + Redis)
+    runs-on: ubuntu-latest
+    needs: check
+    # The deployable build — static client + api/socket.mjs on one origin, as on
+    # Vercel — with shared state in a real Redis; two browsers play Dots & Boxes.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - name: Start the production-style server
+        run: node tools/serve-production.mjs 4300 > server.log 2>&1 &
+        env:
+          REDIS_URL: redis://localhost:6379
+          ALLOWED_ORIGINS: http://localhost:4300
+          LOG_LEVEL: info
+      - name: Wait until it answers
+        run: for i in $(seq 60); do curl -sf http://localhost:4300/api/socket/healthz && exit 0; sleep 1; done; exit 1
+      - run: pnpm smoke
+      - if: ${{ always() }}
+        run: cat server.log

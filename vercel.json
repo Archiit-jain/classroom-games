@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "VITE_SOCKET_PATH=/api/socket/socket.io pnpm build",
+  "buildCommand": "pnpm build",
   "outputDirectory": "apps/client/dist",
   "functions": {
     "api/socket.mjs": { "maxDuration": 300, "memory": 1024 }

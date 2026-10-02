@@ -369,7 +369,15 @@ export function defaultServerUrl(): string {
   return `${window.location.protocol}//${window.location.hostname}:3001`;
 }
 
-/** The Socket.IO path (the server's SOCKET_PATH). Vercel builds set it to the Function's route. */
+/**
+ * The Socket.IO path. A production build that talks to its own site uses the
+ * game-server Function's route on Vercel (`/api/socket/…`, see vercel.json);
+ * development and a separate server (VITE_SERVER_URL) use the Socket.IO default.
+ * VITE_SOCKET_PATH overrides both.
+ */
 export function socketPath(): string {
-  return (import.meta.env.VITE_SOCKET_PATH as string | undefined) || '/socket.io';
+  const configured = import.meta.env.VITE_SOCKET_PATH as string | undefined;
+  if (configured) return configured;
+  const sameSite = import.meta.env.PROD && !import.meta.env.VITE_SERVER_URL;
+  return sameSite ? '/api/socket/socket.io' : '/socket.io';
 }

@@ -15,6 +15,8 @@ const browser = channel ? { channel } : {};
 
 export default defineConfig({
   testDir: 'e2e',
+  // The production smoke test targets a deployed site (playwright.smoke.config.ts).
+  testIgnore: ['smoke/**'],
   timeout: 120_000,
   expect: { timeout: 10_000 },
   workers: 1,

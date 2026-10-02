@@ -19,6 +19,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "serve:production": "node tools/serve-production.mjs",
+    "smoke": "playwright test -c playwright.smoke.config.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
