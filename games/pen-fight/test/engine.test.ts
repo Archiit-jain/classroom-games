@@ -381,7 +381,7 @@ describe('complete matches', () => {
       if (r.state.suddenDeath) suddenDeath++;
     }
     expect(suddenDeath).toBeGreaterThan(0); // some bot matches do reach sudden death
-  });
+  }, 120_000); // every bot turn simulates 24 shots: ~20 s alone, longer next to other files
 
   it('replays exactly from the same seed', () => {
     const a = simulateMatch<FightState, FightEvent>(game, { seats: 4, seed: 42 });

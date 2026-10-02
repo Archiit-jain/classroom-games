@@ -27,6 +27,20 @@ describe('a single flick', () => {
     }
   });
 
+  it('glides like a pen on a desk: an even slow-down to a real stop, not a jump and a creep', () => {
+    const r = simulateShot([pen(0, 0, 0)], HUGE, 0, { anchor: 0, angle: 0, power: 1 });
+    expect(r.steps).toBeLessThan(DEFAULT_PHYSICS.maxSteps); // it stops by itself
+    const xs = r.frames.map((f) => f[0]?.[1]).filter((x): x is number => x !== undefined);
+    const end = r.final[0]?.x as number;
+    const at = (q: number) => (xs[Math.floor((xs.length - 1) * q)] as number) / end;
+    // Constant deceleration: after half the time, 3/4 of the distance (exponential drag
+    // would already be at ~95 %).
+    expect(at(0.5)).toBeGreaterThan(0.7);
+    expect(at(0.5)).toBeLessThan(0.8);
+    expect(at(0.25)).toBeGreaterThan(0.4);
+    expect(at(0.25)).toBeLessThan(0.5);
+  });
+
   it('spins the pen when flicked off-centre — the sign follows the anchor', () => {
     const at = (anchor: number) =>
       simulateShot([pen(0, 0, 0)], HUGE, 0, { anchor, angle: Math.PI / 2, power: 0.5 })

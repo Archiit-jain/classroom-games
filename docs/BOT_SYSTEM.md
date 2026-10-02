@@ -65,7 +65,7 @@ sequenceDiagram
   each opponent, the rest random), scores each (+100 per opponent out, −250 if its own pen goes
   out, + its own distance from the edge, − the opponents'), usually plays the best, sometimes
   the 2nd or 3rd, adds human-like error (±2.5°, ±5 %) that never turns a safe shot into a
-  self-elimination, and always finishes before the aim timer. Measured p50 ≈ 13–15 ms / p95 ≈ 16–18 ms per decision on
+  self-elimination, and always finishes before the aim timer. Measured p50 ≈ 13 ms / p95 ≈ 17 ms per decision on
   a laptop — no worker thread
   ([ADR-022](decisions/ADR-022-pen-fight-physics.md)).
 - Bots never send quick reactions, and chat only to guess in Draw & Guess.

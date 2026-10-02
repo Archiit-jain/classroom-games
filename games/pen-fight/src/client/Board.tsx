@@ -86,11 +86,15 @@ type Frame = ReturnType<typeof makeFrame>;
 
 // ───────────────────────────── replay ─────────────────────────────
 
-/** Plays a shot's keyframes on this device's clock; null when there is nothing to play. */
-function useReplay(shot: ShotPlayed | undefined, version: number, effects: EffectsMode) {
+/**
+ * Plays a shot's keyframes on this device's clock; null when there is nothing to play.
+ * The pens' movement IS the game, so it plays in every effects mode — reduced motion
+ * only drops the decorations (ghosts, sparks, shake, squash).
+ */
+function useReplay(shot: ShotPlayed | undefined, version: number) {
   const [state, setState] = useState({ version: -1, tick: 0 });
   useEffect(() => {
-    if (!shot || effects === 'reduced') return;
+    if (!shot) return;
     const end = shot.steps + FALL_TICKS;
     let frame = 0;
     const t0 = performance.now();
@@ -101,8 +105,8 @@ function useReplay(shot: ShotPlayed | undefined, version: number, effects: Effec
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);
-  }, [shot, version, effects]);
-  if (!shot || effects === 'reduced') return null;
+  }, [shot, version]);
+  if (!shot) return null;
   const tick = state.version === version ? state.tick : 0;
   return { tick, done: tick >= shot.steps + FALL_TICKS };
 }
@@ -169,7 +173,7 @@ export default function PenBoard({
   const skipped = events.find(
     (e): e is Extract<FightEvent, { type: 'TURN_SKIPPED' }> => e.type === 'TURN_SKIPPED',
   );
-  const replay = useReplay(shot, version, effects);
+  const replay = useReplay(shot, version);
   // The sudden-death banner shows briefly, then gets out of the way (the status line keeps it).
   const banner = useFlash(shrunk ? 'shrink' : armedNow ? 'armed' : null, version, 1800);
   const tracks = useMemo(
@@ -652,7 +656,15 @@ function PenShape({
     <g
       className={classes}
       transform={`translate(${x} ${y})`}
-      style={{ opacity: ghost ? 0.22 / ((pen.ghost as number) / 3) : 1 - fall }}
+      style={{
+        opacity: ghost
+          ? 0.22 / ((pen.ghost as number) / 3)
+          : effects === 'reduced'
+            ? falling
+              ? 0
+              : 1
+            : 1 - fall,
+      }}
       aria-hidden={ghost || undefined}
     >
       {active && <circle r={HALF + 260} className="pf-pen__halo" />}

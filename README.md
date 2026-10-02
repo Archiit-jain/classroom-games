@@ -160,7 +160,7 @@ See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) and [docs/GAME_SYSTEM.md](doc
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md). Current suite: 344 unit/integration tests and 16
+See [docs/TESTING.md](docs/TESTING.md). Current suite: 345 unit/integration tests and 16
 end-to-end runs (desktop + mobile), including full RMCS, 16 Parchi, Draw & Guess and Pen Fight
 matches on a phone profile and 16 Parchi, Draw & Guess and Pen Fight with reduced motion.
 

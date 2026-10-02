@@ -365,13 +365,19 @@ play-test, which is a tuning step, not a blocker).
 The proposed numbers were measured during implementation (seeded bot-vs-bot matches and the
 bot benchmark) rather than assumed. What changed, and why:
 
-| Value                    | Proposed (§14)    | Implemented                    | Measurement that drove it                                                                                                                                                                                   |
-| ------------------------ | ----------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Full-power slide         | ≈ 1.2 × desk (12) | **7 units**                    | At 12, almost every hit was a knockout: bot matches lasted a median of 1 round and 23 % of exits were self-eliminations. At 7: median 4 rounds, ≈ 0 self-eliminations, sudden death in ~8 % of bot matches. |
-| Linear / angular damping | 1.6 / 2.5         | **5 / 7**                      | Replays took 3–4 s and felt like sliding on ice; at 5 / 7 a shot settles in ≈ 1.4 s (p95 ≈ 1.5 s), closer to a real pen on a desk.                                                                          |
-| Pen size                 | 1.4 × 0.12        | **2.0 × 0.16**                 | Visual review: at 14 % of the desk width pens read as small objects, not pens. Drawn 1.5× thicker than the physics body so they read on a phone.                                                            |
-| Bot search               | ≈ 10 ms (spike)   | p50 ≈ 13–15 ms, p95 ≈ 16–18 ms | Bot what-ifs skip keyframe/collision recording; the error-noise check adds one simulation. No worker thread needed.                                                                                         |
-| Keyframe payload         | ≈ 2.6 KB          | ≈ 2–3 KB, max seen ≈ 3.2 KB    | Bot matches; tests assert < 16 KB.                                                                                                                                                                          |
+| Value            | Proposed (§14)    | Implemented                             | Measurement that drove it                                                                                                                                                                                                       |
+| ---------------- | ----------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Full-power slide | ≈ 1.2 × desk (12) | **10 units**                            | At 12 (with damping) almost every hit was a knockout. With real friction a struck pen also stops crisply, so 7 gave 18-round matches; at 10: median 4 rounds, sudden death in ~24 % of bot matches, ~0.5 % self-eliminations.   |
+| Desk friction    | damping 1.6 / 2.5 | **Coulomb: 8 units/s², spin 26 rad/s²** | Damping (exponential) made a flick a jump then a creep — owner feedback: "just like cut frames". Constant deceleration gives an even glide to a real stop: full power 10 units in ≈ 1.6 s; replays median ≈ 1.0 s, p95 ≈ 1.2 s. |
+| Pen size         | 1.4 × 0.12        | **2.0 × 0.16**                          | Visual review: at 14 % of the desk width pens read as small objects, not pens. Drawn 1.5× thicker than the physics body so they read on a phone.                                                                                |
+| Bot search       | ≈ 10 ms (spike)   | p50 ≈ 13 ms, p95 ≈ 17 ms                | Bot what-ifs skip keyframe/collision recording; the error-noise check adds one simulation. No worker thread needed.                                                                                                             |
+| Keyframe payload | ≈ 2.6 KB          | ≈ 1–2 KB, max seen ≈ 1.9 KB             | Bot matches; tests assert < 16 KB.                                                                                                                                                                                              |
+
+**Reduced motion (owner feedback):** the replay of the pens' movement now plays in every
+effects mode — it is the game, not decoration (§3.5 first proposed skipping it). Reduced
+motion only drops ghosts, sparks, shake, squash and the shrinking fall. Measured in a browser:
+≈ 60 frames of movement per shot at 60 fps in both reduced and full mode, largest step between
+frames ≈ 1.5 % of the desk.
 
 Other implementation choices: the bot's human-like error is re-checked so it never turns a safe
 shot into flicking itself off; places are shown only once a pen has visibly fallen in the

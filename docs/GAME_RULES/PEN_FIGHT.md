@@ -34,10 +34,13 @@ strength, A/D spin, Enter flick, Esc reset. There is no predicted path.
 
 ## Physics (server only)
 
-- Planck.js, top-down, no gravity; the table's friction is linear and angular damping
-  _(play-test: 5 / 7)_, restitution 0.45, friction 0.25. A pen is one rigid body: a thin box
+- Planck.js, top-down, no gravity. The desk's friction works like a real pen on wood
+  (Coulomb friction): a sliding pen slows down at a constant rate until it stops
+  _(play-test: 8 units/s², spin 26 rad/s²)_ — a smooth glide, not a jump and a creep.
+  Pen–pen restitution 0.45, friction 0.25. A pen is one rigid body: a thin box
   with a round cap at each end.
-- A full-power flick through the centre slides a lone pen **7 units** _(play-test)_.
+- A full-power flick through the centre glides a lone pen **10 units** in about 1.6 s
+  _(play-test)_; distance grows in proportion to strength.
 - Fixed **60 Hz** steps until every pen rests or **8 s** have passed (then pens stop where
   they are).
 - Positions are stored rounded (1/1000 unit, 1/10000 rad) — exactly what players receive — so a
@@ -76,7 +79,7 @@ One level ("Normal"), using only the public table and the same physics as the re
 
 1. 24 candidate shots: six per opponent (at its centre and both ends, at different strengths,
    some with spin), the rest random.
-2. Simulate each (p50 ≈ 13–15 ms for all 24 on a laptop), score it: +100 per opponent out, −250 if
+2. Simulate each (p50 ≈ 13 ms, p95 ≈ 17 ms for all 24 on a laptop), score it: +100 per opponent out, −250 if
    its own pen goes out, plus its own distance from the edge, minus the opponents' (in sudden
    death, measured against the previewed desk).
 3. Usually play the best (60 %), sometimes the 2nd (30 %) or 3rd (10 %), with human-like error
@@ -91,3 +94,9 @@ One level ("Normal"), using only the public table and the same physics as the re
 - The shot is simulated in one step on the server, so a disconnect never interrupts physics; a
   player who reconnects mid-replay sees the result straight away.
 - Everything is public; there is no hidden information.
+
+## Reduced motion
+
+The pens' movement is the game, so every replay plays in every effects mode. Reduced motion
+only removes the decorations (motion ghosts, sparks, shake, the squash on the flicked pen, the
+shrinking/fading fall) and animated banners.

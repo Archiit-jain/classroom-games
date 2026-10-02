@@ -24,12 +24,15 @@ actions → transitions → per-player `match:update` (plus `match:stream` for d
   determinism is not needed: only the server simulates.
 - **Transport:** the whole replay travels in **one public `SHOT_PLAYED` event** (30 Hz keyframes
   listing only pens that moved, integer `[seat, x, y, angle]`, plus collisions and elimination
-  ticks) inside the normal `match:update`. Measured ≈ 2–3 KB per shot (max seen ≈ 3.2 KB). The server holds the
+  ticks) inside the normal `match:update`. Measured ≈ 1–2 KB per shot (max seen ≈ 1.9 KB). The server holds the
   turn for the replay length + 0.5 s; the client's animation director waits the same time, the
   board interpolates and then shows the authoritative final view. **No second networking model,
   no client physics, no live aim broadcast.**
+- **Desk friction** is Coulomb friction applied before every step (a fixed slow-down, clamped
+  at standing still), so pens glide evenly and stop for real. Planck's `FrictionJoint` was
+  tried first: it keeps a tiny drift at rest (warm starting), so pens never settled.
 - **Bots** evaluate 24 candidate shots with the same function (without recording keyframes):
-  measured p50 ≈ 13–15 ms, p95 ≈ 16–18 ms across runs on a laptop (budget 20 ms). Worker threads are **not** used;
+  measured p50 ≈ 13 ms, p95 ≈ 17 ms on a laptop (budget 20 ms). Worker threads are **not** used;
   the design keeps them as a fallback if measurements on the production host ever require it.
 
 ## Consequences

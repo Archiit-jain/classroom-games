@@ -77,7 +77,8 @@ Players can switch **Effects: Auto / Full / Lite** from the header.
   slider sets the spin point precisely; keyboard controls on desktop. Others see only "…is
   aiming" and the timer. Replays interpolate the server's keyframes at 60 fps with motion
   ghosts, a squash on the flicked pen, sparks and a small shake on hard hits (full), sparks only
-  (lite) or no replay at all (reduced: pens appear at their final places). Knocked-out pens tip
+  (lite) or with no decorations at all (reduced) — the pens' movement itself always plays,
+  because it is the game. Knocked-out pens tip
   off the edge with an "OUT!" stamp; places appear only once the pen has fallen. Sudden death:
   a brief banner, a glowing dashed preview of the smaller desk and the old outline kept as a
   ghost while the desk shrinks.

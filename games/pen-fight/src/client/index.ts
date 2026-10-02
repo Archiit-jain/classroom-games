@@ -7,13 +7,15 @@ import { penMessages } from './messages';
 
 /**
  * How long the board animates each event. A shot's replay is as long as the
- * server simulated it (the server holds the turn for that + 0.5 s); reduced
- * motion skips straight to the result.
+ * server simulated it (the server holds the turn for that + 0.5 s) — in every
+ * effects mode, because the moving pens are the game, not decoration.
  */
 function eventDuration(event: FightEvent, effects: EffectsMode): number {
   switch (event.type) {
     case 'SHOT_PLAYED':
-      return durationFor(effects, event.durationMs + 400, event.durationMs + 200);
+      return effects === 'reduced'
+        ? event.durationMs
+        : durationFor(effects, event.durationMs + 400, event.durationMs + 200);
     case 'DESK_SHRUNK':
       return durationFor(effects, 900, 500);
     case 'SUDDEN_DEATH_ARMED':

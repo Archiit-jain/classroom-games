@@ -19,9 +19,14 @@ import { outsideDesk } from '../shared/table';
  * game's options so they can be tuned without touching the rules.
  */
 export interface PhysicsParams {
-  /** Table friction: how quickly a sliding pen slows down (1/s). */
-  linearDamping: number;
-  /** How quickly a spinning pen stops spinning (1/s). */
+  /**
+   * Desk friction (Coulomb, like a real pen on wood): a sliding pen slows down at
+   * this constant rate (units/s²) until it stops, and a spinning one at `spinDecel`
+   * (rad/s²) — a smooth glide, not an exponential jump-then-creep.
+   */
+  slideDecel: number;
+  spinDecel: number;
+  /** A little drag on spinning (1/s); sliding has none beyond the desk friction. */
   angularDamping: number;
   restitution: number;
   friction: number;
@@ -41,16 +46,18 @@ export interface PhysicsParams {
 }
 
 /**
- * Measured starting points (design §14 proposed 1.6 / 2.5 and a 12-unit slide; the
- * Phase 5 sweep showed that made almost every hit a knockout, with 3–4 s replays).
+ * Measured starting points (play-test values). A full-power flick through the
+ * centre glides 10 units in about 1.6 s; the design's first proposal (damping only,
+ * 12-unit slide) made almost every hit a knockout.
  */
 export const DEFAULT_PHYSICS: PhysicsParams = {
-  linearDamping: 5,
-  angularDamping: 7,
+  slideDecel: 8,
+  spinDecel: 26,
+  angularDamping: 0.3,
   restitution: 0.45,
   friction: 0.25,
   density: 1,
-  fullPowerSlide: 7,
+  fullPowerSlide: 10,
   maxSteps: 8 * PHYSICS_HZ,
   restSpeed: 0.03,
   restSpin: 0.06,
@@ -80,7 +87,6 @@ function createPen(world: World, pen: Pen, p: PhysicsParams): Body {
     type: 'dynamic',
     position: Vec2(pen.x / POS_SCALE, pen.y / POS_SCALE),
     angle: pen.a / ANGLE_SCALE,
-    linearDamping: p.linearDamping,
     angularDamping: p.angularDamping,
     bullet: true,
     userData: pen.seat,
@@ -121,7 +127,10 @@ export function simulateShot(
   // The flick: an impulse in `angle`'s direction at `anchor` along the pen.
   const body = bodies.get(shooter);
   if (body) {
-    const speed = shot.power * p.fullPowerSlide * p.linearDamping;
+    // Under constant deceleration a pen slides v²/2a: pick the speed for power × full slide.
+    // (+ half a step's slow-down: friction is applied before each 60 Hz step.)
+    const speed =
+      Math.sqrt(2 * p.slideDecel * shot.power * p.fullPowerSlide) + p.slideDecel / PHYSICS_HZ / 2;
     const impulse = body.getMass() * speed;
     const point = body.getWorldPoint(Vec2(shot.anchor * PEN_HALF_LENGTH, 0));
     body.applyLinearImpulse(
@@ -185,6 +194,18 @@ export function simulateShot(
   let resting = 0;
   while (tick < p.maxSteps) {
     tick++;
+    // Desk friction (Coulomb): a fixed slow-down per step, never past standing still.
+    for (const b of bodies.values()) {
+      const v = b.getLinearVelocity();
+      const speed = v.length();
+      const dv = p.slideDecel / PHYSICS_HZ;
+      b.setLinearVelocity(
+        speed <= dv ? Vec2(0, 0) : Vec2(v.x * (1 - dv / speed), v.y * (1 - dv / speed)),
+      );
+      const w = b.getAngularVelocity();
+      const dw = p.spinDecel / PHYSICS_HZ;
+      b.setAngularVelocity(Math.abs(w) <= dw ? 0 : w - Math.sign(w) * dw);
+    }
     world.step(1 / PHYSICS_HZ, 8, 3);
     for (const [seat, b] of [...bodies]) {
       const c = b.getWorldCenter();
