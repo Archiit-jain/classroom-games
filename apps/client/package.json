@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@cg/game-draw-and-guess": "workspace:*",
     "@cg/game-rmcs": "workspace:*",
     "@cg/game-sdk": "workspace:*",
     "@cg/game-sixteen-parchi": "workspace:*",

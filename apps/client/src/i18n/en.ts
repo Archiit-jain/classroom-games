@@ -163,6 +163,8 @@ export const en = {
     placeholder: 'Say something nice…',
     send: 'Send',
     empty: 'No messages yet.',
+    restricted: 'Private',
+    restrictedHint: 'Only some players can see this message.',
   },
   errors,
 } as const;

@@ -48,6 +48,11 @@ export function ChatPanel() {
             <span className="chat__from">
               {m.fromName}
               {m.isBot && <span className="badge badge--bot">{t('room.bot')}</span>}
+              {m.channel !== 'ROOM' && (
+                <span className="badge" title={t('chat.restrictedHint')}>
+                  {t('chat.restricted')}
+                </span>
+              )}
             </span>
             <span className="chat__text">{m.text}</span>
           </motion.li>

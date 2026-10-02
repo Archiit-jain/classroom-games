@@ -41,6 +41,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@cg/game-draw-and-guess':
+        specifier: workspace:*
+        version: link:../../games/draw-and-guess
       '@cg/game-rmcs':
         specifier: workspace:*
         version: link:../../games/rmcs
@@ -84,6 +87,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@cg/game-draw-and-guess':
+        specifier: workspace:*
+        version: link:../../games/draw-and-guess
       '@cg/game-rmcs':
         specifier: workspace:*
         version: link:../../games/rmcs
