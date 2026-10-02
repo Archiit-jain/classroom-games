@@ -86,6 +86,47 @@ export class ChatService {
   }
 
   /**
+   * A bot's chat message — only games whose bots play through chat use this (a
+   * drawing-game guess, spec §12). It takes the same path as a human's message: the
+   * game's interceptor first, then moderation and the broadcast, marked as a bot.
+   */
+  sendFromBot(matchId: string, seat: number, rawText: string): void {
+    const found = this.deps.rooms.roomOfMatch(matchId);
+    const seatState = found?.match.seats[seat];
+    if (!found || !seatState) return;
+    const text = rawText.replace(/\s+/gu, ' ').trim();
+    if (!text || [...text].length > this.deps.config.chat.maxLength) return;
+
+    const decision = this.deps.rooms.interceptChatForSeat(
+      found.room,
+      seat,
+      this.deps.moderator.normalize(text),
+    );
+    if (decision.kind === 'BLOCK' || decision.kind === 'CONSUME') return;
+
+    const { display } = this.deps.moderator.moderate(text);
+    const takeover = seatState.takeover;
+    const message: ChatMessage = {
+      id: newId('c'),
+      fromId: takeover ? takeover.botId : seatState.memberId,
+      fromName: takeover ? takeover.botName : seatState.displayName,
+      isBot: true,
+      text: display,
+      sentAt: this.now(),
+      channel: decision.kind === 'RESTRICT' ? decision.channel : 'ROOM',
+    };
+    let recipients: string[];
+    if (decision.kind === 'RESTRICT') {
+      recipients = this.deps.rooms.playersInAudience(found.room, decision.audience);
+    } else {
+      recipients = this.deps.rooms.humanIds(found.room);
+      found.room.chat.push(message);
+      if (found.room.chat.length > this.deps.config.chat.bufferSize) found.room.chat.shift();
+    }
+    this.deps.notifier.chatMessage(recipients, message);
+  }
+
+  /**
    * Quick reaction (spec §8): a fixed emote shown over the sender's seat for
    * everyone in the room. Only while a match is running; the transport applies
    * the 1-per-1.5 s limit. Players only — bots never react.

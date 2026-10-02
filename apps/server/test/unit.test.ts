@@ -148,6 +148,7 @@ describe('GameRuntime', () => {
         onOver: (r) => over.push(r),
         afterTransition: () => undefined,
         onCrash: (e) => crashes.push(e),
+        deliverStream: () => undefined,
       },
     });
     return { runtime, updates, requests, over, crashes };
@@ -347,6 +348,7 @@ describe('GameRuntime', () => {
         onOver: () => undefined,
         afterTransition: () => order.push('after'),
         onCrash: () => undefined,
+        deliverStream: () => undefined,
       },
     });
     runtime.start();

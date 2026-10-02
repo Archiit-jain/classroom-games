@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   MatchEnd,
+  MatchStream,
   MatchUpdate,
   Reaction,
   RoomEvent,
@@ -17,6 +18,7 @@ export interface Notifier {
   roomEvent(playerId: string, event: RoomEvent): void;
   matchUpdate(playerId: string, update: MatchUpdate): void;
   matchEnd(playerIds: readonly string[], end: MatchEnd): void;
+  matchStream(playerIds: readonly string[], stream: MatchStream): void;
   chatMessage(playerIds: readonly string[], message: ChatMessage): void;
   chatHistory(playerId: string, messages: readonly ChatMessage[]): void;
   reaction(playerIds: readonly string[], reaction: Reaction): void;

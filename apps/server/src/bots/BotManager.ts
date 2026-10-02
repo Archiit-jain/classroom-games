@@ -1,4 +1,4 @@
-import { createRng, type SeatIndex, type SeededRng } from '@cg/game-sdk';
+import { createRng, type BotStreamStep, type SeatIndex, type SeededRng } from '@cg/game-sdk';
 import type { MatchUpdate } from '@cg/protocol';
 import { errorFields, type Logger } from '../log';
 import type { GameRuntime } from '../runtime/GameRuntime';
@@ -57,6 +57,7 @@ export class BotManager {
   detach(matchId: string, seat: SeatIndex): void {
     const key = BotManager.key(matchId, seat);
     this.deps.timers.clear(`bot:${key}`);
+    this.deps.timers.clearPrefix(`bot:${key}:`);
     this.seats.delete(key);
   }
 
@@ -109,8 +110,10 @@ export class BotManager {
             code: result.code,
           });
         }
-      } else {
+      } else if (decision.kind === 'CHAT') {
         this.deps.onChat?.(entry.runtime.matchId, entry.seat, decision.text);
+      } else {
+        this.runPlan(entry, decision.steps);
       }
     } catch (err) {
       this.deps.log.error('bot failed', {
@@ -119,5 +122,30 @@ export class BotManager {
         ...errorFields(err),
       });
     }
+  }
+
+  /**
+   * Plays a stream plan (e.g. a bot drawing): each chunk goes through the same
+   * `acceptStream` path as a human's. While the plan runs the bot does not re-decide;
+   * the first rejected chunk (e.g. the turn ended) cancels the rest.
+   */
+  private runPlan(entry: BotSeat, steps: BotStreamStep[]): void {
+    if (steps.length === 0) return;
+    entry.pending = true;
+    const prefix = `bot:${entry.key}:plan:`;
+    let at = 0;
+    steps.forEach((step, i) => {
+      at += Math.max(0, step.delayMs);
+      this.deps.timers.set(`${prefix}${i}`, at, () => {
+        if (this.seats.get(entry.key) !== entry || entry.runtime.isOver) return;
+        const result = entry.runtime.acceptStream(entry.seat, step.chunk);
+        const last = i === steps.length - 1;
+        if (!result.ok || last) {
+          this.deps.timers.clearPrefix(prefix);
+          entry.pending = false;
+          if (!result.ok) this.consider(entry, entry.runtime.viewFor(entry.seat).view);
+        }
+      });
+    });
   }
 }

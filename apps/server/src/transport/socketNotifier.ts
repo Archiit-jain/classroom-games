@@ -18,6 +18,7 @@ export function createSocketNotifier(io: IoServer, sessions: SessionManager): No
     roomEvent: (id, event) => to([id])?.emit('room:event', event),
     matchUpdate: (id, update) => to([id])?.emit('match:update', update),
     matchEnd: (ids, end) => to(ids)?.emit('match:end', end),
+    matchStream: (ids, stream) => to(ids)?.emit('match:stream', stream),
     chatMessage: (ids, message) => to(ids)?.emit('chat:message', message),
     chatHistory: (id, messages) => to([id])?.emit('chat:history', { messages: [...messages] }),
     reaction: (ids, reaction) => to(ids)?.emit('chat:reaction', reaction),

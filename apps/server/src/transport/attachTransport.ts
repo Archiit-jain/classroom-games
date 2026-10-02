@@ -186,6 +186,7 @@ function onConnection(io: IoServer, socket: IoSocket, session: Session, deps: Tr
     rooms.submitAction(session, p.matchId, p.version, p.actionId, p.action),
   );
   bind('match:resync', 'matchAction', (p) => rooms.resync(session, p.matchId));
+  bind('match:stream', 'stream', (p) => rooms.submitStream(session, p.matchId, p.chunk));
   // Chat and reports apply their own limits (cooldowns, per-report budget).
   bind('chat:send', null, (p) => deps.chat.send(session, p.text));
   bind('chat:react', 'reaction', (p) => deps.chat.react(session, p.reactionId));

@@ -2,6 +2,7 @@ import {
   createRng,
   eventsForSeat,
   type AnyGameModule,
+  type Audience,
   type ChatDecision,
   type RuntimeRequest,
   type SeatChange,
@@ -23,6 +24,8 @@ export interface RuntimeHooks {
   afterTransition(): void;
   /** The engine threw; the match cannot continue. */
   onCrash(error: unknown): void;
+  /** Relays accepted stream chunks (STREAMED games) to an audience. */
+  deliverStream(audience: Audience, chunks: unknown[]): void;
 }
 
 export interface RuntimeOptions {
@@ -143,6 +146,38 @@ export class GameRuntime {
     }
   }
 
+  /**
+   * A chunk of streamed data (STREAMED games, e.g. drawing strokes). The game's
+   * `stream.accept` validates it against the current state; an accepted chunk updates
+   * the state (no new version, no match:update) and is relayed to the audience it names.
+   */
+  acceptStream(seat: SeatIndex, rawChunk: unknown): Result<Record<never, never>> {
+    const stream = this.game.stream;
+    if (!stream) return fail('ILLEGAL_ACTION');
+    if (!this.started || this.over || this.stopped) return fail('INVALID_PHASE');
+    const parsed = stream.chunkSchema.safeParse(rawChunk);
+    if (!parsed.success) return fail('INVALID_PAYLOAD');
+    let result: Result<Record<never, never>> = fail('INVALID_PHASE');
+    this.run(() => {
+      const out = stream.accept(this.state, seat, parsed.data);
+      if (!('state' in out)) {
+        result = fail(out.ok ? 'ILLEGAL_ACTION' : out.code);
+        return null;
+      }
+      this.state = out.state;
+      result = ok({});
+      this.hooks.deliverStream(out.audience, [out.relay]);
+      return null;
+    });
+    return result;
+  }
+
+  /** Everything a seat needs to rebuild the streamed picture (reconnect / resync). */
+  streamReplay(seat: SeatIndex): unknown[] | null {
+    if (!this.game.stream || !this.started || this.stopped) return null;
+    return this.game.stream.replay(this.state, seat);
+  }
+
   seatChanged(seat: SeatIndex, change: SeatChange): void {
     if (!this.started || this.stopped) return;
     this.run(() =>
@@ -155,6 +190,10 @@ export class GameRuntime {
     if (!this.game.chat || !this.started || this.over || this.stopped) return null;
     const decision = this.game.chat.intercept(this.state, seat, normalized, this.ctx());
     if (decision.kind === 'CONSUME') this.run(() => decision.transition);
+    else if (decision.kind === 'PASS' && decision.transition) {
+      const transition = decision.transition;
+      this.run(() => transition);
+    }
     return decision;
   }
 

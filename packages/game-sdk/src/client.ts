@@ -1,5 +1,5 @@
 import type { ComponentType, LazyExoticComponent } from 'react';
-import type { SeatView } from '@cg/protocol';
+import type { ChatMessage, ReportReason, SeatView } from '@cg/protocol';
 
 /** Effects level chosen by the platform (reduced-motion preference, device capability, user choice). */
 export type EffectsMode = 'full' | 'lite' | 'reduced';
@@ -15,6 +15,39 @@ export interface BoardReaction {
   emoji: string;
   /** Accessible, translated description ("Laughing"). */
   label: string;
+}
+
+/** A batch of streamed chunks; with `reset`, it replaces everything received before. */
+export interface StreamBatch {
+  chunks: readonly unknown[];
+  reset: boolean;
+}
+
+/** Streamed data for STREAMED games (e.g. drawing strokes), outside the animation director. */
+export interface BoardStream {
+  /** Sends one chunk; the server validates it and relays it to the others. */
+  send(chunk: unknown): void;
+  /**
+   * Receives everything so far as one `reset` batch, then new chunks as they arrive.
+   * Returns an unsubscribe function.
+   */
+  subscribe(listener: (batch: StreamBatch) => void): () => void;
+}
+
+/** Room chat for games that play through it (e.g. drawing-game guesses). */
+export interface BoardChat {
+  /** Recent messages you may see (room and restricted channels), muted players removed. */
+  messages: readonly ChatMessage[];
+  /** Sends a message through the normal chat pipeline. Resolves true when accepted. */
+  send(text: string): Promise<boolean>;
+}
+
+/** Local safety tools: hide a player's content, report a player. */
+export interface BoardSafety {
+  /** Member ids this device has hidden (muted or reported). */
+  hidden: readonly string[];
+  toggleHidden(memberId: string): void;
+  report(memberId: string, reason: ReportReason): void;
 }
 
 export interface BoardProps<V, A, E> {
@@ -33,6 +66,9 @@ export interface BoardProps<V, A, E> {
   msUntil(serverTs: number): number;
   /** Reactions on screen right now, oldest first (only for games with `reactions: true`). */
   reactions: readonly BoardReaction[];
+  stream: BoardStream;
+  chat: BoardChat;
+  safety: BoardSafety;
 }
 
 export interface SettingsProps<Settings> {

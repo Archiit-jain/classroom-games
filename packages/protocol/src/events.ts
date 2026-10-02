@@ -5,6 +5,7 @@ import type {
   ChatMessage,
   GameInfo,
   MatchEnd,
+  MatchStream,
   MatchUpdate,
   Reaction,
   RoomView,
@@ -33,6 +34,7 @@ export interface C2SResults {
   'room:reclaimSeat': Empty;
   'match:action': { version: number };
   'match:resync': { update: MatchUpdate };
+  'match:stream': Empty;
   'chat:send': Empty;
   'chat:react': Empty;
   'report:submit': Empty;
@@ -73,6 +75,7 @@ export interface ServerToClientEvents {
   'room:snapshot': (payload: { room: RoomView | null }) => void;
   'room:event': (payload: RoomEvent) => void;
   'match:update': (payload: MatchUpdate) => void;
+  'match:stream': (payload: MatchStream) => void;
   'match:end': (payload: MatchEnd) => void;
   'chat:message': (payload: ChatMessage) => void;
   'chat:reaction': (payload: Reaction) => void;

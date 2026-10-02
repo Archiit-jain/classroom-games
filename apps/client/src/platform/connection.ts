@@ -16,6 +16,7 @@ import { createActionSender } from './actions';
 import { estimateOffset, type PingSample } from './clock';
 import { KEYS, storage } from './storage';
 import { Store, initialState, type AppState, type MatchState, type Toast } from './store';
+import type { StreamBatch } from '@cg/game-sdk/client';
 
 type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export type ClientAck<T> = Ack<T> | { ok: false; code: ClientErrorCode; retryAfterMs?: number };
@@ -25,6 +26,8 @@ const SLOW_CONNECT_MS = 3000;
 /** Matches the waking-up message's promise of "up to a minute". */
 const UNREACHABLE_MS = 60_000;
 const MAX_CHAT = 100;
+/** Streamed chunks kept for late subscribers (a board mounting mid-turn). */
+const MAX_STREAM_LOG = 20_000;
 /** How long a reaction bubble stays on screen. */
 export const REACTION_SHOW_MS = 2400;
 
@@ -89,6 +92,29 @@ export class GameConnection {
   );
 
   private readonly updateListeners = new Set<(update: MatchState) => void>();
+  private readonly streamListeners = new Set<(batch: StreamBatch) => void>();
+  /** Everything streamed in the current match (replaced by a server reset). */
+  private streamLog: { matchId: string; chunks: unknown[] } | null = null;
+
+  /**
+   * Streamed chunks of the current match (STREAMED games): first everything so far as one
+   * `reset` batch, then new chunks as they arrive. Returns an unsubscribe function.
+   */
+  subscribeStream(listener: (batch: StreamBatch) => void): () => void {
+    const matchId = this.store.get().match?.matchId;
+    const chunks =
+      this.streamLog && this.streamLog.matchId === matchId ? this.streamLog.chunks : [];
+    listener({ chunks: [...chunks], reset: true });
+    this.streamListeners.add(listener);
+    return () => this.streamListeners.delete(listener);
+  }
+
+  /** Sends a stream chunk for the current match (fire-and-forget; the server validates it). */
+  sendStream(chunk: unknown): void {
+    const matchId = this.store.get().match?.matchId;
+    if (!matchId || !this.socket.connected) return;
+    void this.request('match:stream', { matchId, chunk });
+  }
 
   /** Receive every match update in arrival order (used by the animation director). */
   subscribeUpdates(listener: (update: MatchState) => void): () => void {
@@ -248,6 +274,16 @@ export class GameConnection {
     });
 
     socket.on('room:event', (event) => this.onRoomEvent(event));
+
+    socket.on('match:stream', ({ matchId, chunks, reset }) => {
+      const fresh = reset || this.streamLog?.matchId !== matchId;
+      if (fresh) this.streamLog = { matchId, chunks: [...chunks] };
+      else this.streamLog?.chunks.push(...chunks);
+      if (this.streamLog && this.streamLog.chunks.length > MAX_STREAM_LOG) {
+        this.streamLog.chunks.splice(0, this.streamLog.chunks.length - MAX_STREAM_LOG);
+      }
+      for (const listener of this.streamListeners) listener({ chunks, reset: fresh });
+    });
 
     socket.on('match:update', (update) => {
       const current = store.get().match;

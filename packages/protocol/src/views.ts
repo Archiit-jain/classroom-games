@@ -94,6 +94,16 @@ export interface MatchUpdate<View = unknown, Event = unknown> {
   serverNow: number;
 }
 
+/**
+ * Streamed game data (e.g. drawing strokes), separate from `match:update`. With `reset`,
+ * `chunks` is everything so far (after a reconnect/resync) and replaces what the client had.
+ */
+export interface MatchStream {
+  matchId: string;
+  chunks: unknown[];
+  reset: boolean;
+}
+
 export interface MatchEnd {
   matchId: string;
   results: GameResults;

@@ -35,6 +35,8 @@ export const C2S = {
     action: z.unknown(),
   }),
   'match:resync': z.strictObject({ matchId: id }),
+  /** One chunk of a streamed game (e.g. drawing strokes); the game validates its shape. */
+  'match:stream': z.strictObject({ matchId: id, chunk: z.unknown() }),
 
   // Raw text may be longer than the limit before trimming; the service enforces the real limit.
   'chat:send': z.strictObject({ text: z.string().max(CHAT_MAX_LENGTH * 2) }),

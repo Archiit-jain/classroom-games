@@ -48,6 +48,7 @@ export interface ServerConfig {
     roomJoin: BucketSpec;
     roomAdmin: BucketSpec;
     matchAction: BucketSpec;
+    stream: BucketSpec;
     report: BucketSpec;
     reaction: BucketSpec;
     ping: BucketSpec;
@@ -95,6 +96,8 @@ export const DEFAULT_CONFIG: ServerConfig = {
     roomJoin: { burst: 10, perSecond: 20 / 60 },
     roomAdmin: { burst: 10, perSecond: 2 },
     matchAction: { burst: 20, perSecond: 10 },
+    // Streamed games (drawing strokes): about 20 chunks per second (spec §12).
+    stream: { burst: 30, perSecond: 20 },
     report: { burst: 3, perSecond: 5 / 60 },
     // Quick reactions: one per 1.5 s (spec Appendix A).
     reaction: { burst: 1, perSecond: 1000 / REACTION_INTERVAL_MS },

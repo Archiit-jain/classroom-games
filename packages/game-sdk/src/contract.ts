@@ -52,8 +52,21 @@ export interface BotCtx {
   rng: SeededRng;
 }
 
+/** One chunk of a bot's drawing plan, sent `delayMs` after the previous one. */
+export interface BotStreamStep {
+  delayMs: number;
+  chunk: unknown;
+}
+
 export type BotDecision<A> =
-  { kind: 'ACTION'; action: A; thinkMs: number } | { kind: 'CHAT'; text: string; thinkMs: number };
+  | { kind: 'ACTION'; action: A; thinkMs: number }
+  /** Chat text sent through the same chat pipeline (and game hook) as a human's message. */
+  | { kind: 'CHAT'; text: string; thinkMs: number }
+  /**
+   * A timed plan of stream chunks (e.g. a drawing), each submitted through the same
+   * `stream.accept` path as a human's. The plan stops at the first rejected chunk.
+   */
+  | { kind: 'STREAM'; steps: BotStreamStep[]; thinkMs: number };
 
 export interface BotModule<V, A, E, M = unknown> {
   createMemory(seat: SeatIndex): M;
@@ -69,7 +82,12 @@ export interface StreamLimits {
   maxStrokesPerTurn: number;
 }
 
-/** Required when `manifest.sync === 'STREAMED'`. Runtime wiring lands with the first streamed game. */
+/**
+ * Required when `manifest.sync === 'STREAMED'`. Chunks arrive on `match:stream` (rate-limited),
+ * are parsed with `chunkSchema` and passed to `accept`, which may update the state (no new
+ * version, no `match:update`) and returns what to relay to whom. `replay` rebuilds a seat's
+ * picture after a reconnect or resync.
+ */
 export interface StreamModule<S, C = unknown> {
   chunkSchema: ZodType<C>;
   limits: StreamLimits;
@@ -78,7 +96,11 @@ export interface StreamModule<S, C = unknown> {
 }
 
 export type ChatDecision =
-  | { kind: 'PASS' }
+  /**
+   * Show the message normally. A game may attach a transition to record public
+   * information about it (e.g. a wrong guess) — it is committed before the broadcast.
+   */
+  | { kind: 'PASS'; transition?: Transition<unknown, unknown> }
   | { kind: 'RESTRICT'; audience: Audience; channel: string }
   | { kind: 'CONSUME'; transition: Transition<unknown, unknown> }
   | { kind: 'BLOCK'; code: ChatErrorCode };

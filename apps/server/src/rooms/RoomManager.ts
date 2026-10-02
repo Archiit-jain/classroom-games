@@ -328,6 +328,19 @@ export class RoomManager {
     return match.runtime.submitAction(seat.seat, version, actionId, action);
   }
 
+  /** A chunk of streamed game data (e.g. drawing strokes) from the player in a seat. */
+  submitStream(session: Session, matchId: string, chunk: unknown): Result<Empty> {
+    const ctx = this.context(session);
+    if (!ctx) return fail('NOT_IN_ROOM');
+    const match = ctx.room.match;
+    if (!match || match.matchId !== matchId || ctx.room.phase !== 'IN_GAME')
+      return fail('MATCH_NOT_FOUND');
+    const seat = seatOf(match, session.id);
+    if (!seat) return fail('MATCH_NOT_FOUND');
+    if (seat.takeover) return fail('SEAT_CONTROLLED_BY_BOT');
+    return match.runtime.acceptStream(seat.seat, chunk);
+  }
+
   resync(session: Session, matchId: string): Result<{ update: MatchUpdate }> {
     const ctx = this.context(session);
     const match = ctx?.room.match;
@@ -335,7 +348,31 @@ export class RoomManager {
       return fail('MATCH_NOT_FOUND');
     const seat = seatOf(match, session.id);
     if (!seat) return fail('MATCH_NOT_FOUND');
+    this.sendStreamReplay(session.id, match, seat.seat);
     return ok({ update: match.runtime.viewFor(seat.seat) });
+  }
+
+  /** Sends a player everything streamed so far (STREAMED games), replacing what they had. */
+  private sendStreamReplay(playerId: string, match: ActiveMatch, seat: number): void {
+    const chunks = match.runtime.streamReplay(seat);
+    if (chunks)
+      this.deps.notifier.matchStream([playerId], { matchId: match.matchId, chunks, reset: true });
+  }
+
+  /** The room running a match (bots act by match id). */
+  roomOfMatch(matchId: string): { room: Room; match: ActiveMatch } | null {
+    for (const room of this.deps.store.all()) {
+      if (room.match?.matchId === matchId && room.phase === 'IN_GAME')
+        return { room, match: room.match };
+    }
+    return null;
+  }
+
+  /** Offers a bot's chat message (e.g. a drawing-game guess) to the game's interceptor. */
+  interceptChatForSeat(room: Room, seat: number, normalized: string): ChatDecision {
+    const match = room.match;
+    if (room.phase !== 'IN_GAME' || !match) return { kind: 'PASS' };
+    return match.runtime.interceptChat(seat, normalized) ?? { kind: 'PASS' };
   }
 
   /** Offers a chat message to the running game's interceptor (if any). */
@@ -379,6 +416,7 @@ export class RoomManager {
     this.deps.notifier.chatHistory(member.id, room.chat);
     if (seat && room.match?.runtime.isStarted) {
       this.deps.notifier.matchUpdate(member.id, room.match.runtime.viewFor(seat.seat));
+      this.sendStreamReplay(member.id, room.match, seat.seat);
     }
   }
 
@@ -477,6 +515,7 @@ export class RoomManager {
         onOver: (results) => this.finishMatch(roomId, matchId, results),
         afterTransition: () => this.processPendingReclaims(roomId, matchId),
         onCrash: () => this.abortMatch(roomId, matchId),
+        deliverStream: (audience, chunks) => this.deliverStream(roomId, matchId, audience, chunks),
       },
     });
     room.match = {
@@ -526,6 +565,21 @@ export class RoomManager {
     if (s.memberKind === 'BOT' || s.takeover) this.deps.bots.onUpdate(matchId, seat, update);
   }
 
+  /** Relays stream chunks to the connected humans in the audience (bots don't need them). */
+  private deliverStream(
+    roomId: string,
+    matchId: string,
+    audience: Audience,
+    chunks: unknown[],
+  ): void {
+    const found = this.activeMatch(roomId, matchId);
+    if (!found) return;
+    const ids = this.playersInAudience(found.room, audience).filter(
+      (id) => findHuman(found.room, id)?.connected,
+    );
+    if (ids.length > 0) this.deps.notifier.matchStream(ids, { matchId, chunks, reset: false });
+  }
+
   private handleRequest(roomId: string, matchId: string, request: RuntimeRequest): void {
     const found = this.activeMatch(roomId, matchId);
     if (!found || request.type !== 'MARK_IDLE') return;
@@ -565,8 +619,10 @@ export class RoomManager {
     this.deps.notifier.roomEvent(seat.memberId, { type: 'SEAT_RECLAIMED' });
     this.broadcast(room);
     const member = findHuman(room, seat.memberId);
-    if (member?.connected)
+    if (member?.connected) {
       this.deps.notifier.matchUpdate(member.id, match.runtime.viewFor(seat.seat));
+      this.sendStreamReplay(member.id, match, seat.seat);
+    }
   }
 
   private processPendingReclaims(roomId: string, matchId: string): void {

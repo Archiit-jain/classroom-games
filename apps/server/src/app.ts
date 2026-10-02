@@ -110,7 +110,13 @@ export function createGameServer(options: GameServerOptions): GameServer {
   });
 
   const notifier = createSocketNotifier(io, sessions);
-  const bots = new BotManager({ timers, log });
+  // Bots that play through chat (drawing-game guesses) use the same chat pipeline as humans.
+  let chatForBots: ChatService | null = null;
+  const bots = new BotManager({
+    timers,
+    log,
+    onChat: (matchId, seat, text) => chatForBots?.sendFromBot(matchId, seat, text),
+  });
   const rooms = new RoomManager({
     config,
     store: new InMemoryRoomStore(),
@@ -123,6 +129,7 @@ export function createGameServer(options: GameServerOptions): GameServer {
     log,
   });
   const chat = new ChatService({ config, moderator, rooms, notifier, limiter });
+  chatForBots = chat;
   const reportSink =
     options.reportSink ?? new InMemoryFlagStore(config.reports.maxFlags, config.reports.flagTtlMs);
   const reports = new ReportService({ sink: reportSink, rooms, limiter, log });
