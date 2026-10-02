@@ -1,0 +1,29 @@
+{
+  "name": "@cg/game-draw-and-guess",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Draw & Guess (working name) — engine, bots, word pack, drawing board.",
+  "exports": {
+    "./shared": "./src/shared/index.ts",
+    "./server": "./src/server/index.ts",
+    "./client": "./src/client/index.ts",
+    "./content/en": "./content/en/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cg/game-sdk": "workspace:*",
+    "@cg/protocol": "workspace:*",
+    "@cg/ui": "workspace:*",
+    "motion": "^13.4.6",
+    "perfect-freehand": "^1.2.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cg/moderation": "workspace:*",
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0"
+  }
+}
