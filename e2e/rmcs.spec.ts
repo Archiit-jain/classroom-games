@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { RMCS, createRoom, joinRoom, newPlayer } from './helpers';
+import { installDiagnostics } from './diagnostics';
+
+installDiagnostics(test);
 
 /**
  * Plays as a human whenever this page is the Mantri: picks the first suspect,
@@ -13,10 +16,12 @@ async function playRmcsUntilResults(pages: Page[]): Promise<number> {
       if (await page.getByRole('heading', { name: 'Results' }).isVisible()) return guesses;
       const suspect = page.getByRole('button', { name: /^Suspect / }).first();
       if (await suspect.isVisible().catch(() => false)) {
-        await suspect.click().catch(() => undefined);
+        // Short timeouts: the button vanishes when guessing ends, and an unbounded click
+        // would wait for it until the test times out.
+        await suspect.click({ timeout: 2000 }).catch(() => undefined);
         const accuse = page.getByRole('button', { name: /^Accuse .+!$/ });
         if (await accuse.isVisible().catch(() => false)) {
-          await accuse.click().catch(() => undefined);
+          await accuse.click({ timeout: 2000 }).catch(() => undefined);
           guesses++;
         }
       }

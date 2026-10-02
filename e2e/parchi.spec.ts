@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import { installDiagnostics, matchLength, progressSummary, sampleProgress } from './diagnostics';
 import { PARCHI, createRoom, joinRoom, newPlayer } from './helpers';
+
+installDiagnostics(test);
 
 /**
  * Deals are random, so match length varies a lot (a long match can run dozens of passes),
@@ -10,14 +13,24 @@ const PLAY_BUDGET_MS = 220_000;
 const PARCHI_TEST_TIMEOUT_MS = 240_000;
 
 /**
- * Plays like a person: whenever this page may pass a slip it taps the last one
- * (the hand is grouped biggest first), and it claims a full set as soon as the
- * CLAIM button appears. Stops when the results screen appears.
+ * Plays like a person: whenever this page may pass a slip it passes one from its smallest
+ * group (ties broken at random, as people and bots do), and it claims a full set as soon as
+ * the CLAIM button appears. Stops when the results screen appears.
+ *
+ * Why random ties: a fixed choice (e.g. always the last slip) made by two neighbouring
+ * players can repeat the same passes forever; about 1 match in 10 then only ends at the
+ * game's 100-pass safety cap, which is far longer than any realistic match.
  */
 async function playUntilResults(pages: Page[]): Promise<{ picks: number; claims: number }> {
   const done = { picks: 0, claims: 0 };
   const deadline = Date.now() + PLAY_BUDGET_MS;
+  let nextSample = 0;
   while (Date.now() < deadline) {
+    // Progress trail for diagnostics (one cheap DOM read per page every 10 s).
+    if (Date.now() >= nextSample) {
+      nextSample = Date.now() + 10_000;
+      await sampleProgress();
+    }
     for (const page of pages) {
       if (await page.getByRole('heading', { name: 'Results' }).isVisible()) return done;
       const claim = page.getByRole('button', { name: 'Claim your full set' });
@@ -27,22 +40,31 @@ async function playUntilResults(pages: Page[]): Promise<{ picks: number; claims:
         done.claims++;
         continue;
       }
-      const desk = await page
-        .locator('.sp-desk__inner')
-        .innerText()
-        .catch(() => '');
-      const slips = page.locator('.sp-hand__slip:not([disabled])');
-      if (desk.includes('Pick a slip') && (await slips.count()) > 0) {
-        await slips
-          .last()
-          .click({ timeout: 2000 })
-          .catch(() => undefined);
-        done.picks++;
+      // Never wait for the desk: it disappears for good when the match ends, and a waiting
+      // read (innerText) would then hang until the test times out.
+      const desk = (await page.locator('.sp-desk__inner').allInnerTexts()).join(' ');
+      if (desk.includes('Pick a slip')) {
+        const groups = page.locator('.sp-hand .sp-group');
+        const sizes = await groups.evaluateAll((els) =>
+          els.map((g) => g.querySelectorAll('.sp-hand__slip:not([disabled])').length),
+        );
+        const smallest = Math.min(...sizes.filter((n) => n > 0));
+        const choices = sizes.flatMap((n, i) => (n === smallest ? [i] : []));
+        if (choices.length > 0) {
+          const pick = choices[Math.floor(Math.random() * choices.length)] as number;
+          await groups
+            .nth(pick)
+            .locator('.sp-hand__slip:not([disabled])')
+            .first()
+            .click({ timeout: 2000 })
+            .catch(() => undefined);
+          done.picks++;
+        }
       }
     }
     await pages[0]?.waitForTimeout(100);
   }
-  throw new Error('16 Parchi did not finish in time');
+  throw new Error(`16 Parchi did not finish in time — ${await progressSummary()}`);
 }
 
 test('16 Parchi: two humans and two bots pass, claim and reach the podium @mobile', async ({
@@ -87,6 +109,7 @@ test('16 Parchi: two humans and two bots pass, claim and reach the podium @mobil
   await expect(host.locator('.sp-seat .cb-reaction__bubble[aria-label="On fire"]')).toBeVisible();
 
   const played = await playUntilResults([host, guest]);
+  testInfo.annotations.push({ type: 'match', description: matchLength() });
   expect(played.picks).toBeGreaterThan(0);
   for (const page of [host, guest]) {
     await expect(page.getByRole('heading', { name: 'Results' })).toBeVisible();
@@ -118,6 +141,7 @@ test('16 Parchi is fully playable with reduced motion', async ({ browser }) => {
   await expect(host.getByLabel('Your slips')).toBeVisible();
 
   const played = await playUntilResults([host]);
+  test.info().annotations.push({ type: 'match', description: matchLength() });
   expect(played.picks).toBeGreaterThan(0);
   await expect(host.locator('.results__row')).toHaveCount(4);
   // No confetti and no flying slips in reduced motion.

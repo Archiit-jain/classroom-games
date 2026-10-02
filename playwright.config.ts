@@ -18,11 +18,16 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 10_000 },
   workers: 1,
+  // Keep the output (traces, screenshots, videos, diagnostics) of failed attempts only.
+  preserveOutput: 'failures-only',
   retries: isCI ? 1 : 0,
   reporter: isCI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${CLIENT_PORT}`,
+    // Evidence from any failed attempt is kept, even when an automatic retry then passes.
     trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
   },
   projects: [
     {

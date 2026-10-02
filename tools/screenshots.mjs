@@ -16,11 +16,14 @@ const phone = await browser.newContext({ ...devices['Pixel 7'] });
 const host = await desktop.newPage();
 const guest = await phone.newPage();
 const shot = (page, name) => page.screenshot({ path: join(out, `${name}.png`) });
-const deskText = (page) =>
-  page
-    .locator('.rmcs-desk__inner')
-    .innerText()
-    .catch(() => '');
+// Non-waiting read: the desk disappears for good when the match ends.
+const deskText = async (page) =>
+  (
+    await page
+      .locator('.rmcs-desk__inner')
+      .allInnerTexts()
+      .catch(() => [])
+  ).join(' ');
 
 for (const [page, name] of [
   [host, 'Archit'],
@@ -76,7 +79,7 @@ while (Date.now() < deadline) {
     }
     const suspect = page.getByRole('button', { name: /^Suspect / }).first();
     if (await suspect.isVisible().catch(() => false)) {
-      await suspect.click().catch(() => {});
+      await suspect.click({ timeout: 2000 }).catch(() => {});
       await page.waitForTimeout(500);
       if (!seen.has(`accuse-${who}`)) {
         await shot(page, `07-rmcs-accuse-${who}`);
@@ -84,7 +87,7 @@ while (Date.now() < deadline) {
       }
       await page
         .getByRole('button', { name: /^Accuse .+!$/ })
-        .click()
+        .click({ timeout: 2000 })
         .catch(() => {});
     }
   }

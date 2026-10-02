@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { FIXTURE, createRoom, joinRoom, newPlayer } from './helpers';
+import { installDiagnostics } from './diagnostics';
+
+installDiagnostics(test);
 
 /** Clicks "+3" whenever it is this player's turn, until the results screen appears. */
 async function playUntilResults(pages: Page[]): Promise<void> {

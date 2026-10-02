@@ -24,11 +24,14 @@ const once = async (key, fn) => {
   seen.add(key);
   await fn();
 };
-const deskText = (page) =>
-  page
-    .locator('.sp-desk__inner')
-    .innerText()
-    .catch(() => '');
+// Non-waiting read: the desk disappears for good when the match ends.
+const deskText = async (page) =>
+  (
+    await page
+      .locator('.sp-desk__inner')
+      .allInnerTexts()
+      .catch(() => [])
+  ).join(' ');
 
 for (const [page, name] of [
   [host, 'Archit'],
@@ -78,7 +81,7 @@ while (Date.now() < deadline) {
         await shot(page, `17-parchi-claim-${who}`);
       });
       // The button pulses in full effects; force skips Playwright's wait-until-still check.
-      await claim.click({ force: true }).catch(() => {});
+      await claim.click({ force: true, timeout: 2000 }).catch(() => {});
       await page.waitForTimeout(900);
       await once(`claimed-${who}`, () => shot(page, `18-parchi-claimed-${who}`));
       continue;
@@ -92,7 +95,7 @@ while (Date.now() < deadline) {
       // Pass from the smallest group (the hand is grouped biggest first).
       await slips
         .last()
-        .click()
+        .click({ timeout: 2000 })
         .catch(() => {});
       await page.waitForTimeout(450);
       await once(`chosen-${who}`, () => shot(page, `15-parchi-chosen-${who}`));
