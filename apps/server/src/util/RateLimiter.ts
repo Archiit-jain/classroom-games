@@ -8,14 +8,20 @@ interface Bucket {
 /** Token-bucket rate limiter keyed by (subject, bucket name). */
 export class RateLimiter {
   private readonly buckets = new Map<string, Bucket>();
+  /** Buckets whose spec comes with the call (e.g. a game's own chat-input limit). */
+  private readonly extra = new Map<string, BucketSpec>();
 
   constructor(
     private readonly specs: Record<string, BucketSpec>,
     private readonly now: () => number = Date.now,
   ) {}
 
+  private specFor(name: string): BucketSpec | undefined {
+    return this.specs[name] ?? this.extra.get(name);
+  }
+
   private refill(subject: string, name: string): { bucket: Bucket; spec: BucketSpec } {
-    const spec = this.specs[name];
+    const spec = this.specFor(name);
     if (!spec) throw new Error(`Unknown rate-limit bucket "${name}"`);
     const key = `${subject}\u0000${name}`;
     const now = this.now();
@@ -31,8 +37,13 @@ export class RateLimiter {
     return { bucket, spec };
   }
 
-  /** Consumes one token; returns false (and consumes nothing) when the bucket is empty. */
-  take(subject: string, name: string): boolean {
+  /**
+   * Consumes one token; returns false (and consumes nothing) when the bucket is empty.
+   * `spec` defines a bucket that is not in the configuration (its name must be unique
+   * to that spec).
+   */
+  take(subject: string, name: string, spec?: BucketSpec): boolean {
+    if (spec && !this.specs[name]) this.extra.set(name, spec);
     const { bucket } = this.refill(subject, name);
     if (bucket.tokens < 1) return false;
     bucket.tokens -= 1;
@@ -49,7 +60,7 @@ export class RateLimiter {
   sweep(): void {
     for (const [key, bucket] of this.buckets) {
       const name = key.split('\u0000')[1] as string;
-      const spec = this.specs[name];
+      const spec = this.specFor(name);
       if (!spec) continue;
       const elapsed = (this.now() - bucket.updatedAt) / 1000;
       if (bucket.tokens + elapsed * spec.perSecond >= spec.burst) this.buckets.delete(key);

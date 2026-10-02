@@ -26,6 +26,20 @@ describe('RateLimiter', () => {
     expect(limiter.take('a', 'x')).toBe(false);
   });
 
+  it('supports buckets whose spec comes with the call, kept separate per name', () => {
+    let now = 0;
+    const limiter = new RateLimiter({ chat: { burst: 1, perSecond: 1 } }, () => now);
+    const spec = { burst: 2, perSecond: 0.5 };
+    expect([1, 2, 3].map(() => limiter.take('a', 'game', spec))).toEqual([true, true, false]);
+    expect(limiter.retryAfterMs('a', 'game')).toBe(2000);
+    expect(limiter.take('a', 'chat')).toBe(true); // the configured bucket is untouched
+    now = 2000;
+    expect(limiter.take('a', 'game', spec)).toBe(true);
+    now = 60_000;
+    limiter.sweep(); // refilled buckets are dropped, including call-defined ones
+    expect([1, 2, 3].map(() => limiter.take('a', 'game', spec))).toEqual([true, true, false]);
+  });
+
   it('rejects unknown buckets loudly', () => {
     expect(() => new RateLimiter({}).take('a', 'nope')).toThrow(/Unknown/);
   });

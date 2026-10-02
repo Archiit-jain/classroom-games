@@ -181,6 +181,21 @@ describe('hints', () => {
 });
 
 describe('guessing through the chat hook', () => {
+  it('marks only unsolved guessers’ messages while drawing as guesses (own rate limit)', () => {
+    const input = game.chat!.input!;
+    expect(input.limit).toEqual({ burst: 8, perSecond: 1 });
+    expect(input.applies(start().state, 1)).toBe(false); // choosing: normal chat
+    let s = drawingWord('kite');
+    expect(input.applies(s, 0)).toBe(false); // the drawer
+    expect(input.applies(s, 1)).toBe(true);
+    const solved = chat(s, 1, 'kite');
+    if (solved.kind !== 'CONSUME') throw new Error('expected consume');
+    s = (solved.transition as T).state;
+    expect(input.applies(s, 1)).toBe(false); // solved: SOLVED-lane chat
+    expect(input.applies(s, 2)).toBe(true);
+    expect(input.applies(timer(s).state, 2)).toBe(false); // reveal
+  });
+
   it('consumes a correct guess: private Correct!, public "guessed it", never the word', () => {
     const s = drawingWord('ice cream');
     const d = chat(s, 2, 'is it ICE-CREAM?');

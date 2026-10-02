@@ -1,4 +1,4 @@
-import type { Audience, ChatDecision, RuntimeRequest } from '@cg/game-sdk';
+import type { Audience, ChatDecision, ChatInputLimit, RuntimeRequest } from '@cg/game-sdk';
 import { isInAudience } from '@cg/game-sdk';
 import type { Moderator } from '@cg/moderation';
 import {
@@ -373,6 +373,15 @@ export class RoomManager {
     const match = room.match;
     if (room.phase !== 'IN_GAME' || !match) return { kind: 'PASS' };
     return match.runtime.interceptChat(seat, normalized) ?? { kind: 'PASS' };
+  }
+
+  /** The running game's own rate limit when this player's next message is game input. */
+  chatInputLimit(room: Room, playerId: string): ChatInputLimit | null {
+    const match = room.match;
+    if (room.phase !== 'IN_GAME' || !match) return null;
+    const seat = seatOf(match, playerId);
+    if (!seat) return null;
+    return match.runtime.chatInputLimit(seat.seat);
   }
 
   /** Offers a chat message to the running game's interceptor (if any). */

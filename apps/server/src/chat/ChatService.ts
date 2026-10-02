@@ -40,14 +40,24 @@ export class ChatService {
     if (!text) return fail('CHAT_EMPTY');
     if ([...text].length > this.deps.config.chat.maxLength) return fail('INVALID_PAYLOAD');
 
-    // 1. Rate limit (first, so floods cost almost nothing).
+    // 1. Rate limit (first, so floods cost almost nothing). Game input typed into the
+    // chat (e.g. guesses while drawing) has the game's own limit and no cooldown;
+    // everything else uses the room-chat limit.
     const now = this.now();
-    const until = this.cooldownUntil.get(session.id);
-    if (until !== undefined && until > now) return fail('CHAT_COOLDOWN', until - now);
-    if (!this.deps.limiter.take(session.id, 'chat')) {
-      const cooldown = this.deps.config.chat.cooldownMs;
-      this.cooldownUntil.set(session.id, now + cooldown);
-      return fail('CHAT_COOLDOWN', cooldown);
+    const inputLimit = this.deps.rooms.chatInputLimit(room, session.id);
+    if (inputLimit) {
+      const bucket = `chatInput:${room.gameId}`;
+      if (!this.deps.limiter.take(session.id, bucket, inputLimit)) {
+        return fail('RATE_LIMITED', this.deps.limiter.retryAfterMs(session.id, bucket));
+      }
+    } else {
+      const until = this.cooldownUntil.get(session.id);
+      if (until !== undefined && until > now) return fail('CHAT_COOLDOWN', until - now);
+      if (!this.deps.limiter.take(session.id, 'chat')) {
+        const cooldown = this.deps.config.chat.cooldownMs;
+        this.cooldownUntil.set(session.id, now + cooldown);
+        return fail('CHAT_COOLDOWN', cooldown);
+      }
     }
 
     // 2. Normalise, 3. let the running game intercept (e.g. drawing-game guesses).

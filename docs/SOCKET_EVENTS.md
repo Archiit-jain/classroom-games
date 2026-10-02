@@ -22,28 +22,28 @@ implemented as of Phase 3.
 
 ## Client → server
 
-| Event                 | Payload                                                  | Success result                        | Rate bucket          |
-| --------------------- | -------------------------------------------------------- | ------------------------------------- | -------------------- |
-| `session:setNickname` | `{ nickname }`                                           | `{ nickname }` (normalised)           | nickname             |
-| `room:create`         | `{ gameId }`                                             | `{ room: RoomView }`                  | roomCreate           |
-| `room:join`           | `{ code }`                                               | `{ room: RoomView }`                  | roomJoin             |
-| `room:leave`          | `{}`                                                     | `{}`                                  | roomAdmin            |
-| `room:setGame`        | `{ gameId }`                                             | `{}` (host, LOBBY)                    | roomAdmin            |
-| `room:updateSettings` | `{ settings }`                                           | `{}` (host, LOBBY)                    | roomAdmin            |
-| `room:addBot`         | `{}`                                                     | `{}` (host, LOBBY)                    | roomAdmin            |
-| `room:removeBot`      | `{ botId }`                                              | `{}` (host, LOBBY)                    | roomAdmin            |
-| `room:kick`           | `{ playerId }`                                           | `{}` (host)                           | roomAdmin            |
-| `room:start`          | `{}`                                                     | `{}` (host, LOBBY)                    | roomAdmin            |
-| `room:playAgain`      | `{}`                                                     | `{}` (host, RESULTS → STARTING)       | roomAdmin            |
-| `room:backToLobby`    | `{}`                                                     | `{}` (host, RESULTS → LOBBY)          | roomAdmin            |
-| `room:reclaimSeat`    | `{}`                                                     | `{}` (take your seat back from a bot) | roomAdmin            |
-| `match:action`        | `{ matchId, version, actionId, action }`                 | `{ version }`                         | matchAction          |
-| `match:resync`        | `{ matchId }`                                            | `{ update: MatchUpdate }`             | matchAction          |
-| `match:stream`        | `{ matchId, chunk }` (streamed games, e.g. a stroke)     | `{}`                                  | stream (30, 20/s)    |
-| `chat:send`           | `{ text }`                                               | `{}`                                  | chat (own cooldown)  |
-| `chat:react`          | `{ reactionId }` (one of the 8 `REACTION_IDS`)           | `{}`                                  | reaction (1 / 1.5 s) |
-| `report:submit`       | `{ playerId, reason: CHAT \| DRAWING \| NAME \| OTHER }` | `{}`                                  | report               |
-| `time:ping`           | `{ clientTs }`                                           | `{ clientTs, serverNow }`             | ping                 |
+| Event                 | Payload                                                  | Success result                        | Rate bucket                                                                          |
+| --------------------- | -------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `session:setNickname` | `{ nickname }`                                           | `{ nickname }` (normalised)           | nickname                                                                             |
+| `room:create`         | `{ gameId }`                                             | `{ room: RoomView }`                  | roomCreate                                                                           |
+| `room:join`           | `{ code }`                                               | `{ room: RoomView }`                  | roomJoin                                                                             |
+| `room:leave`          | `{}`                                                     | `{}`                                  | roomAdmin                                                                            |
+| `room:setGame`        | `{ gameId }`                                             | `{}` (host, LOBBY)                    | roomAdmin                                                                            |
+| `room:updateSettings` | `{ settings }`                                           | `{}` (host, LOBBY)                    | roomAdmin                                                                            |
+| `room:addBot`         | `{}`                                                     | `{}` (host, LOBBY)                    | roomAdmin                                                                            |
+| `room:removeBot`      | `{ botId }`                                              | `{}` (host, LOBBY)                    | roomAdmin                                                                            |
+| `room:kick`           | `{ playerId }`                                           | `{}` (host)                           | roomAdmin                                                                            |
+| `room:start`          | `{}`                                                     | `{}` (host, LOBBY)                    | roomAdmin                                                                            |
+| `room:playAgain`      | `{}`                                                     | `{}` (host, RESULTS → STARTING)       | roomAdmin                                                                            |
+| `room:backToLobby`    | `{}`                                                     | `{}` (host, RESULTS → LOBBY)          | roomAdmin                                                                            |
+| `room:reclaimSeat`    | `{}`                                                     | `{}` (take your seat back from a bot) | roomAdmin                                                                            |
+| `match:action`        | `{ matchId, version, actionId, action }`                 | `{ version }`                         | matchAction                                                                          |
+| `match:resync`        | `{ matchId }`                                            | `{ update: MatchUpdate }`             | matchAction                                                                          |
+| `match:stream`        | `{ matchId, chunk }` (streamed games, e.g. a stroke)     | `{}`                                  | stream (30, 20/s)                                                                    |
+| `chat:send`           | `{ text }`                                               | `{}`                                  | chat (own cooldown); game input (e.g. guesses): the game's own limit, `RATE_LIMITED` |
+| `chat:react`          | `{ reactionId }` (one of the 8 `REACTION_IDS`)           | `{}`                                  | reaction (1 / 1.5 s)                                                                 |
+| `report:submit`       | `{ playerId, reason: CHAT \| DRAWING \| NAME \| OTHER }` | `{}`                                  | report                                                                               |
+| `time:ping`           | `{ clientTs }`                                           | `{ clientTs, serverNow }`             | ping                                                                                 |
 
 A coarse per-socket flood guard (burst 40, 20/s) silently drops excess packets before any
 handler runs.

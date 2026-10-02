@@ -105,8 +105,24 @@ export type ChatDecision =
   | { kind: 'CONSUME'; transition: Transition<unknown, unknown> }
   | { kind: 'BLOCK'; code: ChatErrorCode };
 
+/** A token bucket: up to `burst` at once, refilling `perSecond`. */
+export interface ChatInputLimit {
+  burst: number;
+  perSecond: number;
+}
+
 export interface ChatInterceptor<S> {
   intercept(s: S, seat: SeatIndex, normalized: string, ctx: StepCtx): ChatDecision;
+  /**
+   * Game input typed into the chat (e.g. drawing-game guesses). While `applies` is
+   * true for a seat, that seat's messages use this game's own rate limit instead of
+   * the room-chat limit and its cooldown; they still go through `intercept` and
+   * moderation like any other message.
+   */
+  input?: {
+    limit: ChatInputLimit;
+    applies(s: S, seat: SeatIndex): boolean;
+  };
 }
 
 /**

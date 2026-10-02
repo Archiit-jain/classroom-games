@@ -49,6 +49,11 @@ through the game before moderation:
 | Anything else                        | Shown normally (moderated) and remembered as a wrong guess for this turn.                                   |
 | Outside `DRAWING` (choosing, reveal) | Normal chat.                                                                                                |
 
+**Guess rate limit:** while drawing, a guesser's messages are limited by the game's own
+limit — 8 at once, then 1 per second; beyond that, a short "slow down" (about a second), never
+the room chat's 30-second cooldown. Players who already guessed, the drawer, and chat outside
+the drawing phase use the normal room-chat limit.
+
 **Correct** means: after lower-casing and removing accents and punctuation (hyphens count as
 spaces), the guess equals the word or one of its aliases (spaces ignored, so "icecream" =
 "ice cream"), or contains it as a whole word or phrase ("is it a cat?"). A word hidden inside

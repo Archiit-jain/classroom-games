@@ -1,6 +1,7 @@
 import {
   toAll,
   toSeats,
+  type ChatInputLimit,
   type GameModule,
   type RuntimeRequest,
   type Scoped,
@@ -54,6 +55,11 @@ export const DEFAULT_TIMING: DrawTiming = { chooseMs: 10_000, drawMs: 60_000, re
 /** Guesser points by order (spec §12), then the drawer's points per correct guesser. */
 export const GUESSER_POINTS = [100, 80, 65, 55, 50] as const;
 export const DRAWER_POINTS_PER_GUESS = 20;
+/**
+ * Guesses have their own rate limit (instead of room chat's 5 + 1/s and 30 s
+ * cooldown): a quick burst, then one guess per second, never a cooldown.
+ */
+export const GUESS_LIMIT: ChatInputLimit = { burst: 8, perSecond: 1 };
 
 export interface DrawOptions {
   /** Multiplies every duration (dev/e2e speed-ups; production uses 1). */
@@ -70,6 +76,8 @@ export interface DrawOptions {
   botDrawMs?: [number, number];
   /** Consecutive empty drawing turns before the seat is handed to a bot. */
   idleAfterEmptyTurns?: number;
+  /** Rate limit for guesses (see GUESS_LIMIT). */
+  guessLimit?: ChatInputLimit;
 }
 
 type T = Transition<DrawState, DrawEvent>;
@@ -469,6 +477,15 @@ export function createDrawAndGuessGame(
     },
 
     chat: {
+      /** Guessers' messages while drawing are guesses (solved players chat normally). */
+      input: {
+        limit: options.guessLimit ?? GUESS_LIMIT,
+        applies: (s, seat) =>
+          s.phase === 'DRAWING' &&
+          seat !== s.drawer &&
+          s.seats.includes(seat) &&
+          !s.guessed.some((g) => g.seat === seat),
+      },
       intercept(s, seat, normalized, ctx) {
         const entry = wordOf(s);
         if (s.phase !== 'DRAWING' || !entry) return { kind: 'PASS' };

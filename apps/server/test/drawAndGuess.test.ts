@@ -134,6 +134,79 @@ describe('Draw & Guess over real sockets', () => {
     expect(g1.all('chat:message').some((m) => m.channel === 'SOLVED')).toBe(false);
   });
 
+  it('gives guesses their own rate limit: a burst of guesses never triggers the chat cooldown', async () => {
+    const [drawer, g1, g2] = await threePlayers();
+    const choosing = (await drawer.waitFor('match:update', (u) =>
+      (u as Update).events.some((e) => e.type === 'WORD_OPTIONS'),
+    )) as Update;
+    await drawer.act(choosing, { type: 'CHOOSE', option: 0 });
+    const word = (
+      (await drawer.waitFor(
+        'match:update',
+        (u) => (u as Update).view.phase === 'DRAWING',
+      )) as Update
+    ).view.word as string;
+    await g1.waitFor('match:update', (u) => (u as Update).view.phase === 'DRAWING');
+
+    // Eight quick wrong guesses (room chat alone allows 5, then a 30 s cooldown): all accepted,
+    // shown to the others and still moderated.
+    const guesses = [
+      'zebra',
+      'yak',
+      'what the fuck',
+      'quilt',
+      'xylophone',
+      'violin',
+      'tulip',
+      'swan',
+    ];
+    for (const text of guesses) {
+      expect(await g1.emit('chat:send', { text })).toEqual({ ok: true });
+    }
+    await g2.waitFor('chat:message', (m) => m.text === 'swan');
+    expect(g2.all('chat:message').map((m) => m.text)).toContain('what the ****');
+
+    // A ninth at once: a short "slow down" from the guess limit — not the chat cooldown.
+    const limited = await g1.emit('chat:send', { text: 'rose' });
+    expect(limited).toMatchObject({ ok: false, code: 'RATE_LIMITED' });
+    const retry = (limited as { retryAfterMs: number }).retryAfterMs;
+    expect(retry).toBeGreaterThan(0);
+    expect(retry).toBeLessThanOrEqual(1000);
+
+    // After that wait the correct guess goes through, is consumed and stays hidden.
+    await sleep(retry + 50);
+    expect(await g1.emit('chat:send', { text: word })).toEqual({ ok: true });
+    await g1.waitFor('match:update', (u) =>
+      (u as Update).events.some((e) => e.type === 'YOU_GUESSED'),
+    );
+    await sleep(50);
+    expect(g2.all('chat:message').some((m) => m.text.toLowerCase().includes(word))).toBe(false);
+
+    // Now solved, g1 chats in the SOLVED lane under the unchanged room-chat limit:
+    // the guess burst used none of it (5 accepted), and a 6th starts the usual cooldown.
+    for (let i = 0; i < 5; i++) {
+      expect(await g1.emit('chat:send', { text: `gg ${i}` })).toEqual({ ok: true });
+    }
+    expect(await g1.emit('chat:send', { text: 'gg 5' })).toMatchObject({
+      ok: false,
+      code: 'CHAT_COOLDOWN',
+    });
+  });
+
+  it('keeps the room-chat limit and cooldown for the drawer and outside drawing', async () => {
+    const [drawer, g1] = await threePlayers();
+    await g1.waitFor('match:update', (u) => (u as Update).view.phase === 'CHOOSING');
+    // While the drawer is choosing, messages are ordinary chat.
+    for (let i = 0; i < 5; i++) {
+      expect(await g1.emit('chat:send', { text: `hi ${i}` })).toEqual({ ok: true });
+    }
+    expect(await g1.emit('chat:send', { text: 'hi 5' })).toMatchObject({
+      ok: false,
+      code: 'CHAT_COOLDOWN',
+    });
+    expect(drawer.all('chat:message').filter((m) => m.text.startsWith('hi '))).toHaveLength(5);
+  });
+
   it('replays the current drawing to a guesser who reconnects', async () => {
     const [drawer, guest] = await threePlayers();
     const choosing = (await drawer.waitFor('match:update', (u) =>

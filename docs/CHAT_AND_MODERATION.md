@@ -24,7 +24,11 @@ flowchart LR
 ```
 
 1. **Rate limit first** (per session: burst 5, refill 1/s). Emptying the bucket starts a
-   **30 s cooldown**. Nobody is removed or banned for chatting.
+   **30 s cooldown**. Nobody is removed or banned for chatting. **Game input typed into the
+   chat** (Draw & Guess guesses: an unsolved guesser while drawing) uses the game's own
+   bucket instead (Draw & Guess: burst 8, then 1/s) — a short `RATE_LIMITED` with
+   `retryAfterMs` when empty, never the cooldown, and it does not use up room-chat tokens.
+   Everything after this step (game hook, censoring) is the same.
 2. **Normalise** for game logic: NFKC, invisible characters removed, accents removed,
    lower case, single spaces.
 3. **Game hook:** a running game may `PASS`, `RESTRICT` (deliver only to some seats on a

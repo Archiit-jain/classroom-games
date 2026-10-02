@@ -4,6 +4,7 @@ import {
   type AnyGameModule,
   type Audience,
   type ChatDecision,
+  type ChatInputLimit,
   type RuntimeRequest,
   type SeatChange,
   type SeatIndex,
@@ -183,6 +184,16 @@ export class GameRuntime {
     this.run(() =>
       this.over ? null : this.game.onSeatChange(this.state, seat, change, this.ctx()),
     );
+  }
+
+  /**
+   * The game's own rate limit for this seat's next chat message when it is game
+   * input (e.g. a guess); null means ordinary room chat.
+   */
+  chatInputLimit(seat: SeatIndex): ChatInputLimit | null {
+    const input = this.game.chat?.input;
+    if (!input || !this.started || this.over || this.stopped) return null;
+    return input.applies(this.state, seat) ? input.limit : null;
   }
 
   /** Lets a game's chat interceptor inspect a message. Returns null when the game has none. */
