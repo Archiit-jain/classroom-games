@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AnyGameModule } from '@cg/game-sdk';
 import { fixtureGame } from '@cg/game-sdk/fixture';
+import { createDotsAndBoxesGame } from '@cg/game-dots-and-boxes/server';
 import { createDrawAndGuessGame } from '@cg/game-draw-and-guess/server';
 import { createPenFightGame } from '@cg/game-pen-fight/server';
 import { createRmcsGame } from '@cg/game-rmcs/server';
@@ -77,6 +78,7 @@ export function defaultGames(config: ServerConfig): AnyGameModule[] {
     createSixteenParchiGame({ timeScale: config.gameTimeScale }),
     createDrawAndGuessGame({ timeScale: config.gameTimeScale }),
     createPenFightGame({ timeScale: config.gameTimeScale }),
+    createDotsAndBoxesGame({ timeScale: config.gameTimeScale }),
     ...(config.enableFixtureGame ? [fixtureGame] : []),
   ];
 }

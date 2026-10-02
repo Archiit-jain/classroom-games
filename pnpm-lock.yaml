@@ -41,6 +41,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@cg/game-dots-and-boxes':
+        specifier: workspace:*
+        version: link:../../games/dots-and-boxes
       '@cg/game-draw-and-guess':
         specifier: workspace:*
         version: link:../../games/draw-and-guess
@@ -90,6 +93,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@cg/game-dots-and-boxes':
+        specifier: workspace:*
+        version: link:../../games/dots-and-boxes
       '@cg/game-draw-and-guess':
         specifier: workspace:*
         version: link:../../games/draw-and-guess

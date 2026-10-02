@@ -2,6 +2,8 @@ import type { AnyGameModule } from '@cg/game-sdk';
 import type { FixtureEvent, FixtureView } from '@cg/game-sdk/fixture';
 import type { MatchStream, MatchUpdate } from '@cg/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createDotsAndBoxesGame } from '@cg/game-dots-and-boxes/server';
+import { allEdges, edgeId, isDrawn, type DotsView } from '@cg/game-dots-and-boxes/shared';
 import { createGameServer, type GameServer } from '../src/app';
 import { KEYS } from '../src/cluster/Cluster';
 import { STATE_KEYS } from '../src/cluster/HostServices';
@@ -196,6 +198,35 @@ describe('several server instances sharing one store', () => {
     });
     const got = (await guest.waitFor('match:stream')) as MatchStream;
     expect(got.chunks).toEqual([{ n: 7 }]);
+  });
+});
+
+describe('Dots & Boxes across instances', () => {
+  it('plays a whole 4×4 match with the players on different instances', async () => {
+    c = await startCluster(2, {
+      games: [createDotsAndBoxesGame({ botThinkMs: [10, 30], botChainMs: [5, 15] })],
+    });
+    const a = await c.player(0, 'Archit');
+    const b = await c.player(1, 'Priya');
+    await setupGameRoom('dots-and-boxes', b, a);
+    await b.emit('room:updateSettings', { settings: { grid: 4 } });
+    for (const client of [a, b]) {
+      client.socket.on('match:update', (update) => {
+        const u = update as MatchUpdate<DotsView>;
+        if (u.view.phase !== 'PLAYING' || u.view.turn !== u.you) return;
+        const e = allEdges(u.view.n).find(
+          (x) => !isDrawn({ n: u.view.n, h: u.view.h, v: u.view.v }, x),
+        );
+        if (e)
+          void client.act(u, { type: 'DRAW', edge: edgeId(e.o, e.r, e.c) }).catch(() => undefined);
+      });
+    }
+    expect((await b.emit('room:start', {})).ok).toBe(true);
+    const endA = await a.waitFor('match:end', () => true, 20_000);
+    const endB = await b.waitFor('match:end', () => true, 20_000);
+    expect(endB).toEqual(endA);
+    const boxes = endA.results.stats as Record<number, { boxes: number }>;
+    expect(boxes[0]!.boxes + boxes[1]!.boxes).toBe(16);
   });
 });
 
