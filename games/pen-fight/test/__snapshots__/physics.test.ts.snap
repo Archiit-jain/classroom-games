@@ -1,0 +1,50 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`a single flick > matches the golden result for a fixed shot (same Node version) 1`] = `
+{
+  "collisions": [
+    {
+      "a": 0,
+      "b": 1,
+      "impulse": 3049,
+      "tick": 6,
+    },
+    {
+      "a": 1,
+      "b": 2,
+      "impulse": 1862,
+      "tick": 10,
+    },
+    {
+      "a": 0,
+      "b": 1,
+      "impulse": 436,
+      "tick": 16,
+    },
+  ],
+  "final": [
+    {
+      "a": 9073,
+      "alive": true,
+      "seat": 0,
+      "x": 615,
+      "y": -121,
+    },
+    {
+      "a": 10534,
+      "alive": true,
+      "seat": 1,
+      "x": 942,
+      "y": -245,
+    },
+    {
+      "a": 13536,
+      "alive": true,
+      "seat": 2,
+      "x": 3034,
+      "y": 1866,
+    },
+  ],
+  "steps": 80,
+}
+`;

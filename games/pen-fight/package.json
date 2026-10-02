@@ -1,0 +1,27 @@
+{
+  "name": "@cg/game-pen-fight",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pen Fight — engine, Planck physics (server only), bot and board.",
+  "exports": {
+    "./shared": "./src/shared/index.ts",
+    "./server": "./src/server/index.ts",
+    "./client": "./src/client/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cg/game-sdk": "workspace:*",
+    "@cg/protocol": "workspace:*",
+    "@cg/ui": "workspace:*",
+    "motion": "^13.4.6",
+    "planck": "^1.5.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0"
+  }
+}
