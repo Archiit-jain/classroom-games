@@ -11,8 +11,12 @@ async function playUntilResults(pages: Page[]): Promise<void> {
     for (const page of pages) {
       const results = page.getByRole('heading', { name: 'Results' });
       if (await results.isVisible()) return;
-      const plusThree = page.getByRole('button', { name: '+3' });
-      if ((await plusThree.isVisible()) && (await plusThree.isEnabled())) await plusThree.click();
+      // Non-waiting check plus a short click timeout: the button disappears for good when the
+      // match ends, and a waiting call (isEnabled, click) would then hang until the test times out.
+      const plusThree = page.getByRole('button', { name: '+3', disabled: false });
+      if (await plusThree.isVisible()) {
+        await plusThree.click({ timeout: 2000 }).catch(() => undefined);
+      }
     }
     await pages[0]?.waitForTimeout(150);
   }
