@@ -42,4 +42,11 @@ describe('createRng', () => {
   it('pick() throws on an empty list', () => {
     expect(() => createRng(1).pick([])).toThrow(RangeError);
   });
+
+  it('restores from its state and continues the same sequence', () => {
+    const a = createRng(99);
+    for (let i = 0; i < 7; i++) a.next();
+    const b = createRng(a.state);
+    expect([a.next(), a.int(1, 6), a.next()]).toEqual([b.next(), b.int(1, 6), b.next()]);
+  });
 });

@@ -5,6 +5,11 @@
  */
 export interface SeededRng {
   readonly seed: number;
+  /**
+   * The generator's current position: `createRng(rng.state)` continues the exact
+   * same sequence (used to snapshot a running match and restore it elsewhere).
+   */
+  readonly state: number;
   /** Float in [0, 1). */
   next(): number;
   /** Integer in [min, max], both inclusive. */
@@ -31,6 +36,9 @@ export function createRng(seed: number): SeededRng {
   };
   return {
     seed: seed >>> 0,
+    get state() {
+      return a;
+    },
     next,
     int,
     pick<T>(items: readonly T[]): T {

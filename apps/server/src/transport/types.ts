@@ -3,6 +3,7 @@ import type { Server, Socket } from 'socket.io';
 
 export interface SocketData {
   sessionId: string;
+  nickname: string | null;
   ip: string;
   /** Set only when the handshake created a brand-new session. */
   newToken?: string;

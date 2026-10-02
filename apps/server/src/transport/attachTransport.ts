@@ -1,30 +1,17 @@
-import {
-  ok,
-  type Ack,
-  type C2SEventName,
-  type C2SResults,
-  type HandshakeAuth,
-  type Result,
-} from '@cg/protocol';
+import type { Ack, C2SEventName, C2SResults, HandshakeAuth, Result } from '@cg/protocol';
 import { C2S } from '@cg/protocol/schemas';
-import type { z } from 'zod';
-import type { ChatService } from '../chat/ChatService';
+import { ClusterError, type Cluster } from '../cluster/Cluster';
 import type { ServerConfig } from '../config';
 import { errorFields, type Logger } from '../log';
-import type { ReportService } from '../reports/ReportService';
-import type { RoomManager } from '../rooms/RoomManager';
 import type { GameRegistry } from '../runtime/GameRegistry';
-import type { Session, SessionManager } from '../session/SessionManager';
 import type { RateLimiter } from '../util/RateLimiter';
 import type { IoServer, IoSocket } from './types';
 
 export interface TransportDeps {
   config: ServerConfig;
-  sessions: SessionManager;
-  rooms: RoomManager;
-  chat: ChatService;
-  reports: ReportService;
+  cluster: Cluster;
   registry: GameRegistry;
+  /** This instance's per-session buckets (socket flood guard, per-event limits). */
   limiter: RateLimiter;
   log: Logger;
   isShuttingDown: () => boolean;
@@ -32,7 +19,7 @@ export interface TransportDeps {
 
 type BucketName = keyof ServerConfig['rateLimits'];
 
-/** Concurrent sockets per IP. Generous on purpose: a whole classroom can share one IP. */
+/** Concurrent sockets per IP (on this instance). Generous: a whole classroom can share one IP. */
 class ConnectionCounter {
   private readonly counts = new Map<string, number>();
 
@@ -69,8 +56,27 @@ function clientIp(socket: IoSocket, trustProxy: boolean): string {
   return socket.handshake.address || 'unknown';
 }
 
-export function attachTransport(io: IoServer, deps: TransportDeps): void {
+/** The host's answer to a forwarded request; cluster trouble counts as "busy". */
+async function hostCall(cluster: Cluster, op: string, data: unknown): Promise<Result<object>> {
+  try {
+    return (await cluster.call(op, data)) as Result<object>;
+  } catch (err) {
+    if (err instanceof ClusterError) return { ok: false, code: 'SERVER_BUSY' };
+    throw err;
+  }
+}
+
+/**
+ * The socket-facing half of every server instance (ADR-023). It checks what can
+ * be checked here (origin, connections per IP, flood guard, rate buckets,
+ * payload shape) and forwards everything else to the room host — which is this
+ * instance itself when it holds the host lease.
+ */
+export function attachTransport(io: IoServer, deps: TransportDeps): { settled(): Promise<void> } {
   const connections = new ConnectionCounter();
+  const { cluster } = deps;
+  // Departures still being reported to the host (awaited before leaving the cluster).
+  const departing = new Set<Promise<unknown>>();
 
   io.use((socket, next) => {
     if (deps.isShuttingDown()) return next(new Error('SERVER_BUSY'));
@@ -79,117 +85,157 @@ export function attachTransport(io: IoServer, deps: TransportDeps): void {
       return next(new Error('RATE_LIMITED'));
     }
     const auth = (socket.handshake.auth ?? {}) as HandshakeAuth;
-    const resolved = deps.sessions.resolve(auth.token, ip);
-    if (!resolved.ok) {
-      connections.release(ip);
-      return next(new Error(resolved.code));
-    }
-    socket.data.sessionId = resolved.value.session.id;
-    socket.data.ip = ip;
-    if (resolved.value.token) socket.data.newToken = resolved.value.token;
-    next();
+    hostCall(cluster, 'resolve', { token: auth.token, ip })
+      .then((resolved) => {
+        if (!resolved.ok) {
+          connections.release(ip);
+          next(new Error(resolved.code));
+          return;
+        }
+        const value = resolved.value as {
+          sessionId: string;
+          nickname: string | null;
+          token?: string;
+        };
+        socket.data.sessionId = value.sessionId;
+        socket.data.nickname = value.nickname;
+        socket.data.ip = ip;
+        if (value.token) socket.data.newToken = value.token;
+        next();
+      })
+      .catch((err: unknown) => {
+        connections.release(ip);
+        deps.log.error('handshake failed', errorFields(err));
+        next(new Error('SERVER_BUSY'));
+      });
   });
 
   io.on('connection', (socket) => {
-    const session = deps.sessions.get(socket.data.sessionId);
-    if (!session) {
-      connections.release(socket.data.ip);
-      socket.disconnect(true);
-      return;
-    }
-    onConnection(io, socket, session, deps);
+    const sessionId = socket.data.sessionId;
+    socket.emit('session:ready', {
+      playerId: sessionId,
+      nickname: socket.data.nickname,
+      ...(socket.data.newToken ? { token: socket.data.newToken } : {}),
+      games: deps.registry.infos(),
+      serverNow: Date.now(),
+    });
+    // Attach first (restores the player's room and match), then accept requests.
+    const attached = hostCall(cluster, 'attach', { sessionId, socketId: socket.id }).then(
+      (res) => {
+        if (!res.ok) socket.disconnect(true);
+      },
+      () => {
+        socket.disconnect(true);
+      },
+    );
+    bindEvents(socket, sessionId, deps, attached);
     socket.on('disconnect', () => {
       connections.release(socket.data.ip);
-      if (deps.sessions.detachSocket(session, socket.id)) deps.rooms.onDisconnected(session);
+      const done = attached
+        .then(() => hostCall(cluster, 'detach', { sessionId, socketId: socket.id }))
+        .catch(() => undefined)
+        .finally(() => {
+          departing.delete(done);
+          cluster.socketsChanged();
+        });
+      departing.add(done);
     });
   });
+
+  return {
+    settled: async () => {
+      await Promise.allSettled([...departing]);
+    },
+  };
 }
 
-function onConnection(io: IoServer, socket: IoSocket, session: Session, deps: TransportDeps): void {
-  // One active socket per session: a newer tab takes over from an older one.
-  const previous = deps.sessions.attachSocket(session, socket.id);
-  if (previous) {
-    const old = io.sockets.sockets.get(previous);
-    old?.emit('session:displaced');
-    old?.disconnect(true);
-  }
-
-  socket.emit('session:ready', {
-    playerId: session.id,
-    nickname: session.nickname,
-    ...(socket.data.newToken ? { token: socket.data.newToken } : {}),
-    games: deps.registry.infos(),
-    serverNow: Date.now(),
-  });
-  deps.rooms.onConnected(session);
-
+function bindEvents(
+  socket: IoSocket,
+  sessionId: string,
+  deps: TransportDeps,
+  attached: Promise<void>,
+): void {
   // Coarse per-socket flood guard: excess packets are dropped before any handler runs.
   socket.use((_packet, next) => {
-    if (deps.limiter.take(session.id, 'socket')) next();
+    if (deps.limiter.take(sessionId, 'socket')) next();
   });
 
-  const bind = <K extends C2SEventName>(
-    name: K,
-    bucket: BucketName | null,
-    handler: (payload: z.output<(typeof C2S)[K]>) => Result<C2SResults[K]>,
-  ): void => {
+  const bind = (name: C2SEventName, bucket: BucketName | null): void => {
     (socket as unknown as { on(event: string, fn: (...args: unknown[]) => void): void }).on(
       name,
       (payload: unknown, ack: unknown) => {
         if (typeof ack !== 'function') return; // every event must be acknowledged
-        const reply = ack as (response: Ack<C2SResults[K]>) => void;
-        try {
-          if (bucket && !deps.limiter.take(session.id, bucket)) {
-            reply({
-              ok: false,
-              code: 'RATE_LIMITED',
-              retryAfterMs: deps.limiter.retryAfterMs(session.id, bucket),
-            });
-            return;
-          }
-          const parsed = C2S[name].safeParse(payload);
-          if (!parsed.success) {
-            reply({ ok: false, code: 'INVALID_PAYLOAD' });
-            return;
-          }
-          const result = handler(parsed.data as z.output<(typeof C2S)[K]>);
-          if (result.ok) reply({ ok: true, ...result.value } as Ack<C2SResults[K]>);
-          else
-            reply({
-              ok: false,
-              code: result.code,
-              ...(result.retryAfterMs ? { retryAfterMs: result.retryAfterMs } : {}),
-            });
-        } catch (err) {
-          deps.log.error('handler failed', { event: name, ...errorFields(err) });
-          reply({ ok: false, code: 'INTERNAL_ERROR' });
+        const reply = ack as (response: Ack<C2SResults[typeof name]>) => void;
+        if (bucket && !deps.limiter.take(sessionId, bucket)) {
+          reply({
+            ok: false,
+            code: 'RATE_LIMITED',
+            retryAfterMs: deps.limiter.retryAfterMs(sessionId, bucket),
+          });
+          return;
         }
+        const parsed = C2S[name].safeParse(payload);
+        if (!parsed.success) {
+          reply({ ok: false, code: 'INVALID_PAYLOAD' });
+          return;
+        }
+        attached
+          .then(() => hostCall(deps.cluster, 'event', { sessionId, name, payload: parsed.data }))
+          .then((result) => {
+            if (result.ok) reply({ ok: true, ...result.value } as Ack<C2SResults[typeof name]>);
+            else
+              reply({
+                ok: false,
+                code: result.code,
+                ...(result.retryAfterMs ? { retryAfterMs: result.retryAfterMs } : {}),
+              });
+          })
+          .catch((err: unknown) => {
+            deps.log.error('handler failed', { event: name, ...errorFields(err) });
+            reply({ ok: false, code: 'INTERNAL_ERROR' });
+          });
       },
     );
   };
 
-  const { rooms } = deps;
-  bind('session:setNickname', 'nickname', (p) => deps.sessions.setNickname(session, p.nickname));
-  bind('room:create', 'roomCreate', (p) => rooms.create(session, p.gameId));
-  bind('room:join', 'roomJoin', (p) => rooms.join(session, p.code));
-  bind('room:leave', 'roomAdmin', () => rooms.leave(session));
-  bind('room:setGame', 'roomAdmin', (p) => rooms.setGame(session, p.gameId));
-  bind('room:updateSettings', 'roomAdmin', (p) => rooms.updateSettings(session, p.settings));
-  bind('room:addBot', 'roomAdmin', () => rooms.addBot(session));
-  bind('room:removeBot', 'roomAdmin', (p) => rooms.removeBot(session, p.botId));
-  bind('room:kick', 'roomAdmin', (p) => rooms.kick(session, p.playerId));
-  bind('room:start', 'roomAdmin', () => rooms.start(session));
-  bind('room:playAgain', 'roomAdmin', () => rooms.playAgain(session));
-  bind('room:backToLobby', 'roomAdmin', () => rooms.backToLobby(session));
-  bind('room:reclaimSeat', 'roomAdmin', () => rooms.reclaimSeat(session));
-  bind('match:action', 'matchAction', (p) =>
-    rooms.submitAction(session, p.matchId, p.version, p.actionId, p.action),
+  bind('session:setNickname', 'nickname');
+  bind('room:create', 'roomCreate');
+  bind('room:join', 'roomJoin');
+  bind('room:leave', 'roomAdmin');
+  bind('room:setGame', 'roomAdmin');
+  bind('room:updateSettings', 'roomAdmin');
+  bind('room:addBot', 'roomAdmin');
+  bind('room:removeBot', 'roomAdmin');
+  bind('room:kick', 'roomAdmin');
+  bind('room:start', 'roomAdmin');
+  bind('room:playAgain', 'roomAdmin');
+  bind('room:backToLobby', 'roomAdmin');
+  bind('room:reclaimSeat', 'roomAdmin');
+  bind('match:action', 'matchAction');
+  bind('match:resync', 'matchAction');
+  bind('match:stream', 'stream');
+  // Chat and reports apply their own limits on the host (cooldowns, per-report budget).
+  bind('chat:send', null);
+  bind('chat:react', 'reaction');
+  bind('report:submit', null);
+
+  // Answered here: clock sync needs no host.
+  (socket as unknown as { on(event: string, fn: (...args: unknown[]) => void): void }).on(
+    'time:ping',
+    (payload: unknown, ack: unknown) => {
+      if (typeof ack !== 'function') return;
+      const reply = ack as (r: unknown) => void;
+      if (!deps.limiter.take(sessionId, 'ping')) {
+        reply({
+          ok: false,
+          code: 'RATE_LIMITED',
+          retryAfterMs: deps.limiter.retryAfterMs(sessionId, 'ping'),
+        });
+        return;
+      }
+      const parsed = C2S['time:ping'].safeParse(payload);
+      if (!parsed.success) reply({ ok: false, code: 'INVALID_PAYLOAD' });
+      else reply({ ok: true, clientTs: parsed.data.clientTs, serverNow: Date.now() });
+    },
   );
-  bind('match:resync', 'matchAction', (p) => rooms.resync(session, p.matchId));
-  bind('match:stream', 'stream', (p) => rooms.submitStream(session, p.matchId, p.chunk));
-  // Chat and reports apply their own limits (cooldowns, per-report budget).
-  bind('chat:send', null, (p) => deps.chat.send(session, p.text));
-  bind('chat:react', 'reaction', (p) => deps.chat.react(session, p.reactionId));
-  bind('report:submit', null, (p) => deps.reports.submit(session, p.playerId, p.reason));
-  bind('time:ping', 'ping', (p) => ok({ clientTs: p.clientTs, serverNow: Date.now() }));
 }

@@ -1,5 +1,5 @@
 import type { ChatMessage, GameResults, RoomKind, RoomPhase, TakeoverReason } from '@cg/protocol';
-import type { GameRuntime } from '../runtime/GameRuntime';
+import type { GameRuntime, RuntimeSnapshot } from '../runtime/GameRuntime';
 
 export interface HumanMember {
   kind: 'HUMAN';
@@ -8,6 +8,8 @@ export interface HumanMember {
   nicknameKey: string;
   joinedAt: number;
   connected: boolean;
+  /** While disconnected: when the reconnect grace period ends (server ms). */
+  graceUntil: number | null;
 }
 
 export interface BotMember {
@@ -58,4 +60,15 @@ export interface Room {
   noHumansSince: number | null;
   /** Last N censored ROOM-channel messages, for reconnecting players. In memory only. */
   chat: ChatMessage[];
+}
+
+/** A room as plain JSON: what the shared store keeps so another instance can continue it. */
+export interface RoomSnapshot extends Omit<Room, 'barred' | 'match'> {
+  barred: string[];
+  match:
+    | (Omit<ActiveMatch, 'runtime' | 'pendingReclaims'> & {
+        runtime: RuntimeSnapshot;
+        pendingReclaims: number[];
+      })
+    | null;
 }

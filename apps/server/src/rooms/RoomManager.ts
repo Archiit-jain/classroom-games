@@ -16,7 +16,7 @@ import type { BotManager } from '../bots/BotManager';
 import type { ServerConfig } from '../config';
 import type { Logger } from '../log';
 import type { Notifier } from '../notifier';
-import { GameRuntime } from '../runtime/GameRuntime';
+import { GameRuntime, type RuntimeSnapshot } from '../runtime/GameRuntime';
 import type { GameRegistry } from '../runtime/GameRegistry';
 import type { Session, SessionManager } from '../session/SessionManager';
 import { newId, randomSeed } from '../util/ids';
@@ -24,7 +24,7 @@ import type { TimerService } from '../util/TimerService';
 import { generateRoomCode, nextBotName } from './naming';
 import { policyFor } from './policies';
 import type { RoomStore } from './RoomStore';
-import type { ActiveMatch, HumanMember, Member, Room, SeatState } from './types';
+import type { ActiveMatch, HumanMember, Member, Room, RoomSnapshot, SeatState } from './types';
 
 export interface RoomManagerDeps {
   config: ServerConfig;
@@ -413,6 +413,7 @@ export class RoomManager {
       return;
     }
     member.connected = true;
+    member.graceUntil = null;
     room.noHumansSince = null;
     this.deps.timers.clear(graceKey(room.id, member.id));
 
@@ -435,11 +436,7 @@ export class RoomManager {
     if (!ctx) return;
     const { room, member } = ctx;
     member.connected = false;
-    this.deps.timers.set(
-      graceKey(room.id, member.id),
-      this.deps.config.timing.reconnectGraceMs,
-      () => this.graceExpired(room.id, member.id),
-    );
+    this.startGrace(room, member);
     const seat = room.phase === 'IN_GAME' ? seatOf(room.match, member.id) : undefined;
     if (seat && !seat.takeover && room.match)
       room.match.runtime.seatChanged(seat.seat, 'DISCONNECTED');
@@ -463,8 +460,22 @@ export class RoomManager {
     }
   }
 
-  dispose(): void {
-    for (const room of this.deps.store.all()) this.closeRoom(room, false);
+  /**
+   * Stops every match and timer here. With `endRooms` the rooms are closed for good
+   * (server shutdown); without, they are only let go — their state stays in the shared
+   * store and the next host instance continues them.
+   */
+  dispose(endRooms = true): void {
+    for (const room of this.deps.store.all()) {
+      if (endRooms) {
+        this.closeRoom(room, false);
+        continue;
+      }
+      if (room.match) {
+        this.deps.bots.detachMatch(room.match.matchId);
+        room.match.runtime.stop();
+      }
+    }
   }
 
   // ───────────────────────────── internals ─────────────────────────────
@@ -509,24 +520,7 @@ export class RoomManager {
       takeover: null,
       forfeited: false,
     }));
-    const runtime = new GameRuntime({
-      matchId,
-      game,
-      settings: room.settings,
-      seatCount: seats.length,
-      seed: randomSeed(),
-      timers: this.deps.timers,
-      log: this.deps.log,
-      now: this.now,
-      hooks: {
-        deliver: (seat, update) => this.deliver(roomId, matchId, seat, update),
-        onRequest: (request) => this.handleRequest(roomId, matchId, request),
-        onOver: (results) => this.finishMatch(roomId, matchId, results),
-        afterTransition: () => this.processPendingReclaims(roomId, matchId),
-        onCrash: () => this.abortMatch(roomId, matchId),
-        deliverStream: (audience, chunks) => this.deliverStream(roomId, matchId, audience, chunks),
-      },
-    });
+    const runtime = this.createRuntime(roomId, matchId, room.settings, seats.length);
     room.match = {
       matchId,
       gameId: room.gameId,
@@ -553,6 +547,131 @@ export class RoomManager {
     for (const s of seats) {
       const member = s.memberKind === 'HUMAN' ? findHuman(room, s.memberId) : undefined;
       if (member && !member.connected) runtime.seatChanged(s.seat, 'DISCONNECTED');
+    }
+  }
+
+  private createRuntime(
+    roomId: string,
+    matchId: string,
+    settings: unknown,
+    seatCount: number,
+    restore?: RuntimeSnapshot,
+  ): GameRuntime {
+    const gameId = restore?.gameId ?? this.deps.store.get(roomId)?.gameId ?? '';
+    const game = this.deps.registry.get(gameId);
+    if (!game) throw new Error(`Unknown game ${gameId}`);
+    return new GameRuntime({
+      matchId,
+      game,
+      settings,
+      seatCount,
+      seed: randomSeed(),
+      ...(restore ? { restore } : {}),
+      timers: this.deps.timers,
+      log: this.deps.log,
+      now: this.now,
+      hooks: {
+        deliver: (seat, update) => this.deliver(roomId, matchId, seat, update),
+        onRequest: (request) => this.handleRequest(roomId, matchId, request),
+        onOver: (results) => this.finishMatch(roomId, matchId, results),
+        afterTransition: () => this.processPendingReclaims(roomId, matchId),
+        onCrash: () => this.abortMatch(roomId, matchId),
+        deliverStream: (audience, chunks) => this.deliverStream(roomId, matchId, audience, chunks),
+      },
+    });
+  }
+
+  private startGrace(
+    room: Room,
+    member: HumanMember,
+    ms = this.deps.config.timing.reconnectGraceMs,
+  ): void {
+    member.graceUntil = this.now() + ms;
+    this.deps.timers.set(graceKey(room.id, member.id), ms, () =>
+      this.graceExpired(room.id, member.id),
+    );
+  }
+
+  // ─────────────────────── snapshots (multi-instance) ───────────────────────
+
+  /** The room as plain JSON for the shared store (ADR-023). */
+  snapshot(room: Room): RoomSnapshot {
+    const { barred, match, ...rest } = room;
+    return structuredClone({
+      ...rest,
+      barred: [...barred],
+      match: match
+        ? {
+            matchId: match.matchId,
+            gameId: match.gameId,
+            seats: match.seats,
+            results: match.results,
+            pendingReclaims: [...match.pendingReclaims],
+            runtime: match.runtime.snapshot(),
+          }
+        : null,
+    });
+  }
+
+  /**
+   * Continues a snapshotted room on this instance: rebuilds its match runtime,
+   * re-arms every timer from its stored deadline (overdue ones fire at once) and
+   * puts the bots back in their seats. Call `resendState` once all rooms are back.
+   */
+  restore(snapshot: RoomSnapshot): Room {
+    const { barred, match, ...rest } = structuredClone(snapshot);
+    const room: Room = { ...rest, barred: new Set(barred), match: null };
+    this.deps.store.add(room);
+    if (match) {
+      const runtime = this.createRuntime(
+        room.id,
+        match.matchId,
+        match.runtime.settings,
+        match.runtime.seatCount,
+        match.runtime,
+      );
+      room.match = {
+        matchId: match.matchId,
+        gameId: match.gameId,
+        seats: match.seats,
+        results: match.results,
+        pendingReclaims: new Set(match.pendingReclaims),
+        runtime,
+      };
+      if (room.phase === 'IN_GAME' && runtime.isStarted && !runtime.isOver) {
+        for (const seat of match.seats) {
+          if (seat.memberKind === 'BOT' || seat.takeover) {
+            this.deps.bots.attach(runtime, seat.seat, true);
+          }
+        }
+        runtime.resumeTimers();
+      }
+    }
+    if (room.phase === 'STARTING' && room.startsAt !== null) {
+      this.deps.timers.set(`room:${room.id}:start`, Math.max(0, room.startsAt - this.now()), () =>
+        this.beginMatch(room.id),
+      );
+    }
+    for (const m of room.members) {
+      if (m.kind === 'HUMAN' && !m.connected && m.graceUntil !== null) {
+        this.startGrace(room, m, Math.max(0, m.graceUntil - this.now()));
+      }
+    }
+    return room;
+  }
+
+  /** Sends every connected player the room's current authoritative state (after a restore). */
+  resendState(room: Room): void {
+    if (!this.deps.store.get(room.id)) return;
+    this.broadcast(room);
+    const match = room.match;
+    for (const m of room.members) {
+      if (m.kind !== 'HUMAN' || !m.connected) continue;
+      const seat = room.phase === 'IN_GAME' ? seatOf(match, m.id) : undefined;
+      if (seat && match?.runtime.isStarted) {
+        this.deps.notifier.matchUpdate(m.id, match.runtime.viewFor(seat.seat));
+        this.sendStreamReplay(m.id, match, seat.seat);
+      }
     }
   }
 
@@ -662,11 +781,7 @@ export class RoomManager {
     // Players still away get a fresh grace period to come back to the results/lobby.
     for (const m of room.members) {
       if (m.kind === 'HUMAN' && !m.connected && !this.deps.timers.has(graceKey(room.id, m.id))) {
-        this.deps.timers.set(
-          graceKey(room.id, m.id),
-          this.deps.config.timing.reconnectGraceMs,
-          () => this.graceExpired(room.id, m.id),
-        );
+        this.startGrace(room, m);
       }
     }
     this.broadcast(room);
@@ -687,6 +802,7 @@ export class RoomManager {
     const room = this.deps.store.get(roomId);
     const member = room ? findHuman(room, playerId) : undefined;
     if (!room || !member || member.connected) return;
+    member.graceUntil = null;
 
     const match = room.match;
     const seat = room.phase === 'IN_GAME' ? seatOf(match, playerId) : undefined;
@@ -791,6 +907,7 @@ function humanMember(session: Session, now: number): HumanMember {
     nicknameKey: session.nicknameKey as string,
     joinedAt: now,
     connected: session.socketId !== null,
+    graceUntil: null,
   };
 }
 

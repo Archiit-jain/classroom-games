@@ -59,6 +59,10 @@ export class GameConnection {
   constructor(url: string) {
     this.url = url;
     this.socket = io(url, {
+      path: socketPath(),
+      // WebSocket only: long-polling cannot work when requests may reach different
+      // server instances (Vercel), and every supported browser has WebSockets.
+      transports: ['websocket'],
       auth: (cb) => {
         const token = storage.get(KEYS.token);
         cb(token ? { token } : {});
@@ -353,8 +357,19 @@ export class GameConnection {
   }
 }
 
+/**
+ * Where the game server is. A production build talks to its own site (same
+ * origin, HTTPS/WSS — e.g. the Vercel deployment) unless VITE_SERVER_URL says
+ * otherwise; only a development build falls back to a local server on port 3001.
+ */
 export function defaultServerUrl(): string {
   const configured = import.meta.env.VITE_SERVER_URL as string | undefined;
   if (configured) return configured;
+  if (import.meta.env.PROD) return window.location.origin;
   return `${window.location.protocol}//${window.location.hostname}:3001`;
+}
+
+/** The Socket.IO path (the server's SOCKET_PATH). Vercel builds set it to the Function's route. */
+export function socketPath(): string {
+  return (import.meta.env.VITE_SOCKET_PATH as string | undefined) || '/socket.io';
 }

@@ -29,12 +29,35 @@ export interface RuntimeHooks {
   deliverStream(audience: Audience, chunks: unknown[]): void;
 }
 
+/**
+ * Everything needed to continue a match on another server instance: the
+ * authoritative state, version, RNG position, processed action ids and the
+ * engine timers' deadlines (plain JSON).
+ */
+export interface RuntimeSnapshot {
+  matchId: string;
+  gameId: string;
+  settings: unknown;
+  seatCount: number;
+  state: unknown;
+  version: number;
+  rng: number;
+  seenActionIds: string[];
+  started: boolean;
+  over: boolean;
+  stopped: boolean;
+  /** Engine timer id → due time (server ms). */
+  timers: Record<string, number>;
+}
+
 export interface RuntimeOptions {
   matchId: string;
   game: AnyGameModule;
   settings: unknown;
   seatCount: number;
   seed: number;
+  /** Continue a snapshotted match instead of starting fresh (then call `resumeTimers`). */
+  restore?: RuntimeSnapshot;
   timers: TimerService;
   hooks: RuntimeHooks;
   log: Logger;
@@ -73,17 +96,61 @@ export class GameRuntime {
   private busy = false;
   /** Action ids already processed in this match (insertion-ordered, bounded). */
   private readonly seenActionIds = new Set<string>();
+  /** Engine timer id → due time, for snapshots. */
+  private readonly deadlines = new Map<string, number>();
 
   constructor(options: RuntimeOptions) {
     this.matchId = options.matchId;
     this.game = options.game;
     this.settings = options.settings;
     this.seats = Array.from({ length: options.seatCount }, (_, i) => i);
-    this.rng = createRng(options.seed);
     this.timers = options.timers;
     this.hooks = options.hooks;
     this.log = options.log;
     this.now = options.now ?? Date.now;
+    const r = options.restore;
+    this.rng = createRng(r ? r.rng : options.seed);
+    if (r) {
+      this.state = r.state;
+      this.currentVersion = r.version;
+      this.started = r.started;
+      this.over = r.over;
+      this.stopped = r.stopped;
+      for (const id of r.seenActionIds) this.seenActionIds.add(id);
+      for (const [id, at] of Object.entries(r.timers)) this.deadlines.set(id, at);
+    }
+  }
+
+  snapshot(): RuntimeSnapshot {
+    return {
+      matchId: this.matchId,
+      gameId: this.game.manifest.id,
+      settings: this.settings,
+      seatCount: this.seats.length,
+      state: this.state,
+      version: this.currentVersion,
+      rng: this.rng.state,
+      seenActionIds: [...this.seenActionIds],
+      started: this.started,
+      over: this.over,
+      stopped: this.stopped,
+      timers: Object.fromEntries(this.deadlines),
+    };
+  }
+
+  /** After a restore: re-arms the engine timers (overdue ones fire right away, in due order). */
+  resumeTimers(): void {
+    if (this.stopped || this.over) return;
+    const due = [...this.deadlines].sort((a, b) => a[1] - b[1]);
+    for (const [id, at] of due) this.armTimer(id, Math.max(0, at - this.now()));
+  }
+
+  private armTimer(id: string, ms: number): void {
+    this.deadlines.set(id, this.now() + ms);
+    this.timers.set(`${this.timerPrefix}${id}`, ms, () => {
+      this.deadlines.delete(id);
+      this.run(() => (this.over ? null : this.game.onTimer(this.state, id, this.ctx())));
+    });
   }
 
   get version(): number {
@@ -229,6 +296,7 @@ export class GameRuntime {
   stop(): void {
     this.stopped = true;
     this.queue.length = 0;
+    this.deadlines.clear();
     this.timers.clearPrefix(this.timerPrefix);
   }
 
@@ -269,11 +337,9 @@ export class GameRuntime {
 
     for (const cmd of t.timers ?? []) {
       if ('set' in cmd) {
-        const id = cmd.set;
-        this.timers.set(`${this.timerPrefix}${id}`, cmd.ms, () =>
-          this.run(() => (this.over ? null : this.game.onTimer(this.state, id, this.ctx()))),
-        );
+        this.armTimer(cmd.set, cmd.ms);
       } else {
+        this.deadlines.delete(cmd.clear);
         this.timers.clear(`${this.timerPrefix}${cmd.clear}`);
       }
     }
@@ -295,6 +361,7 @@ export class GameRuntime {
 
     if (!this.over && this.game.isOver(this.state)) {
       this.over = true;
+      this.deadlines.clear();
       this.timers.clearPrefix(this.timerPrefix);
       this.hooks.onOver(this.game.getResults(this.state));
     }

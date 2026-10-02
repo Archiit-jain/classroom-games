@@ -7,6 +7,7 @@ import { createLogger } from '../src/log';
 import { InMemoryFlagStore } from '../src/reports/ReportService';
 import { GameRegistry } from '../src/runtime/GameRegistry';
 import { GameRuntime } from '../src/runtime/GameRuntime';
+import { normalizeSocketUrl } from '../src/transport/socketUrl';
 import { RateLimiter } from '../src/util/RateLimiter';
 import { isOriginAllowed } from '../src/transport/origins';
 import { TimerService } from '../src/util/TimerService';
@@ -46,12 +47,55 @@ describe('RateLimiter', () => {
 });
 
 describe('loadConfig', () => {
-  it('never enables the fixture game in production', () => {
-    expect(
-      loadConfig({ NODE_ENV: 'production', ENABLE_FIXTURE_GAME: 'true' }).enableFixtureGame,
-    ).toBe(false);
+  const PROD = {
+    NODE_ENV: 'production',
+    REDIS_URL: 'rediss://default:secret@example.upstash.io:6379',
+    ALLOWED_ORIGINS: 'https://games.example',
+  };
+
+  it('never enables the fixture game or time scaling in production', () => {
+    const c = loadConfig({ ...PROD, ENABLE_FIXTURE_GAME: 'true', GAME_TIME_SCALE: '0.25' });
+    expect(c.enableFixtureGame).toBe(false);
+    expect(c.gameTimeScale).toBe(1);
     expect(loadConfig({}).enableFixtureGame).toBe(true);
     expect(loadConfig({ ENABLE_FIXTURE_GAME: 'false' }).enableFixtureGame).toBe(false);
+  });
+
+  it('refuses to run in production without shared state or with development origins', () => {
+    expect(() => loadConfig({ ...PROD, REDIS_URL: undefined })).toThrow(/REDIS_URL/);
+    expect(() => loadConfig({ NODE_ENV: 'production', REDIS_URL: PROD.REDIS_URL })).toThrow(
+      /ALLOWED_ORIGINS/,
+    );
+    expect(() => loadConfig({ ...PROD, ALLOWED_ORIGINS: 'http://localhost:5173' })).toThrow(
+      /localhost/,
+    );
+    const c = loadConfig(PROD);
+    expect(c.production).toBe(true);
+    expect(c.allowedOrigins).toEqual(['https://games.example']);
+    expect(c.allowedOrigins.some((o) => o.includes('localhost'))).toBe(false);
+  });
+
+  it('on Vercel allows only the deployment’s own HTTPS domains and hands the host role over when idle', () => {
+    const c = loadConfig({
+      NODE_ENV: 'production',
+      REDIS_URL: PROD.REDIS_URL,
+      VERCEL: '1',
+      VERCEL_URL: 'classroom-games-abc123.vercel.app',
+      VERCEL_PROJECT_PRODUCTION_URL: 'classroom-games.vercel.app',
+      SOCKET_PATH: '/api/socket',
+    });
+    expect(c.allowedOrigins).toEqual([
+      'https://classroom-games.vercel.app',
+      'https://classroom-games-abc123.vercel.app',
+    ]);
+    expect(c.releaseHostWhenIdle).toBe(true);
+    expect(c.trustProxy).toBe(true);
+    expect(c.socketPath).toBe('/api/socket');
+    // Local development: one process, in-memory state, the dev origins.
+    const dev = loadConfig({});
+    expect(dev.redisUrl).toBeNull();
+    expect(dev.releaseHostWhenIdle).toBe(false);
+    expect(dev.socketPath).toBe('/socket.io');
   });
 
   it('parses origins, port and proxy trust', () => {
@@ -74,6 +118,19 @@ describe('loadConfig', () => {
     const c = loadConfig({}, { timing: { reconnectGraceMs: 5 } });
     expect(c.timing.reconnectGraceMs).toBe(5);
     expect(c.timing.startingCountdownMs).toBe(3000);
+  });
+});
+
+describe('normalizeSocketUrl (Vercel Function route → Socket.IO path)', () => {
+  it.each([
+    ['/api/socket/socket.io/?EIO=4&transport=websocket', '/socket.io/?EIO=4&transport=websocket'],
+    ['/socket.io/?EIO=4&transport=websocket', '/socket.io/?EIO=4&transport=websocket'],
+    ['/api/socket?EIO=4&transport=websocket', '/socket.io/?EIO=4&transport=websocket'],
+    ['/api/socket/?EIO=4&transport=websocket', '/socket.io/?EIO=4&transport=websocket'],
+    ['/api/socket/healthz', '/api/socket/healthz'],
+    ['/other', '/other'],
+  ])('%s → %s', (url, expected) => {
+    expect(normalizeSocketUrl(url, '/socket.io')).toBe(expected);
   });
 });
 

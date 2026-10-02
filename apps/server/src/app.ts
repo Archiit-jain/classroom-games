@@ -9,21 +9,22 @@ import { createSixteenParchiGame } from '@cg/game-sixteen-parchi/server';
 import { createModerator, type Moderator } from '@cg/moderation';
 import { NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH } from '@cg/protocol';
 import { Server } from 'socket.io';
-import { BotManager } from './bots/BotManager';
-import { ChatService } from './chat/ChatService';
+import type { ChatService } from './chat/ChatService';
+import { Cluster, type ClusterOptions } from './cluster/Cluster';
+import { HostServices } from './cluster/HostServices';
+import { RedisSharedStore } from './cluster/RedisSharedStore';
+import { MemorySharedStore, type SharedStore } from './cluster/SharedStore';
 import type { ServerConfig } from './config';
 import { createLogger, type Logger } from './log';
-import { InMemoryFlagStore, ReportService, type ReportSink } from './reports/ReportService';
-import { InMemoryRoomStore } from './rooms/RoomStore';
-import { RoomManager } from './rooms/RoomManager';
+import type { ReportService, ReportSink } from './reports/ReportService';
+import type { RoomManager } from './rooms/RoomManager';
 import { GameRegistry } from './runtime/GameRegistry';
-import { SessionManager } from './session/SessionManager';
+import type { SessionManager } from './session/SessionManager';
 import { attachTransport } from './transport/attachTransport';
 import { isOriginAllowed } from './transport/origins';
-import { createSocketNotifier } from './transport/socketNotifier';
 import type { IoServer } from './transport/types';
 import { RateLimiter } from './util/RateLimiter';
-import { TimerService } from './util/TimerService';
+import type { TimerService } from './util/TimerService';
 
 export interface GameServerOptions {
   config: ServerConfig;
@@ -32,26 +33,40 @@ export interface GameServerOptions {
   moderator?: Moderator;
   reportSink?: ReportSink;
   log?: Logger;
+  /**
+   * Shared state. Defaults to Redis when `config.redisUrl` is set, otherwise an
+   * in-process store. Tests pass one MemorySharedStore to several servers to
+   * simulate a multi-instance deployment.
+   */
+  store?: SharedStore;
+  /** Cluster timing (tests use short leases). */
+  cluster?: Pick<ClusterOptions, 'instanceId' | 'leaseTtlMs' | 'renewEveryMs' | 'callTimeoutMs'>;
+}
+
+export interface HostServicesView {
+  registry: GameRegistry;
+  sessions: SessionManager;
+  rooms: RoomManager;
+  chat: ChatService;
+  reports: ReportService;
+  reportSink: ReportSink;
+  timers: TimerService;
 }
 
 export interface GameServer {
   config: ServerConfig;
   httpServer: HttpServer;
   io: IoServer;
-  services: {
-    registry: GameRegistry;
-    sessions: SessionManager;
-    rooms: RoomManager;
-    chat: ChatService;
-    reports: ReportService;
-    reportSink: ReportSink;
-    timers: TimerService;
-  };
+  cluster: Cluster;
+  /** The authoritative services — only on the instance that currently hosts the rooms. */
+  readonly services: HostServicesView;
+  /** Joins the cluster (and becomes host if nobody is). `listen` calls it. */
+  start(): Promise<void>;
   /** Starts listening; resolves with the bound port. */
   listen(port?: number): Promise<number>;
   /** Warns connected players, waits `shutdownGraceMs`, then closes. */
   shutdown(): Promise<void>;
-  /** Closes immediately. */
+  /** Closes immediately (handing the host role and state over first). */
   close(): Promise<void>;
 }
 
@@ -66,6 +81,11 @@ export function defaultGames(config: ServerConfig): AnyGameModule[] {
   ];
 }
 
+/**
+ * One server instance (ADR-023): a Socket.IO gateway for the players connected
+ * here, plus — while it holds the cluster's host lease — the authoritative
+ * services for every room. With one process (development) it is always the host.
+ */
 export function createGameServer(options: GameServerOptions): GameServer {
   const { config } = options;
   const log = options.log ?? createLogger(config.logLevel);
@@ -73,21 +93,18 @@ export function createGameServer(options: GameServerOptions): GameServer {
 
   const registry = new GameRegistry();
   for (const game of options.games ?? defaultGames(config)) registry.register(game);
-
   const moderator =
     options.moderator ??
     createModerator({
       nickname: { minLength: NICKNAME_MIN_LENGTH, maxLength: NICKNAME_MAX_LENGTH },
     });
-  const timers = new TimerService(log);
-  const limiter = new RateLimiter({
-    ...config.rateLimits,
-    chat: { burst: config.chat.burst, perSecond: config.chat.perSecond },
-  });
-  const sessions = new SessionManager(config, moderator);
+  const ownsStore = !options.store;
+  const store: SharedStore =
+    options.store ??
+    (config.redisUrl ? new RedisSharedStore(config.redisUrl) : new MemorySharedStore());
 
   const httpServer = createServer((req, res) => {
-    if (req.method === 'GET' && req.url === '/healthz') {
+    if (req.method === 'GET' && req.url?.split('?')[0]?.endsWith('/healthz')) {
       res.writeHead(shuttingDown ? 503 : 200, {
         'content-type': 'application/json',
         'cache-control': 'no-store',
@@ -100,6 +117,7 @@ export function createGameServer(options: GameServerOptions): GameServer {
   });
 
   const io: IoServer = new Server(httpServer, {
+    path: config.socketPath,
     maxHttpBufferSize: config.limits.maxMessageBytes,
     cors: {
       origin: (origin, callback) =>
@@ -113,76 +131,108 @@ export function createGameServer(options: GameServerOptions): GameServer {
     },
   });
 
-  const notifier = createSocketNotifier(io, sessions);
-  // Bots that play through chat (drawing-game guesses) use the same chat pipeline as humans.
-  let chatForBots: ChatService | null = null;
-  const bots = new BotManager({
-    timers,
+  let host: HostServices | null = null;
+  const cluster: Cluster = new Cluster({
+    store,
     log,
-    onChat: (matchId, seat, text) => chatForBots?.sendFromBot(matchId, seat, text),
+    releaseWhenIdle: config.releaseHostWhenIdle,
+    ...options.cluster,
+    localSocketCount: () => io.sockets.sockets.size,
+    becomeHost: async (fence) => {
+      host = await HostServices.start({
+        config,
+        log,
+        registry,
+        moderator,
+        store,
+        cluster,
+        fence,
+        hasLocalSocket: (socketId) => io.sockets.sockets.has(socketId),
+        ...(options.reportSink ? { reportSink: options.reportSink } : {}),
+      });
+    },
+    stopHosting: () => {
+      host?.dispose();
+      host = null;
+    },
+    flush: async () => {
+      await host?.flush();
+    },
+    handleCall: (call) => (host ? host.handle(call) : { ok: false, code: 'SERVER_BUSY' }),
+    deliver: (message) => {
+      if (message.t === 'deliver') {
+        (io.to(message.socketIds) as unknown as { emit(e: string, p: unknown): void }).emit(
+          message.event,
+          message.payload,
+        );
+        return;
+      }
+      const old = io.sockets.sockets.get(message.socketId);
+      old?.emit('session:displaced');
+      old?.disconnect(true);
+    },
   });
-  const rooms = new RoomManager({
-    config,
-    store: new InMemoryRoomStore(),
-    registry,
-    sessions,
-    moderator,
-    timers,
-    bots,
-    notifier,
-    log,
-  });
-  const chat = new ChatService({ config, moderator, rooms, notifier, limiter });
-  chatForBots = chat;
-  const reportSink =
-    options.reportSink ?? new InMemoryFlagStore(config.reports.maxFlags, config.reports.flagTtlMs);
-  const reports = new ReportService({ sink: reportSink, rooms, limiter, log });
 
-  attachTransport(io, {
+  // Per-instance protections (the host applies chat/report limits itself).
+  const limiter = new RateLimiter(config.rateLimits);
+  const transport = attachTransport(io, {
     config,
-    sessions,
-    rooms,
-    chat,
-    reports,
+    cluster,
     registry,
     limiter,
     log,
     isShuttingDown: () => shuttingDown,
   });
-
-  const sweeper = setInterval(() => {
-    rooms.sweep();
-    sessions.sweep();
-    limiter.sweep();
-    chat.sweep();
-  }, config.timing.sweepIntervalMs);
+  const sweeper = setInterval(() => limiter.sweep(), config.timing.sweepIntervalMs);
   sweeper.unref();
+
+  let started: Promise<void> | null = null;
+  const start = () => (started ??= cluster.start());
 
   let closed = false;
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
     clearInterval(sweeper);
-    rooms.dispose();
-    timers.dispose();
+    // Disconnect our players first (the host hears about it), then leave the cluster:
+    // a host instance hands its role and state over as it goes.
     await new Promise<void>((resolve) => {
       io.close(() => resolve());
     });
+    await transport.settled();
+    await cluster.stop();
+    if (ownsStore) await store.close();
   };
 
   return {
     config,
     httpServer,
     io,
-    services: { registry, sessions, rooms, chat, reports, reportSink, timers },
-    listen: (port = config.port) =>
-      new Promise<number>((resolve, reject) => {
+    cluster,
+    get services(): HostServicesView {
+      if (!host) throw new Error('This instance does not host the rooms right now');
+      const h: HostServices = host;
+      return {
+        registry,
+        sessions: h.sessions,
+        rooms: h.rooms,
+        chat: h.chat,
+        reports: h.reports,
+        reportSink: h.reportSink,
+        timers: h.timers,
+      };
+    },
+    start,
+    listen: async (port = config.port) => {
+      await start();
+      return new Promise<number>((resolve, reject) => {
         httpServer.once('error', reject);
         httpServer.listen(port, config.host, () => {
           httpServer.off('error', reject);
           resolve((httpServer.address() as AddressInfo).port);
         });
-      }),
+      });
+    },
     shutdown: async () => {
       if (shuttingDown) return;
       shuttingDown = true;

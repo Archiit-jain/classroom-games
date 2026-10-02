@@ -24,3 +24,21 @@ await build({
   },
   logLevel: 'info',
 });
+
+// The Vercel Function bundle (api/socket.mjs re-exports it): everything bundled into
+// one self-contained file, so the Function needs no node_modules of its own.
+await build({
+  entryPoints: ['src/vercel.ts'],
+  outfile: 'dist/vercel.mjs',
+  bundle: true,
+  platform: 'node',
+  target: 'node24',
+  format: 'esm',
+  sourcemap: true,
+  // Optional native speed-ups of the WebSocket library; it works without them.
+  external: ['bufferutil', 'utf-8-validate'],
+  banner: {
+    js: "import { createRequire as __cgCreateRequire } from 'node:module'; const require = __cgCreateRequire(import.meta.url);",
+  },
+  logLevel: 'info',
+});
