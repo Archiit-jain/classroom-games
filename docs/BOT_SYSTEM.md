@@ -61,4 +61,11 @@ sequenceDiagram
   rest). Guesses by returning `CHAT` — a pack word that fits the public pattern and has not
   been guessed wrong this turn — every 6–12 s, sent through `ChatService.sendFromBot`. It never
   sees the answer ([ADR-020](decisions/ADR-020-streamed-games.md)).
+- **Pen Fight bot:** simulates 24 candidate shots with the same server physics (six aimed at
+  each opponent, the rest random), scores each (+100 per opponent out, −250 if its own pen goes
+  out, + its own distance from the edge, − the opponents'), usually plays the best, sometimes
+  the 2nd or 3rd, adds human-like error (±2.5°, ±5 %) that never turns a safe shot into a
+  self-elimination, and always finishes before the aim timer. Measured p50 ≈ 13–15 ms / p95 ≈ 16–18 ms per decision on
+  a laptop — no worker thread
+  ([ADR-022](decisions/ADR-022-pen-fight-physics.md)).
 - Bots never send quick reactions, and chat only to guess in Draw & Guess.

@@ -71,11 +71,11 @@ Audience helpers: `toAll(e)`, `toSeats([1], e)`, `toAllExcept([1], e)`.
 
 ## Sync styles
 
-| Style        | Meaning                                                  | Status                                   |
-| ------------ | -------------------------------------------------------- | ---------------------------------------- |
-| `TURN_PHASE` | Phases/turns; every change is a transition               | Implemented                              |
-| `STREAMED`   | Also has a high-frequency stream (drawing strokes)       | Implemented (Phase 4)                    |
-| `SIMULATED`  | Server simulates physics and sends keyframes in an event | Uses the normal path; physics in Phase 5 |
+| Style        | Meaning                                                  | Status                                                                   |
+| ------------ | -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `TURN_PHASE` | Phases/turns; every change is a transition               | Implemented                                                              |
+| `STREAMED`   | Also has a high-frequency stream (drawing strokes)       | Implemented (Phase 4)                                                    |
+| `SIMULATED`  | Server simulates physics and sends keyframes in an event | Implemented (Phase 5, [ADR-022](decisions/ADR-022-pen-fight-physics.md)) |
 
 ## Game catalogue
 
@@ -88,7 +88,7 @@ games use this same server-authoritative runtime — none has its own networking
 | Raja Mantri Chor Sipahi     | `rmcs`                    | 4       | `TURN_PHASE` | Shipped (Phase 2)            | [rules](GAME_RULES/RAJA_MANTRI_CHOR_SIPAHI.md)                                   |
 | 16 Parchi                   | `sixteen-parchi`          | 4       | `TURN_PHASE` | Shipped (Phase 3)            | [rules](GAME_RULES/16_PARCHI.md), [design](design/16_PARCHI_DESIGN.md)           |
 | Draw & Guess (working name) | `draw-and-guess`          | 3–6     | `STREAMED`   | Shipped (Phase 4)            | [rules](GAME_RULES/DRAW_AND_GUESS.md), [design](design/DRAW_AND_GUESS_DESIGN.md) |
-| Pen Fight                   | `pen-fight`               | 2–4     | `SIMULATED`  | Phase 5                      | spec §13                                                                         |
+| Pen Fight                   | `pen-fight`               | 2–4     | `SIMULATED`  | Shipped (Phase 5)            | [rules](GAME_RULES/PEN_FIGHT.md), [design](design/PEN_FIGHT_DESIGN.md)           |
 | Dots & Boxes                | `dots-and-boxes`          | 2–4     | `TURN_PHASE` | Designed (Phase 6, proposed) | [design](design/DOTS_AND_BOXES_DESIGN.md)                                        |
 | Name Place Animal Thing     | `name-place-animal-thing` | 2–8     | `TURN_PHASE` | Designed (Phase 7, proposed) | [design](design/NAME_PLACE_ANIMAL_THING_DESIGN.md)                               |
 | Business (working title)    | `business`                | 2–6     | `TURN_PHASE` | Designed (Phase 8, proposed) | [design](design/BUSINESS_DESIGN.md)                                              |

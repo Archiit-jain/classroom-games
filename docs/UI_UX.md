@@ -70,6 +70,17 @@ Players can switch **Effects: Auto / Full / Lite** from the header.
   letter count; hint letters pop in. Word cards deal in and flip (full), fade (lite) or
   appear (reduced); "Correct!" and the reveal use the rubber stamp. Strokes are painted as
   they arrive and never wait for the animation director.
+- Pen Fight: a top-down wooden desk (SVG) with ballpoint pens in the seat colours and name
+  tags. On a portrait phone the landscape desk is drawn turned 90° so it fills the width (input
+  is mapped back). Your pen has a 52 px touch target; touch it, drag back (rubber band, a
+  strength arrow turning yellow → red, a curl showing spin) and let go; a pen-shaped Spin
+  slider sets the spin point precisely; keyboard controls on desktop. Others see only "…is
+  aiming" and the timer. Replays interpolate the server's keyframes at 60 fps with motion
+  ghosts, a squash on the flicked pen, sparks and a small shake on hard hits (full), sparks only
+  (lite) or no replay at all (reduced: pens appear at their final places). Knocked-out pens tip
+  off the edge with an "OUT!" stamp; places appear only once the pen has fallen. Sudden death:
+  a brief banner, a glowing dashed preview of the smaller desk and the old outline kept as a
+  ghost while the desk shrinks.
 
 ## Accessibility
 

@@ -359,3 +359,21 @@ after real phone play-testing.
 
 **Launch blocker:** none specific to Pen Fight (the physics feel needs the owner's phone
 play-test, which is a tuning step, not a blocker).
+
+## 15. Implementation notes (Phase 5 — measured, still play-test values)
+
+The proposed numbers were measured during implementation (seeded bot-vs-bot matches and the
+bot benchmark) rather than assumed. What changed, and why:
+
+| Value                    | Proposed (§14)    | Implemented                    | Measurement that drove it                                                                                                                                                                                   |
+| ------------------------ | ----------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Full-power slide         | ≈ 1.2 × desk (12) | **7 units**                    | At 12, almost every hit was a knockout: bot matches lasted a median of 1 round and 23 % of exits were self-eliminations. At 7: median 4 rounds, ≈ 0 self-eliminations, sudden death in ~8 % of bot matches. |
+| Linear / angular damping | 1.6 / 2.5         | **5 / 7**                      | Replays took 3–4 s and felt like sliding on ice; at 5 / 7 a shot settles in ≈ 1.4 s (p95 ≈ 1.5 s), closer to a real pen on a desk.                                                                          |
+| Pen size                 | 1.4 × 0.12        | **2.0 × 0.16**                 | Visual review: at 14 % of the desk width pens read as small objects, not pens. Drawn 1.5× thicker than the physics body so they read on a phone.                                                            |
+| Bot search               | ≈ 10 ms (spike)   | p50 ≈ 13–15 ms, p95 ≈ 16–18 ms | Bot what-ifs skip keyframe/collision recording; the error-noise check adds one simulation. No worker thread needed.                                                                                         |
+| Keyframe payload         | ≈ 2.6 KB          | ≈ 2–3 KB, max seen ≈ 3.2 KB    | Bot matches; tests assert < 16 KB.                                                                                                                                                                          |
+
+Other implementation choices: the bot's human-like error is re-checked so it never turns a safe
+shot into flicking itself off; places are shown only once a pen has visibly fallen in the
+replay; the sudden-death banner shows for 1.8 s (the round pill keeps "Sudden death");
+replays add motion ghosts and a squash on the flicked pen in full effects.

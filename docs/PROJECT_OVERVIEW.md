@@ -39,9 +39,9 @@ Expandability → Security → Performance → Documentation.
 
 ## Current status
 
-Phases 1–4 are complete: the platform (with quick reactions and streamed games) plus Raja
-Mantri Chor Sipahi, the flagship 16 Parchi and Draw & Guess (working name) in the Color Burst
-Arcade design. Dots & Boxes, Name Place
+Phases 1–5 are complete: the platform (with quick reactions, streamed games and server-side
+physics) plus Raja Mantri Chor Sipahi, the flagship 16 Parchi, Draw & Guess (working name) and
+Pen Fight in the Color Burst Arcade design. Dots & Boxes, Name Place
 Animal Thing and Business have design-verification documents in [design/](design/). The
 12-phase plan is in the README [roadmap](../README.md#roadmap).
 

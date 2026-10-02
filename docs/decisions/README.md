@@ -26,3 +26,4 @@ Consequences. Status is `Accepted`, `Proposed` (waiting for approval) or `Supers
 | [019](ADR-019-category-content-packs.md)         | Category content packs with original icons                           | Accepted                                    |
 | [020](ADR-020-streamed-games.md)                 | Streamed games: `match:stream`, replay, chat/stream bot moves        | Accepted                                    |
 | [021](ADR-021-perfect-freehand.md)               | perfect-freehand for stroke rendering                                | Accepted                                    |
+| [022](ADR-022-pen-fight-physics.md)              | Pen Fight physics: Planck.js on the server, keyframes in one event   | Accepted                                    |
