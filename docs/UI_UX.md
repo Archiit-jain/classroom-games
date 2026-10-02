@@ -62,10 +62,20 @@ Players can switch **Effects: Auto / Full / Lite** from the header.
 - 16 Parchi: your hand (four slips ≥ 56 px wide on phones, grouped by item with a ×N badge)
   sits under the table; the CLAIM button sticks above it; quick reactions are a "React" tray
   on phones and an always-visible row on wider screens.
+- Draw & Guess: a 4:3 notebook-paper canvas, full width on phones, with the player chips
+  (score, ✓ when guessed, pencil on the drawer) above it on phones and beside it from 700 px.
+  Under the canvas the drawer gets the toolbar (12 colour swatches of 40 px, 4 sizes, eraser,
+  undo, clear); guessers get the guess box, "close!" feedback and the last few messages (on
+  wide screens the room chat beside the board takes over). The word is shown as blanks with a
+  letter count; hint letters pop in. Word cards deal in and flip (full), fade (lite) or
+  appear (reduced); "Correct!" and the reveal use the rubber stamp. Strokes are painted as
+  they arrive and never wait for the animation director.
 
 ## Accessibility
 
-Real buttons with labels (e.g. "Suspect Priya"), visible focus rings, `aria-live` for
+Real buttons with labels (e.g. "Suspect Priya", "Red", "Undo"; the Draw & Guess canvas is
+an image labelled with whose drawing it is, and the secret word is read out as "6 letters:
+blank blank …"), visible focus rings, `aria-live` for
 desk messages, chat and toasts, alerts for errors, reduced motion honoured everywhere,
 colour never the only signal (roles have icons and names; bots have badges and names).
 

@@ -39,6 +39,7 @@ implemented as of Phase 3.
 | `room:reclaimSeat`    | `{}`                                                     | `{}` (take your seat back from a bot) | roomAdmin            |
 | `match:action`        | `{ matchId, version, actionId, action }`                 | `{ version }`                         | matchAction          |
 | `match:resync`        | `{ matchId }`                                            | `{ update: MatchUpdate }`             | matchAction          |
+| `match:stream`        | `{ matchId, chunk }` (streamed games, e.g. a stroke)     | `{}`                                  | stream (30, 20/s)    |
 | `chat:send`           | `{ text }`                                               | `{}`                                  | chat (own cooldown)  |
 | `chat:react`          | `{ reactionId }` (one of the 8 `REACTION_IDS`)           | `{}`                                  | reaction (1 / 1.5 s) |
 | `report:submit`       | `{ playerId, reason: CHAT \| DRAWING \| NAME \| OTHER }` | `{}`                                  | report               |
@@ -54,24 +55,31 @@ per intent. Each id executes at most once per match; a repeat gets `DUPLICATE_AC
 on: a version the server never issued gets `STALE_VERSION` (and does not use up the id);
 older issued versions are fine — the game decides legality against the current state.
 
+**`match:stream` details** ([ADR-020](decisions/ADR-020-streamed-games.md)): only for
+`STREAMED` games. The chunk is parsed with the game's schema (`INVALID_PAYLOAD`), then the
+game accepts or rejects it (`NOT_YOUR_TURN`, `INVALID_PHASE`, `ILLEGAL_ACTION` for limits); a
+seat a bot is playing gets `SEAT_CONTROLLED_BY_BOT`. Accepted chunks change no version and send
+no `match:update`; they are relayed to the game's audience (not back to the sender).
+
 **`chat:react` details:** only from a seated human while the room's match is running
 (`NOT_IN_ROOM` / `INVALID_PHASE` otherwise); unknown ids are `INVALID_PAYLOAD`; more than one
 per 1.5 s is `RATE_LIMITED` with `retryAfterMs`. Bots never react.
 
 ## Server → client
 
-| Event               | Payload                                                        | When                                                                                                            |
-| ------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `session:ready`     | `{ playerId, nickname, token?, games: GameInfo[], serverNow }` | After every connection. `token` only when a new session was created — the client must store it.                 |
-| `session:displaced` | —                                                              | Another tab took over this session; this socket is then disconnected.                                           |
-| `room:snapshot`     | `{ room: RoomView \| null }`                                   | Any room change; on every connect; `null` when not in a room.                                                   |
-| `room:event`        | `RoomEvent`                                                    | `KICKED`, `ROOM_CLOSED`, `HOST_CHANGED {hostId}`, `SEAT_TAKEN_OVER {reason}`, `SEAT_RECLAIMED`, `MATCH_ABORTED` |
-| `match:update`      | `MatchUpdate`                                                  | After every transition, per player: `{ matchId, gameId, version, you, events, view, serverNow }`                |
-| `match:end`         | `{ matchId, results }`                                         | Match finished.                                                                                                 |
-| `chat:message`      | `ChatMessage`                                                  | A (moderated) message you may see.                                                                              |
-| `chat:history`      | `{ messages }`                                                 | On joining or reconnecting to a room (last 50 room-channel messages).                                           |
-| `chat:reaction`     | `{ fromId, seat, reactionId, sentAt }`                         | A player in your room's running match sent a quick reaction ([ADR-018](decisions/ADR-018-quick-reactions.md)).  |
-| `system:notice`     | `{ code: 'SERVER_RESTARTING' }`                                | Graceful shutdown started.                                                                                      |
+| Event               | Payload                                                        | When                                                                                                             |
+| ------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `session:ready`     | `{ playerId, nickname, token?, games: GameInfo[], serverNow }` | After every connection. `token` only when a new session was created — the client must store it.                  |
+| `session:displaced` | —                                                              | Another tab took over this session; this socket is then disconnected.                                            |
+| `room:snapshot`     | `{ room: RoomView \| null }`                                   | Any room change; on every connect; `null` when not in a room.                                                    |
+| `room:event`        | `RoomEvent`                                                    | `KICKED`, `ROOM_CLOSED`, `HOST_CHANGED {hostId}`, `SEAT_TAKEN_OVER {reason}`, `SEAT_RECLAIMED`, `MATCH_ABORTED`  |
+| `match:update`      | `MatchUpdate`                                                  | After every transition, per player: `{ matchId, gameId, version, you, events, view, serverNow }`                 |
+| `match:end`         | `{ matchId, results }`                                         | Match finished.                                                                                                  |
+| `match:stream`      | `{ matchId, chunks, reset }`                                   | Streamed-game data (drawing strokes) as it is accepted; `reset: true` = full replay on reconnect/reclaim/resync. |
+| `chat:message`      | `ChatMessage`                                                  | A (moderated) message you may see.                                                                               |
+| `chat:history`      | `{ messages }`                                                 | On joining or reconnecting to a room (last 50 room-channel messages).                                            |
+| `chat:reaction`     | `{ fromId, seat, reactionId, sentAt }`                         | A player in your room's running match sent a quick reaction ([ADR-018](decisions/ADR-018-quick-reactions.md)).   |
+| `system:notice`     | `{ code: 'SERVER_RESTARTING' }`                                | Graceful shutdown started.                                                                                       |
 
 ## Key types
 
@@ -104,5 +112,4 @@ or `SERVER_BUSY`.
 
 ## Not implemented yet
 
-`mm:quickPlay`, `mm:cancel`, `lobby:watch`, `lobby:unwatch`, `lobby:rooms` (Phase 9),
-`match:stream` (Phase 4).
+`mm:quickPlay`, `mm:cancel`, `lobby:watch`, `lobby:unwatch`, `lobby:rooms` (Phase 9).

@@ -3,12 +3,12 @@
 Quick multiplayer classroom and childhood games in the browser. No accounts, no login:
 pick a nickname, create or join a room, play.
 
-> **Status: Phase 3 of 12 — two of seven games playable.** The multiplayer platform
-> (sessions, private rooms, reconnect, bots, chat moderation, quick reactions, game runtime)
-> is built, and **Raja Mantri Chor Sipahi** and the flagship **16 Parchi** are fully playable
-> with friends and bots in the **Color Burst Arcade** design. Five more games are planned:
-> Draw & Guess, Pen Fight, Dots & Boxes, Name Place Animal Thing and Business. See the
-> [roadmap](#roadmap).
+> **Status: Phase 4 of 12 — three of seven games playable.** The multiplayer platform
+> (sessions, private rooms, reconnect, bots, chat moderation, quick reactions, live drawing
+> streams, game runtime) is built, and **Raja Mantri Chor Sipahi**, the flagship **16 Parchi**
+> and **Draw & Guess** (working name) are fully playable with friends and bots in the
+> **Color Burst Arcade** design. Four more games are planned: Pen Fight, Dots & Boxes,
+> Name Place Animal Thing and Business. See the [roadmap](#roadmap).
 
 ## Why
 
@@ -25,6 +25,10 @@ server, not the browser, decides every outcome.
   collect four of a kind and race to CLAIM; finished players leave the circle until everyone
   is placed. Ten categories with original artwork (Fruits, Street Food, Childhood Toys…),
   chosen by the host or Random. Rules: [docs/GAME_RULES/16_PARCHI.md](docs/GAME_RULES/16_PARCHI.md).
+- **Draw & Guess** (working name) — 3–6 players take turns drawing a secret word while the
+  others race to guess it in the chat; correct guesses are never shown, hints reveal letters,
+  bots draw from original templates and guess from the public pattern. Rules:
+  [docs/GAME_RULES/DRAW_AND_GUESS.md](docs/GAME_RULES/DRAW_AND_GUESS.md).
 - **Quick reactions** — eight emotes that pop over your seat for everyone (one per 1.5 s,
   only ever sent by a person).
 - **Color Burst Arcade design** — nostalgic classroom games × modern arcade: paper chits,
@@ -51,7 +55,7 @@ server, not the browser, decides every outcome.
 | --------------------------- | ------- | -------------------------------------------------------------------------------------- |
 | Raja Mantri Chor Sipahi     | 4       | ✅ Playable (Phase 2)                                                                  |
 | 16 Parchi (flagship)        | 4       | ✅ Playable (Phase 3)                                                                  |
-| Draw & Guess (working name) | 3–6     | Planned — Phase 4                                                                      |
+| Draw & Guess (working name) | 3–6     | ✅ Playable (Phase 4)                                                                  |
 | Pen Fight                   | 2–4     | Planned — Phase 5                                                                      |
 | Dots & Boxes                | 2–4     | Designed — Phase 6 (proposed); [design](docs/design/DOTS_AND_BOXES_DESIGN.md)          |
 | Name Place Animal Thing     | 2–8     | Designed — Phase 7 (proposed); [design](docs/design/NAME_PLACE_ANIMAL_THING_DESIGN.md) |
@@ -90,6 +94,7 @@ packages/
 games/
   rmcs/           Raja Mantri Chor Sipahi (shared types, engine + bot, board)
   sixteen-parchi/ 16 Parchi (shared types + categories, engine + bot, board, content/en labels)
+  draw-and-guess/ Draw & Guess (shared types + guess matching, engine + bot templates, board, content/en words)
 e2e/              Playwright end-to-end tests
 tools/            Screenshot capture for visual review
 docs/             Documentation, frozen spec, architecture decision records
@@ -150,16 +155,16 @@ See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) and [docs/GAME_SYSTEM.md](doc
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md). Current suite: 257 unit/integration tests and 10
-end-to-end runs (desktop + mobile), including full RMCS and 16 Parchi matches on a phone
-profile and a 16 Parchi match with reduced motion.
+See [docs/TESTING.md](docs/TESTING.md). Current suite: 300 unit/integration tests and 13
+end-to-end runs (desktop + mobile), including full RMCS, 16 Parchi and Draw & Guess matches on
+a phone profile and 16 Parchi and Draw & Guess with reduced motion.
 
 ## Known limitations
 
 - All rooms and sessions live in server memory: a restart or deploy ends every game.
 - One server instance only (scaling path documented, not built).
-- Two of the seven games so far; public lobby and matchmaking arrive in Phase 9.
-- Client bundle is ≈ 144 KB gzipped (Motion; game boards load separately); trimming is
+- Three of the seven games so far; public lobby and matchmaking arrive in Phase 9.
+- Client bundle is ≈ 146 KB gzipped (Motion; game boards load separately); trimming is
   planned for Phase 11.
 - No sound (excluded from v1). English only (the UI is translation-ready).
 
@@ -168,7 +173,7 @@ profile and a 16 Parchi match with reduced motion.
 1. ✅ Infrastructure and private rooms
 2. ✅ Raja Mantri Chor Sipahi + Color Burst Arcade design system
 3. ✅ 16 Parchi + quick reactions
-4. Draw & Guess (working name)
+4. ✅ Draw & Guess (working name)
 5. Pen Fight
 6. Dots & Boxes _(proposed order)_
 7. Name Place Animal Thing _(proposed order)_

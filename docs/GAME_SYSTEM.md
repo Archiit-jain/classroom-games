@@ -7,22 +7,22 @@ How games plug into the platform. Contract source: `packages/game-sdk/src/contra
 
 A game is an object implementing:
 
-| Member                               | Purpose                                                                                    |
-| ------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `manifest`                           | id, player range, sync style, bot support, public-match sizes, reclaim policy, layout hint |
-| `settingsSchema`, `defaultSettings`  | Host-editable settings, validated by zod                                                   |
-| `actionSchema`                       | Shape of a player action (validated before `validateAction`)                               |
-| `setup(seats, settings, ctx)`        | Initial state + opening events + timers                                                    |
-| `validateAction(s, seat, a)`         | Is this action legal _now_? Returns `{ok}` or a `GameErrorCode`                            |
-| `applyAction(s, seat, a, ctx)`       | Returns the next `Transition`                                                              |
-| `onTimer(s, timerId, ctx)`           | Engine-owned timers (turn clocks, reveals…)                                                |
-| `onSeatChange(s, seat, change, ctx)` | `DISCONNECTED` · `RECONNECTED` · `BOT_TOOK_OVER` · `RECLAIMED` · `LEFT`                    |
-| `getPlayerView(s, seat)`             | Everything this seat may know — and nothing more                                           |
-| `isOver(s)`, `getResults(s)`         | End detection and placements (ties share a place)                                          |
-| `bot`                                | `createMemory` / `observe` / `decide`                                                      |
-| `chat?`                              | Optional chat interceptor (e.g. guess checking)                                            |
-| `stream?`                            | Required for `STREAMED` games (runtime wiring arrives with the first streamed game)        |
-| `canReclaimSeat?`                    | For `NEXT_PHASE_BOUNDARY` games: may the human take the seat back now?                     |
+| Member                               | Purpose                                                                                                          |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `manifest`                           | id, player range, sync style, bot support, public-match sizes, reclaim policy, layout hint                       |
+| `settingsSchema`, `defaultSettings`  | Host-editable settings, validated by zod                                                                         |
+| `actionSchema`                       | Shape of a player action (validated before `validateAction`)                                                     |
+| `setup(seats, settings, ctx)`        | Initial state + opening events + timers                                                                          |
+| `validateAction(s, seat, a)`         | Is this action legal _now_? Returns `{ok}` or a `GameErrorCode`                                                  |
+| `applyAction(s, seat, a, ctx)`       | Returns the next `Transition`                                                                                    |
+| `onTimer(s, timerId, ctx)`           | Engine-owned timers (turn clocks, reveals…)                                                                      |
+| `onSeatChange(s, seat, change, ctx)` | `DISCONNECTED` · `RECONNECTED` · `BOT_TOOK_OVER` · `RECLAIMED` · `LEFT`                                          |
+| `getPlayerView(s, seat)`             | Everything this seat may know — and nothing more                                                                 |
+| `isOver(s)`, `getResults(s)`         | End detection and placements (ties share a place)                                                                |
+| `bot`                                | `createMemory` / `observe` / `decide`                                                                            |
+| `chat?`                              | Optional chat interceptor (e.g. guess checking)                                                                  |
+| `stream?`                            | Required for `STREAMED` games: chunk schema, `accept`, `replay` ([ADR-020](decisions/ADR-020-streamed-games.md)) |
+| `canReclaimSeat?`                    | For `NEXT_PHASE_BOUNDARY` games: may the human take the seat back now?                                           |
 
 ### Transitions
 
@@ -74,7 +74,7 @@ Audience helpers: `toAll(e)`, `toSeats([1], e)`, `toAllExcept([1], e)`.
 | Style        | Meaning                                                  | Status                                   |
 | ------------ | -------------------------------------------------------- | ---------------------------------------- |
 | `TURN_PHASE` | Phases/turns; every change is a transition               | Implemented                              |
-| `STREAMED`   | Also has a high-frequency stream (drawing strokes)       | Contract only; runtime wiring in Phase 4 |
+| `STREAMED`   | Also has a high-frequency stream (drawing strokes)       | Implemented (Phase 4)                    |
 | `SIMULATED`  | Server simulates physics and sends keyframes in an event | Uses the normal path; physics in Phase 5 |
 
 ## Game catalogue
@@ -83,16 +83,16 @@ Every game is a `GameModule` (server) + `GameClientModule` (client) pair registe
 `apps/server/src/app.ts` (`defaultGames`) and `apps/client/src/games/registry.ts`. All seven
 games use this same server-authoritative runtime — none has its own networking.
 
-| Game                        | Id                        | Players | Sync         | Status                       | Rules / design                                                         |
-| --------------------------- | ------------------------- | ------- | ------------ | ---------------------------- | ---------------------------------------------------------------------- |
-| Raja Mantri Chor Sipahi     | `rmcs`                    | 4       | `TURN_PHASE` | Shipped (Phase 2)            | [rules](GAME_RULES/RAJA_MANTRI_CHOR_SIPAHI.md)                         |
-| 16 Parchi                   | `sixteen-parchi`          | 4       | `TURN_PHASE` | Shipped (Phase 3)            | [rules](GAME_RULES/16_PARCHI.md), [design](design/16_PARCHI_DESIGN.md) |
-| Draw & Guess (working name) | `draw-and-guess`          | 3–6     | `STREAMED`   | Phase 4                      | spec §12                                                               |
-| Pen Fight                   | `pen-fight`               | 2–4     | `SIMULATED`  | Phase 5                      | spec §13                                                               |
-| Dots & Boxes                | `dots-and-boxes`          | 2–4     | `TURN_PHASE` | Designed (Phase 6, proposed) | [design](design/DOTS_AND_BOXES_DESIGN.md)                              |
-| Name Place Animal Thing     | `name-place-animal-thing` | 2–8     | `TURN_PHASE` | Designed (Phase 7, proposed) | [design](design/NAME_PLACE_ANIMAL_THING_DESIGN.md)                     |
-| Business (working title)    | `business`                | 2–6     | `TURN_PHASE` | Designed (Phase 8, proposed) | [design](design/BUSINESS_DESIGN.md)                                    |
-| Count Up (fixture)          | `fixture`                 | 2–4     | `TURN_PHASE` | Dev/test only                | [below](#the-fixture-game-count-up)                                    |
+| Game                        | Id                        | Players | Sync         | Status                       | Rules / design                                                                   |
+| --------------------------- | ------------------------- | ------- | ------------ | ---------------------------- | -------------------------------------------------------------------------------- |
+| Raja Mantri Chor Sipahi     | `rmcs`                    | 4       | `TURN_PHASE` | Shipped (Phase 2)            | [rules](GAME_RULES/RAJA_MANTRI_CHOR_SIPAHI.md)                                   |
+| 16 Parchi                   | `sixteen-parchi`          | 4       | `TURN_PHASE` | Shipped (Phase 3)            | [rules](GAME_RULES/16_PARCHI.md), [design](design/16_PARCHI_DESIGN.md)           |
+| Draw & Guess (working name) | `draw-and-guess`          | 3–6     | `STREAMED`   | Shipped (Phase 4)            | [rules](GAME_RULES/DRAW_AND_GUESS.md), [design](design/DRAW_AND_GUESS_DESIGN.md) |
+| Pen Fight                   | `pen-fight`               | 2–4     | `SIMULATED`  | Phase 5                      | spec §13                                                                         |
+| Dots & Boxes                | `dots-and-boxes`          | 2–4     | `TURN_PHASE` | Designed (Phase 6, proposed) | [design](design/DOTS_AND_BOXES_DESIGN.md)                                        |
+| Name Place Animal Thing     | `name-place-animal-thing` | 2–8     | `TURN_PHASE` | Designed (Phase 7, proposed) | [design](design/NAME_PLACE_ANIMAL_THING_DESIGN.md)                               |
+| Business (working title)    | `business`                | 2–6     | `TURN_PHASE` | Designed (Phase 8, proposed) | [design](design/BUSINESS_DESIGN.md)                                              |
+| Count Up (fixture)          | `fixture`                 | 2–4     | `TURN_PHASE` | Dev/test only                | [below](#the-fixture-game-count-up)                                              |
 
 Ids of games not yet built are planned names. Room capacity always comes from the game's
 `manifest.players`, so 6- and 8-player games need no platform change.

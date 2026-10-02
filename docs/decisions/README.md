@@ -24,3 +24,5 @@ Consequences. Status is `Accepted`, `Proposed` (waiting for approval) or `Supers
 | [017](ADR-017-sixteen-parchi-engine.md)          | 16 Parchi engine: simultaneous passing, re-keyed slips, claim races  | Accepted                                    |
 | [018](ADR-018-quick-reactions.md)                | Quick reactions as a platform feature                                | Accepted                                    |
 | [019](ADR-019-category-content-packs.md)         | Category content packs with original icons                           | Accepted                                    |
+| [020](ADR-020-streamed-games.md)                 | Streamed games: `match:stream`, replay, chat/stream bot moves        | Accepted                                    |
+| [021](ADR-021-perfect-freehand.md)               | perfect-freehand for stroke rendering                                | Accepted                                    |

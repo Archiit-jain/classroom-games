@@ -23,8 +23,8 @@ Public-room bot fill arrives in Phase 9.
 - Bots are always labelled: bot members have obviously-bot names and a "Bot" badge;
   takeover seats show `controller: 'BOT'` with the bot's name. Human nicknames may not
   start with "Bot" (kept by product owner decision, Phase 2 review).
-- Bots never chat or react (the only planned exception is Draw & Guess guessing, which
-  uses chat as its input).
+- Bots never react, and never chat — except Draw & Guess guessing, which uses chat as its
+  input and goes through the same game hook and moderation as a human's message.
 
 ## How a bot plays
 
@@ -54,4 +54,11 @@ sequenceDiagram
   it holds most of, pass one it holds fewest of, ties at random — after 0.8–2.5 s, and claims
   a full set after 0.8–2.5 s so humans can win claim races. It only ever looks at its own
   hand (the same view a human in its seat gets); it has no memory of passed slips.
-- Bots never chat or send quick reactions.
+- **Draw & Guess bot:** chooses a card it has a drawing template for; draws by returning a
+  `STREAM` decision — a timed plan of stroke chunks (its word's original template with small
+  random wobble, spread over 20–40 s) that the `BotManager` feeds through `acceptStream`, the
+  same validation a human drawer gets (a rejected chunk, e.g. the turn ended, cancels the
+  rest). Guesses by returning `CHAT` — a pack word that fits the public pattern and has not
+  been guessed wrong this turn — every 6–12 s, sent through `ChatService.sendFromBot`. It never
+  sees the answer ([ADR-020](decisions/ADR-020-streamed-games.md)).
+- Bots never send quick reactions, and chat only to guess in Draw & Guess.

@@ -29,7 +29,9 @@ flowchart LR
    lower case, single spaces.
 3. **Game hook:** a running game may `PASS`, `RESTRICT` (deliver only to some seats on a
    named channel), `CONSUME` (the game handles it — e.g. a correct guess — and it is never
-   shown) or `BLOCK` it. Only room-channel messages are kept in the history buffer.
+   shown) or `BLOCK` it; a `PASS` may also record public game state (Draw & Guess remembers
+   wrong guesses). Only room-channel messages are kept in the history buffer. Bot guesses in
+   Draw & Guess take this same path ([ADR-020](decisions/ADR-020-streamed-games.md)).
 4. **Censor:** profanity is replaced with asterisks of the same length; contact details
    become `[removed]`.
 5. **Broadcast** to the humans in the room (or the restricted audience plus the sender).
@@ -74,6 +76,10 @@ confirmed by the product owner in the Phase 2 review), no profanity or contact d
   `ReportSink` interface into a bounded in-memory store (1,000 flags, 24 h, lost on
   restart) and writes a log line without any message content. **A report never kicks,
   bans or skips anyone.**
+- **Draw & Guess:** guessers can **Hide drawing** (local, per drawer; strokes keep arriving so
+  un-hiding restores the picture) and **Report drawing** (reason `DRAWING`, which also hides
+  the player). Words come only from the curated pack, which is tested against the moderator.
+  The UI never claims drawings are moderated automatically.
 
 ## Quick reactions
 
