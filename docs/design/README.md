@@ -9,7 +9,7 @@ Once a game ships, its rules as implemented live in [../GAME_RULES/](../GAME_RUL
 | 16 Parchi                | [16_PARCHI_DESIGN.md](16_PARCHI_DESIGN.md)                             | Built (Phase 3)                 |
 | Draw & Guess             | [DRAW_AND_GUESS_DESIGN.md](DRAW_AND_GUESS_DESIGN.md)                   | Built (Phase 4)                 |
 | Pen Fight                | [PEN_FIGHT_DESIGN.md](PEN_FIGHT_DESIGN.md)                             | Built (Phase 5)                 |
-| Dots & Boxes             | [DOTS_AND_BOXES_DESIGN.md](DOTS_AND_BOXES_DESIGN.md)                   | Design pass (Phase 6)           |
+| Dots & Boxes             | [DOTS_AND_BOXES_DESIGN.md](DOTS_AND_BOXES_DESIGN.md)                   | Built (Phase 6)                 |
 | Name Place Animal Thing  | [NAME_PLACE_ANIMAL_THING_DESIGN.md](NAME_PLACE_ANIMAL_THING_DESIGN.md) | Design only (Phase 7, proposed) |
 | Business (working title) | [BUSINESS_DESIGN.md](BUSINESS_DESIGN.md)                               | Design only (Phase 8, proposed) |
 

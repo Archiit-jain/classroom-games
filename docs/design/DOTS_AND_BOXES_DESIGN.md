@@ -1,9 +1,16 @@
 # Dots & Boxes — Phase 6 design verification
 
-**Status:** design pass, written **before** implementation (nothing of Dots & Boxes is built yet).
-Game id: `dots-and-boxes`. Built on the existing `GameModule` / server-authoritative runtime
-(`sync: 'TURN_PHASE'`); no new networking. Production deployment is designed separately in
-[PRODUCTION_ARCHITECTURE.md](PRODUCTION_ARCHITECTURE.md).
+**Status:** design pass, written before implementation; **built in Phase 6** — rules as
+implemented: [GAME_RULES/DOTS_AND_BOXES.md](../GAME_RULES/DOTS_AND_BOXES.md).
+
+> **Implementation notes (Phase 6).** Built as designed, with three additions: (1) the final
+> board is held on screen for a moment after the last box (`revealMs` in the client module)
+> before the results; (2) **touch precision was measured** — on a 7×7 grid at 360 px every
+> off-centre touch in the e2e test drew exactly the intended line, so no two-tap confirmation
+> was added; (3) on wide screens the board is landscape (paper beside the score chips).
+> Game id: `dots-and-boxes`. Built on the existing `GameModule` / server-authoritative runtime
+> (`sync: 'TURN_PHASE'`); no new networking. Production deployment is designed separately in
+> [PRODUCTION_ARCHITECTURE.md](PRODUCTION_ARCHITECTURE.md).
 
 > **Decision status.** **Binding (product owner, Phase 6 brief):** traditional rules — 2–4
 > players, draw one available edge, completing a box claims it and grants another turn,

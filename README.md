@@ -3,12 +3,13 @@
 Quick multiplayer classroom and childhood games in the browser. No accounts, no login:
 pick a nickname, create or join a room, play.
 
-> **Status: Phase 5 of 12 — four of seven games playable.** The multiplayer platform
-> (sessions, private rooms, reconnect, bots, chat moderation, quick reactions, live drawing
-> streams, server-side physics, game runtime) is built, and **Raja Mantri Chor Sipahi**, the
-> flagship **16 Parchi**, **Draw & Guess** (working name) and **Pen Fight** are fully playable
-> with friends and bots in the **Color Burst Arcade** design. Three more games are planned:
-> Dots & Boxes, Name Place Animal Thing and Business. See the [roadmap](#roadmap).
+> **Status: Phase 6 of 12 — five of seven games playable, production-ready architecture.**
+> The multiplayer platform (sessions, private rooms, reconnect, bots, chat moderation, quick
+> reactions, live drawing streams, server-side physics) runs on several server instances with
+> shared state in Redis, built for **Vercel**. **Raja Mantri Chor Sipahi**, the flagship
+> **16 Parchi**, **Draw & Guess** (working name), **Pen Fight** and **Dots & Boxes** are fully
+> playable with friends and bots in the **Color Burst Arcade** design. Two more games are
+> planned: Name Place Animal Thing and Business. See the [roadmap](#roadmap).
 
 ## Why
 
@@ -33,6 +34,9 @@ server, not the browser, decides every outcome.
   touch sets the spin) to knock the others off the desk; the server simulates every shot with
   real physics and everyone watches the same replay; after 10 quiet rounds the desk starts
   shrinking. Rules: [docs/GAME_RULES/PEN_FIGHT.md](docs/GAME_RULES/PEN_FIGHT.md).
+- **Dots & Boxes** — 2–4 players join dots on squared paper; close a box to claim it and go
+  again; 4×4, 5×5 or 7×7. Touch near a line to preview it, lift to draw. Rules:
+  [docs/GAME_RULES/DOTS_AND_BOXES.md](docs/GAME_RULES/DOTS_AND_BOXES.md).
 - **Quick reactions** — eight emotes that pop over your seat for everyone (one per 1.5 s,
   only ever sent by a person).
 - **Color Burst Arcade design** — nostalgic classroom games × modern arcade: paper chits,
@@ -61,7 +65,7 @@ server, not the browser, decides every outcome.
 | 16 Parchi (flagship)        | 4       | ✅ Playable (Phase 3)                                                                  |
 | Draw & Guess (working name) | 3–6     | ✅ Playable (Phase 4)                                                                  |
 | Pen Fight                   | 2–4     | ✅ Playable (Phase 5)                                                                  |
-| Dots & Boxes                | 2–4     | Designed — Phase 6 (proposed); [design](docs/design/DOTS_AND_BOXES_DESIGN.md)          |
+| Dots & Boxes                | 2–4     | ✅ Playable (Phase 6)                                                                  |
 | Name Place Animal Thing     | 2–8     | Designed — Phase 7 (proposed); [design](docs/design/NAME_PLACE_ANIMAL_THING_DESIGN.md) |
 | Business (working title)    | 2–6     | Designed — Phase 8 (proposed); [design](docs/design/BUSINESS_DESIGN.md)                |
 | Count Up (fixture)          | 2–4     | Development/test only, never in production                                             |
@@ -98,6 +102,7 @@ packages/
 games/
   rmcs/           Raja Mantri Chor Sipahi (shared types, engine + bot, board)
   sixteen-parchi/ 16 Parchi (shared types + categories, engine + bot, board, content/en labels)
+  dots-and-boxes/ Dots & Boxes (shared grid + picking, engine + bot, board)
   pen-fight/      Pen Fight (shared desk/replay helpers, engine + Planck physics + bot, board)
   draw-and-guess/ Draw & Guess (shared types + guess matching, engine + bot templates, board, content/en words)
 e2e/              Playwright end-to-end tests
@@ -148,10 +153,12 @@ same action path as humans. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md
 
 ## Deployment
 
-Planned for Phase 12. The client is a static site; the server needs a host that supports
-long-lived WebSocket connections (serverless platforms do not). What exists today —
-build outputs, environment variables, health check, graceful shutdown — is described in
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Built for **Vercel + Redis**: the client is served from the CDN and the realtime game server
+runs as a Vercel Function on the same domain (`wss://<site>/api/socket/…`), with sessions,
+rooms and messages shared between instances through Redis
+([ADR-023](docs/decisions/ADR-023-multi-instance-cluster.md)). Locally everything runs in one
+process with in-memory state. Setup, environment variables, the readiness checklist and the
+production smoke test (`pnpm smoke`) are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Adding a game
 
@@ -160,16 +167,17 @@ See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) and [docs/GAME_SYSTEM.md](doc
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md). Current suite: 345 unit/integration tests and 16
-end-to-end runs (desktop + mobile), including full RMCS, 16 Parchi, Draw & Guess and Pen Fight
-matches on a phone profile and 16 Parchi, Draw & Guess and Pen Fight with reduced motion.
+See [docs/TESTING.md](docs/TESTING.md). Current suite: 401 unit/integration tests (the Redis
+adapter and the multi-instance tests run against a real Redis in CI), 20 end-to-end runs
+(desktop + mobile, every game, reduced motion, 7×7 touch precision) and a production smoke test.
 
 ## Known limitations
 
-- All rooms and sessions live in server memory: a restart or deploy ends every game.
-- One server instance only (scaling path documented, not built).
-- Four of the seven games so far; public lobby and matchmaking arrive in Phase 9.
-- Client bundle is ≈ 146 KB gzipped (Motion; game boards load separately); trimming is
+- A live deployment needs a Vercel project and a Redis database (see DEPLOYMENT.md).
+- One instance at a time hosts every room (others forward to it); sharding rooms across hosts is
+  a later step if needed.
+- Five of the seven games so far; public lobby and matchmaking arrive in Phase 9.
+- Client bundle is ≈ 148 KB gzipped (Motion; game boards load separately); trimming is
   planned for Phase 11.
 - No sound (excluded from v1). English only (the UI is translation-ready).
 
@@ -180,7 +188,7 @@ matches on a phone profile and 16 Parchi, Draw & Guess and Pen Fight with reduce
 3. ✅ 16 Parchi + quick reactions
 4. ✅ Draw & Guess (working name)
 5. ✅ Pen Fight
-6. Dots & Boxes _(proposed order)_
+6. ✅ Dots & Boxes + production architecture (Vercel + Redis)
 7. Name Place Animal Thing _(proposed order)_
 8. Business (working title) _(proposed order)_
 9. Public lobby, Quick Play, bot fill, "Play with Bots"

@@ -54,25 +54,29 @@ another tab".
 
 ### Server (`apps/server`)
 
-| Variable              | Default                                                               | Meaning                                                                                                                      |
-| --------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                | `3001`                                                                | HTTP/WebSocket port                                                                                                          |
-| `HOST`                | `0.0.0.0`                                                             | Bind address                                                                                                                 |
-| `ALLOWED_ORIGINS`     | `http://localhost:5173,http://127.0.0.1:5173,http://*.localhost:5173` | Comma-separated browser origins allowed to connect. `*.` matches exactly one subdomain label. **Must be set in production.** |
-| `TRUST_PROXY`         | `false`                                                               | Read the client IP from the last `X-Forwarded-For` entry (only behind a trusted proxy)                                       |
-| `ENABLE_FIXTURE_GAME` | `true`                                                                | Register the fixture game. Always forced off when `NODE_ENV=production`.                                                     |
-| `LOG_LEVEL`           | `info`                                                                | `silent`, `error`, `warn`, `info`, `debug`                                                                                   |
-| `GAME_TIME_SCALE`     | `1`                                                                   | Multiplies game phase timers (e.g. `0.3` for quick test games; e2e uses `0.25`). Always `1` when `NODE_ENV=production`.      |
-| `NODE_ENV`            | —                                                                     | `production` disables the fixture game                                                                                       |
+| Variable                 | Default                                                               | Meaning                                                                                                                      |
+| ------------------------ | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                   | `3001`                                                                | HTTP/WebSocket port                                                                                                          |
+| `HOST`                   | `0.0.0.0`                                                             | Bind address                                                                                                                 |
+| `ALLOWED_ORIGINS`        | `http://localhost:5173,http://127.0.0.1:5173,http://*.localhost:5173` | Comma-separated browser origins allowed to connect. `*.` matches exactly one subdomain label. **Must be set in production.** |
+| `TRUST_PROXY`            | `false`                                                               | Read the client IP from the last `X-Forwarded-For` entry (only behind a trusted proxy)                                       |
+| `ENABLE_FIXTURE_GAME`    | `true`                                                                | Register the fixture game. Always forced off when `NODE_ENV=production`.                                                     |
+| `LOG_LEVEL`              | `info`                                                                | `silent`, `error`, `warn`, `info`, `debug`                                                                                   |
+| `GAME_TIME_SCALE`        | `1`                                                                   | Multiplies game phase timers (e.g. `0.3` for quick test games; e2e uses `0.25`). Always `1` when `NODE_ENV=production`.      |
+| `NODE_ENV`               | —                                                                     | `production` disables the fixture game and time scaling, and requires `REDIS_URL` and real origins                           |
+| `REDIS_URL`              | — (in-memory state)                                                   | Shared state for several server instances (production: required). Unset locally: one process, in memory.                     |
+| `SOCKET_PATH`            | `/socket.io`                                                          | Socket.IO path the server answers on                                                                                         |
+| `RELEASE_HOST_WHEN_IDLE` | `false` (`true` on Vercel)                                            | Hand the room-host role over when this instance has no sockets (platforms that pause idle instances)                         |
 
 All other tunables (timers, limits, rate limits) are in `apps/server/src/config.ts`
 (`DEFAULT_CONFIG`) and can be overridden in code (tests do this).
 
 ### Client (`apps/client`)
 
-| Variable          | Default                             | Meaning                                          |
-| ----------------- | ----------------------------------- | ------------------------------------------------ |
-| `VITE_SERVER_URL` | `<page protocol>//<page host>:3001` | Game server URL. See `apps/client/.env.example`. |
+| Variable           | Default                                                                           | Meaning                                          |
+| ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `VITE_SERVER_URL`  | dev: `<page protocol>//<page host>:3001`; production build: the page's own origin | Game server URL. See `apps/client/.env.example`. |
+| `VITE_SOCKET_PATH` | dev: `/socket.io`; production build on its own site: `/api/socket/socket.io`      | Socket.IO path override                          |
 
 ## Useful commands
 

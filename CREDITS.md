@@ -15,6 +15,7 @@ artwork, icon sets or sounds are used.
 | [zod](https://zod.dev)                                                                                                                                                        | server (payload validation), game SDK | MIT               |
 | [obscenity](https://github.com/jo3-l/obscenity)                                                                                                                               | server (moderation)                   | MIT               |
 | [perfect-freehand](https://github.com/steveruizok/perfect-freehand) (no dependencies)                                                                                         | client (Draw & Guess stroke shapes)   | MIT               |
+| [ioredis](https://github.com/redis/ioredis) (+ @ioredis/commands, debug, redis-errors, standard-as-callback; cluster-key-slot and denque are Apache-2.0)                      | server (production shared state)      | MIT / Apache-2.0  |
 | [planck](https://github.com/piqnt/planck.js) (no dependencies)                                                                                                                | server (Pen Fight physics)            | MIT               |
 
 Checked with `pnpm licenses list --prod` on 2026-10-02.

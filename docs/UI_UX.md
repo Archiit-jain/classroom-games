@@ -82,6 +82,14 @@ Players can switch **Effects: Auto / Full / Lite** from the header.
   off the edge with an "OUT!" stamp; places appear only once the pen has fallen. Sudden death:
   a brief banner, a glowing dashed preview of the smaller desk and the old outline kept as a
   ghost while the desk shrinks.
+- Dots & Boxes: a sheet of squared paper (SVG) with ink dots; drawn lines in the drawer's
+  colour, claimed boxes tinted with the owner's initial, a "+N" pop and a bouncing badge on the
+  score chip. On wide screens the paper sits beside the chips (landscape), capped at 66 % of the
+  viewport height. Touch near a line: the nearest free line previews in your colour (a touch
+  right at a dot or a box centre previews nothing); slide to adjust, lift to draw; hover +
+  click and arrow keys + Enter on desktop. Your line appears at once while the server confirms
+  it. On your turn the paper's edge glows; after 60 s a nudge appears. At the end the full
+  board stays visible for a moment (`revealMs`) before the results.
 
 ## Accessibility
 

@@ -2,12 +2,18 @@
 
 Source of truth: `packages/protocol/src/events.ts` (types) and
 `packages/protocol/src/schemas.ts` (server-side zod schemas). This page lists what is
-implemented as of Phase 3.
+implemented as of Phase 6.
 
 ## Conventions
 
-- Transport: Socket.IO 4. The client authenticates in the handshake with
+- Transport: Socket.IO 4 over **WebSocket only** (no HTTP long-polling: requests may reach
+  different server instances). Path: `/socket.io` in development; in production the client
+  connects to its own site at `/api/socket/socket.io` (the Vercel Function, see
+  [DEPLOYMENT.md](DEPLOYMENT.md)). The client authenticates in the handshake with
   `auth: { token }` (omit it on first visit).
+- With several server instances the socket's instance forwards each event to the instance
+  hosting the rooms and relays its answers ([ADR-023](decisions/ADR-023-multi-instance-cluster.md));
+  the protocol is the same either way.
 - **Every client → server event must carry an acknowledgement callback.** Events without
   one are ignored. The ack is always:
 

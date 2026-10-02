@@ -8,7 +8,7 @@ One document per **shipped** game, describing the rules exactly as implemented.
 | 16 Parchi (flagship)        | [16_PARCHI.md](16_PARCHI.md)                             | Shipped (Phase 3)                                                                        |
 | Draw & Guess (working name) | [DRAW_AND_GUESS.md](DRAW_AND_GUESS.md)                   | Shipped (Phase 4)                                                                        |
 | Pen Fight                   | [PEN_FIGHT.md](PEN_FIGHT.md)                             | Shipped (Phase 5)                                                                        |
-| Dots & Boxes                | `DOTS_AND_BOXES.md`                                      | Arrives with its phase (designed: [design](../design/DOTS_AND_BOXES_DESIGN.md))          |
+| Dots & Boxes                | [DOTS_AND_BOXES.md](DOTS_AND_BOXES.md)                   | Shipped (Phase 6)                                                                        |
 | Name Place Animal Thing     | `NAME_PLACE_ANIMAL_THING.md`                             | Arrives with its phase (designed: [design](../design/NAME_PLACE_ANIMAL_THING_DESIGN.md)) |
 | Business (working title)    | `BUSINESS.md`                                            | Arrives with its phase (designed: [design](../design/BUSINESS_DESIGN.md))                |
 

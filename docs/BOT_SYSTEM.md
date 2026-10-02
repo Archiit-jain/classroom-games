@@ -68,4 +68,13 @@ sequenceDiagram
   self-elimination, and always finishes before the aim timer. Measured p50 ≈ 13 ms / p95 ≈ 17 ms per decision on
   a laptop — no worker thread
   ([ADR-022](decisions/ADR-022-pen-fight-physics.md)).
+- **Dots & Boxes bot** (one level): takes every box it can (a line closing two first) and keeps
+  moving; otherwise draws a safe line (gives no box its third side), preferring quiet parts of
+  the board; when nothing is safe, gives away the smallest chain or loop. Mistakes: with ≤ 4
+  safe lines left it plays an unsafe line 15 % of the time; in the end phase it gives a random
+  chain 20 % of the time; it never misses an available box. Thinks 0.7–1.6 s (0.35–0.7 s per
+  extra move in a chain); the decision itself is far below the 50 ms guard in the tests.
+- **After a server hand-over** (production, [ADR-023](decisions/ADR-023-multi-instance-cluster.md))
+  the new host re-attaches every bot seat and re-arms its thinking timer; a Draw & Guess bot's
+  half-drawn template is not carried over (it stops drawing that turn).
 - Bots never send quick reactions, and chat only to guess in Draw & Guess.

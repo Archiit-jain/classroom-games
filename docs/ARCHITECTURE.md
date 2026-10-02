@@ -16,7 +16,8 @@ flowchart LR
   end
 
   subgraph Server["Node server (apps/server)"]
-    T["Transport<br/>rate limit → schema → handler"]
+    T["Transport (gateway)<br/>rate limit → schema → forward"]
+    Cl["Cluster<br/>host lease · forwarding"]
     S["SessionManager"]
     R["RoomManager"]
     RT["GameRuntime<br/>(one per match)"]
@@ -26,9 +27,11 @@ flowchart LR
     M["Moderator<br/>(@cg/moderation)"]
     Reg["GameRegistry"]
     Tim["TimerService"]
-    Store[("InMemoryRoomStore")]
-    T --> S & R & C & Rep
-    R --> RT & Store & B
+    Store[("Shared store<br/>memory (dev) · Redis (prod)")]
+    T --> Cl
+    Cl --> S & R & C & Rep
+    Cl -. snapshots .-> Store
+    R --> RT & B
     RT --> Tim
     RT -. game modules .-> Reg
     B --> RT
@@ -39,23 +42,24 @@ flowchart LR
   Conn <-- "Socket.IO<br/>acked intents ↑ · filtered updates ↓" --> T
 ```
 
-| Component       | Location                             | Responsibility                                                                                                                                                                 |
-| --------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Transport       | `apps/server/src/transport/`         | Origin check, per-IP connection cap, handshake → session, per-socket flood guard, per-event rate limit, zod validation, acknowledgements, fan-out via `Notifier`               |
-| SessionManager  | `apps/server/src/session/`           | Anonymous identities, secret tokens (stored hashed), one active socket per session, nicknames                                                                                  |
-| RoomManager     | `apps/server/src/rooms/`             | Room lifecycle, membership, host, bots, reconnect grace, bot takeover/reclaim, match start/finish/abort                                                                        |
-| RoomStore       | `apps/server/src/rooms/RoomStore.ts` | Storage interface; v1 = in memory                                                                                                                                              |
-| GameRuntime     | `apps/server/src/runtime/`           | Hosts one match: runs the pure engine, schedules its timers, fans out per-seat views/events                                                                                    |
-| GameRegistry    | `apps/server/src/runtime/`           | `gameId → GameModule`, manifest sanity checks                                                                                                                                  |
-| BotManager      | `apps/server/src/bots/`              | Drives bot seats through the same action path as humans                                                                                                                        |
-| ChatService     | `apps/server/src/chat/`              | Room chat pipeline and quick reactions (validated, rate-limited, fanned out with the sender's seat)                                                                            |
-| ReportService   | `apps/server/src/reports/`           | Player reports → `ReportSink` (v1: bounded in-memory flags)                                                                                                                    |
-| Moderator       | `packages/moderation`                | Text normalisation, profanity censoring, contact-detail removal, nickname checks                                                                                               |
-| Protocol        | `packages/protocol`                  | Event names/payload types, error codes, view types; zod schemas at `@cg/protocol/schemas` (server only)                                                                        |
-| Game SDK        | `packages/game-sdk`                  | Game contract, seeded RNG, audience helpers, test harness, fixture game, client module types                                                                                   |
-| Client platform | `apps/client/src/platform/`          | `GameConnection` (socket + store), clock offset, storage, action sender (ids, double-tap coalescing), animation director, effects controller                                   |
-| Design system   | `packages/ui`                        | Color Burst Arcade tokens/styles + animated primitives shared by screens and game boards ([ADR-015](decisions/ADR-015-shared-ui-package.md))                                   |
-| Games           | `games/<id>`                         | Each game's shared types, pure engine + bot (server) and board (client) — `games/rmcs`, `games/sixteen-parchi`; five more planned ([catalogue](GAME_SYSTEM.md#game-catalogue)) |
+| Component       | Location                             | Responsibility                                                                                                                                                                                                                                   |
+| --------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Transport       | `apps/server/src/transport/`         | Gateway for this instance's sockets: origin check, per-IP connection cap, per-socket flood guard, per-event rate limit, zod validation; forwards each request to the host and relays its acks and messages                                       |
+| Cluster         | `apps/server/src/cluster/`           | Host lease, gateway ↔ host forwarding, state snapshots (fenced commits), hand-over and failover; `HostServices` builds the authoritative services; `SharedStore` = memory or Redis ([ADR-023](decisions/ADR-023-multi-instance-cluster.md))      |
+| SessionManager  | `apps/server/src/session/`           | Anonymous identities, secret tokens (stored hashed), one active socket per session, nicknames                                                                                                                                                    |
+| RoomManager     | `apps/server/src/rooms/`             | Room lifecycle, membership, host, bots, reconnect grace, bot takeover/reclaim, match start/finish/abort                                                                                                                                          |
+| RoomStore       | `apps/server/src/rooms/RoomStore.ts` | Room storage interface on the host; changes are snapshotted to the shared store                                                                                                                                                                  |
+| GameRuntime     | `apps/server/src/runtime/`           | Hosts one match: runs the pure engine, schedules its timers, fans out per-seat views/events                                                                                                                                                      |
+| GameRegistry    | `apps/server/src/runtime/`           | `gameId → GameModule`, manifest sanity checks                                                                                                                                                                                                    |
+| BotManager      | `apps/server/src/bots/`              | Drives bot seats through the same action path as humans                                                                                                                                                                                          |
+| ChatService     | `apps/server/src/chat/`              | Room chat pipeline and quick reactions (validated, rate-limited, fanned out with the sender's seat)                                                                                                                                              |
+| ReportService   | `apps/server/src/reports/`           | Player reports → `ReportSink` (bounded flags in the shared store, 24 h)                                                                                                                                                                          |
+| Moderator       | `packages/moderation`                | Text normalisation, profanity censoring, contact-detail removal, nickname checks                                                                                                                                                                 |
+| Protocol        | `packages/protocol`                  | Event names/payload types, error codes, view types; zod schemas at `@cg/protocol/schemas` (server only)                                                                                                                                          |
+| Game SDK        | `packages/game-sdk`                  | Game contract, seeded RNG, audience helpers, test harness, fixture game, client module types                                                                                                                                                     |
+| Client platform | `apps/client/src/platform/`          | `GameConnection` (socket + store), clock offset, storage, action sender (ids, double-tap coalescing), animation director, effects controller                                                                                                     |
+| Design system   | `packages/ui`                        | Color Burst Arcade tokens/styles + animated primitives shared by screens and game boards ([ADR-015](decisions/ADR-015-shared-ui-package.md))                                                                                                     |
+| Games           | `games/<id>`                         | Each game's shared types, pure engine + bot (server) and board (client) — `games/rmcs`, `games/sixteen-parchi`, `games/draw-and-guess`, `games/pen-fight`, `games/dots-and-boxes`; two more planned ([catalogue](GAME_SYSTEM.md#game-catalogue)) |
 
 ## Request path (one game action)
 
@@ -105,8 +109,9 @@ sequenceDiagram
    platform; engines hear about them through `onSeatChange`.
 6. **Errors are codes.** The server never sends user-facing English; the client maps codes
    to translated messages.
-7. **Replaceable edges.** `RoomStore`, `Moderator`, `ReportSink` are interfaces with one
-   v1 implementation each.
+7. **Replaceable edges.** `RoomStore`, `Moderator`, `ReportSink` and `SharedStore` are
+   interfaces; `SharedStore` has an in-memory (development, tests) and a Redis (production)
+   implementation.
 
 ## Client architecture
 
@@ -137,9 +142,21 @@ catalog is checked to cover every server error code. Game-specific text lives in
 client module (`messages`). Adding a language = adding a catalog with the same shape. →
 [ADR-010](decisions/ADR-010-typed-i18n-catalog.md)
 
-## Scaling (not built)
+## Multiple instances (Phase 6)
 
-v1 is one Node process with in-memory state. Game state and timers live in the process that
-hosts a room, so scaling out needs room affinity (each room pinned to one instance), sticky
-sessions, the Socket.IO Redis adapter for cross-instance broadcast, and a shared
-`RoomStore`. → [ADR-005](decisions/ADR-005-in-memory-room-store.md)
+Production runs any number of server instances (Vercel Functions) sharing state through Redis
+([ADR-023](decisions/ADR-023-multi-instance-cluster.md), [deployment](DEPLOYMENT.md)):
+
+- Every instance is a **gateway** for its own sockets (origin check, rate limits, schemas, clock
+  pings) and forwards everything else.
+- Exactly one instance — the holder of the `cg:host` **lease** (with an epoch) — runs the
+  authoritative services above (`HostServices`) for all rooms. Requests and deliveries travel
+  over per-instance Redis channels; the host's own sockets never touch Redis.
+- The host writes changed sessions and rooms (runtime state, version, RNG, action ids, timer
+  deadlines, grace deadlines) every 100 ms in commits **fenced by the lease**.
+- An idle host hands over; a crashed host's lease expires (15 s) and another instance takes
+  over, restoring rooms, timers and bots and resending state to every player.
+
+Locally (`pnpm dev`, tests) the same code runs in one process with `MemorySharedStore`; that
+process is always the host. The multi-instance tests run several instances in one process
+against the memory store, and against a real Redis in CI.

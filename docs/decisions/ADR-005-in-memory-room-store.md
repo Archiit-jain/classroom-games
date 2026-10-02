@@ -1,6 +1,7 @@
 # ADR-005: In-memory RoomStore; documented scaling path
 
-**Status:** Accepted (Phase 0 spec §2, §17; change C7)
+**Status:** Accepted for local development; **superseded in production by
+[ADR-023](ADR-023-multi-instance-cluster.md)** (Phase 6: shared state in Redis, one host lease).
 
 ## Context
 

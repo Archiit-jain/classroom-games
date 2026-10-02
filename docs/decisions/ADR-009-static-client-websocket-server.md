@@ -1,6 +1,8 @@
 # ADR-009: Static client + WebSocket server
 
-**Status:** Accepted (Phase 0 spec §17)
+**Status:** **Superseded by [ADR-023](ADR-023-multi-instance-cluster.md)** (Phase 6): Vercel
+Functions now serve WebSockets, so the client and the realtime server deploy together on Vercel,
+with shared state in Redis.
 
 ## Context
 

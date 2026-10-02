@@ -1,9 +1,17 @@
 # Production architecture — deployment audit and design
 
-**Status:** Phase 6 design pass, written before implementation (nothing here is built yet).
-**Goal:** Classroom Games runs as a real public website — HTTPS/WSS on a normal domain, many
-players on different devices and networks, Vercel as the primary deployment target — while
-local development keeps the simple in-memory setup.
+**Status:** Phase 6 design pass, written before implementation; **built in Phase 6** — see
+[ADR-023](../decisions/ADR-023-multi-instance-cluster.md) and [DEPLOYMENT.md](../DEPLOYMENT.md).
+
+> **Implementation notes.** One cluster-wide host lease replaced the per-room leases proposed
+> in §4 (same guarantees, far fewer moving parts; sharding by room stays possible). Proven by
+> 11 multi-instance tests (in memory locally, real Redis in CI: cross-instance play, reconnect
+> on another instance, hand-over, crash failover with timers and bots resuming, fencing) and a
+> production smoke test against the bundled Vercel Function. Not yet run on a live Vercel
+> deployment (needs the owner's Vercel project and Redis).
+> **Goal:** Classroom Games runs as a real public website — HTTPS/WSS on a normal domain, many
+> players on different devices and networks, Vercel as the primary deployment target — while
+> local development keeps the simple in-memory setup.
 
 > **Decision status.** **Facts** below come from Vercel's documentation as of October 2026
 > (sources in §8) and from the code. **Decided by the product owner (Phase 6):** option A —
