@@ -1,0 +1,295 @@
+/* Dots & Boxes — Color Burst Arcade board: squared notebook paper, marker lines, inked boxes. */
+
+.db {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ───────── Players ───────── */
+.db-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.db-player {
+  position: relative;
+  flex: 1 1 130px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
+  background: var(--color-surface);
+  border: 2px solid var(--cb-outline);
+  border-left: 6px solid var(--seat);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--pop-sm);
+  transition:
+    transform var(--dur-med) var(--ease-pop),
+    box-shadow var(--dur-med) var(--ease-out);
+}
+.db-player .cb-reaction {
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  z-index: 3;
+}
+.db-player__name {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.db-player--me .db-player__name {
+  color: var(--cb-cyan);
+}
+.db-player__score {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+}
+.db-player--active {
+  transform: translateY(-2px);
+  box-shadow:
+    var(--pop-sm),
+    0 0 0 3px var(--seat);
+}
+.db-player--winner {
+  background: color-mix(in srgb, var(--seat) 28%, var(--color-surface));
+}
+.db-player__plus {
+  position: absolute;
+  top: -6px;
+  right: 8px;
+  padding: 0 7px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-sm);
+  color: #fff;
+  background: var(--seat);
+  border: 2px solid var(--cb-outline);
+  border-radius: var(--radius-pill);
+  pointer-events: none;
+}
+[data-effects='reduced'] .db-player--active {
+  transform: none;
+}
+
+/* ───────── Progress + status ───────── */
+.db-progress {
+  height: 6px;
+  overflow: hidden;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-pill);
+}
+.db-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--cb-cyan), var(--cb-violet), var(--cb-pink));
+  transition: width var(--dur-med) var(--ease-out);
+}
+.db-status {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 34px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--text-lg);
+}
+.db-badge {
+  /* One fixed spot, so an outgoing badge and the next one cross-fade in place. */
+  position: absolute;
+  right: 0;
+  display: inline-block;
+  padding: 0 12px;
+  font-size: var(--text-md);
+  color: #fff;
+  background: var(--seat);
+  border: 3px solid var(--cb-outline);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--pop-sm);
+}
+
+/* ───────── The paper ───────── */
+.db-stage {
+  display: flex;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  outline: none;
+}
+.db-stage:focus-visible {
+  box-shadow: 0 0 0 4px var(--color-focus);
+}
+.db-paper {
+  display: block;
+  width: 100%;
+  /* Square, as large as the screen allows (landscape phones size it to the height). */
+  max-width: min(100%, 66vh);
+  aspect-ratio: 1;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--pop), var(--float);
+}
+.db-paper--active {
+  cursor: pointer;
+}
+.db-paper__sheet {
+  fill: #fdfcff;
+  stroke: var(--cb-outline);
+  stroke-width: 0.05;
+}
+.db-paper__square {
+  fill: none;
+  stroke: #cfe0ff;
+  stroke-width: 0.012;
+}
+.db-paper__margin {
+  stroke: #ffb3c4;
+  stroke-width: 0.025;
+}
+.db-stage--mine .db-paper__sheet {
+  stroke: var(--me);
+  stroke-width: 0.07;
+}
+.db-dot {
+  fill: #2a2347;
+}
+
+/* Lines: marker strokes in the player's colour; a fresh one draws from dot to dot. */
+.db-line {
+  stroke-width: 0.085;
+  stroke-linecap: round;
+}
+.db-line--fresh {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: db-draw 220ms var(--ease-out) forwards;
+}
+@keyframes db-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.db-line--wobble {
+  stroke-width: 0.09;
+}
+.db-last {
+  stroke-width: 0.26;
+  stroke-linecap: round;
+  opacity: 0.22;
+}
+.db-pending {
+  stroke-width: 0.085;
+  stroke-linecap: round;
+  stroke-dasharray: 0.08 0.1;
+  opacity: 0.7;
+}
+.db-preview line {
+  stroke-width: 0.15;
+  stroke-linecap: round;
+  opacity: 0.5;
+}
+.db-preview circle {
+  stroke: none;
+  opacity: 0.7;
+}
+
+/* Boxes */
+.db-box rect {
+  opacity: 0.32;
+}
+.db-box__initial {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.42px;
+}
+.db-paper--over .db-box--lose {
+  opacity: 0.35;
+  transition: opacity 600ms ease;
+}
+.db-paper--over .db-box--win rect {
+  opacity: 0.55;
+}
+[data-effects='full'] .db-paper--over .db-box--win {
+  animation: db-glow 1.2s ease-in-out 2;
+}
+@keyframes db-glow {
+  50% {
+    filter: brightness(1.25);
+  }
+}
+
+.db-hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+.db-nudge {
+  color: var(--cb-yellow);
+}
+
+/* Settings preview */
+.db-settings {
+  align-items: center;
+}
+.db-settings__preview {
+  width: 72px;
+  height: 72px;
+  fill: var(--color-text);
+}
+
+/* Landscape phones: players and status beside a board sized to the screen height. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .db {
+    display: grid;
+    grid-template-columns: minmax(140px, 1fr) auto;
+    grid-template-areas:
+      'players stage'
+      'progress stage'
+      'status stage'
+      'hint stage';
+    grid-template-rows: auto auto auto 1fr;
+    align-items: start;
+    column-gap: 12px;
+  }
+  .db-players {
+    grid-area: players;
+    flex-direction: column;
+  }
+  .db-players .db-player {
+    flex: none;
+  }
+  .db-progress {
+    grid-area: progress;
+  }
+  .db-status {
+    grid-area: status;
+    font-size: var(--text-md);
+  }
+  .db-stage {
+    grid-area: stage;
+  }
+  .db-hint {
+    grid-area: hint;
+    text-align: left;
+  }
+  .db-paper {
+    width: calc(100vh - 24px);
+    max-width: calc(100vh - 24px);
+  }
+}

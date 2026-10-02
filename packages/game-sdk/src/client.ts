@@ -111,6 +111,12 @@ export interface GameClientModule<V, A, E, Settings> {
   reactions?: boolean;
   /** Confetti on the podium in lite mode too (default true; full mode always has it). */
   liteConfetti?: boolean;
+  /**
+   * After the match ends, keep the board on screen this long (ms) before the
+   * results — for games whose final move and end-of-game reveal happen on the board.
+   * Default: straight to the results.
+   */
+  revealMs?(effects: EffectsMode): number;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1,18 +1,40 @@
 import type { RoomView } from '@cg/protocol';
 import { accentVar } from '@cg/ui';
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { ChatPanel } from '../components/ChatPanel';
 import { gameClients, gameName } from '../games/registry';
 import { t } from '../i18n';
-import { useConnection } from '../platform/context';
+import { useConnection, useEffectsSetting } from '../platform/context';
 import { LobbyView } from './LobbyView';
 import { MatchView } from './MatchView';
 import { ResultsView } from './ResultsView';
+
+/**
+ * True for a short while after a match this player watched ends, so the board can
+ * finish its last move and its end-of-game reveal before the results (opt-in per
+ * game via `revealMs`). Joining or reconnecting into finished results never holds.
+ */
+function useRevealHold(room: RoomView, revealMs: number): boolean {
+  const matchId = room.match?.matchId ?? null;
+  const [seen, setSeen] = useState({ phase: room.phase, matchId, hold: false });
+  if (seen.phase !== room.phase || seen.matchId !== matchId) {
+    const hold = revealMs > 0 && seen.phase === 'IN_GAME' && room.phase === 'RESULTS';
+    setSeen({ phase: room.phase, matchId, hold });
+  }
+  useEffect(() => {
+    if (!seen.hold) return;
+    const timer = setTimeout(() => setSeen((s) => ({ ...s, hold: false })), revealMs);
+    return () => clearTimeout(timer);
+  }, [seen.hold, revealMs]);
+  return seen.hold;
+}
 
 export function RoomScreen({ room }: { room: RoomView }) {
   const conn = useConnection();
   const inMatch = room.phase === 'IN_GAME';
   const module = gameClients.get(room.gameId);
+  const { mode } = useEffectsSetting();
+  const holding = useRevealHold(room, module?.revealMs?.(mode) ?? 0);
 
   const leave = async () => {
     if (!window.confirm(inMatch ? t('match.confirmLeave') : t('room.confirmLeave'))) return;
@@ -41,8 +63,8 @@ export function RoomScreen({ room }: { room: RoomView }) {
       <div className="room__layout">
         <div className="room__main">
           {(room.phase === 'LOBBY' || room.phase === 'STARTING') && <LobbyView room={room} />}
-          {room.phase === 'IN_GAME' && <MatchView room={room} />}
-          {room.phase === 'RESULTS' && <ResultsView room={room} />}
+          {(room.phase === 'IN_GAME' || holding) && <MatchView room={room} />}
+          {room.phase === 'RESULTS' && !holding && <ResultsView room={room} />}
         </div>
         <aside className="room__side">
           <ChatPanel />
