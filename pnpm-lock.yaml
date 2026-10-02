@@ -44,6 +44,9 @@ importers:
       '@cg/game-draw-and-guess':
         specifier: workspace:*
         version: link:../../games/draw-and-guess
+      '@cg/game-pen-fight':
+        specifier: workspace:*
+        version: link:../../games/pen-fight
       '@cg/game-rmcs':
         specifier: workspace:*
         version: link:../../games/rmcs
@@ -90,6 +93,9 @@ importers:
       '@cg/game-draw-and-guess':
         specifier: workspace:*
         version: link:../../games/draw-and-guess
+      '@cg/game-pen-fight':
+        specifier: workspace:*
+        version: link:../../games/pen-fight
       '@cg/game-rmcs':
         specifier: workspace:*
         version: link:../../games/rmcs

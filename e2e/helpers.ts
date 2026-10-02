@@ -52,3 +52,4 @@ export const FIXTURE = 'Count Up (dev fixture)';
 export const RMCS = 'Raja Mantri Chor Sipahi';
 export const PARCHI = '16 Parchi';
 export const DRAW = 'Draw & Guess';
+export const PEN_FIGHT = 'Pen Fight';
