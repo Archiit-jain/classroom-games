@@ -113,37 +113,49 @@ while (Date.now() < deadline) {
       if (page === host && (await host.locator('.bz-tile--mine').count()) > 0) {
         if (!loanShown) {
           loanShown = true;
-          await host.getByRole('button', { name: 'Loan', exact: true }).click();
-          await host.waitForTimeout(300);
-          await shot(host, '13-loan-desktop');
-          await host
-            .getByRole('button', { name: /^Borrow/ })
-            .first()
-            .click();
-          await host.waitForTimeout(900);
-          await shot(host, '14-loan-taken-desktop');
+          try {
+            await host.getByRole('button', { name: 'Loan', exact: true }).click();
+            await host.waitForTimeout(300);
+            await shot(host, '13-loan-desktop');
+            await host
+              .getByRole('button', { name: /^Borrow/ })
+              .first()
+              .click();
+            await host.waitForTimeout(900);
+            await shot(host, '14-loan-taken-desktop');
+          } catch {
+            console.log('loanShown step skipped');
+          }
           continue;
         }
         if (!auctioned) {
           auctioned = true;
-          await host.getByRole('button', { name: 'Auction', exact: true }).click();
-          await host.waitForTimeout(300);
-          await host
-            .getByRole('button', { name: /^Auction / })
-            .first()
-            .click();
-          await host.waitForTimeout(900);
+          try {
+            await host.getByRole('button', { name: 'Auction', exact: true }).click();
+            await host.waitForTimeout(300);
+            await host
+              .getByRole('button', { name: /^Auction / })
+              .first()
+              .click();
+            await host.waitForTimeout(900);
+          } catch {
+            console.log('auctioned step skipped');
+          }
           continue;
         }
         if (!traded && (await host.locator('.bz-auction').count()) === 0) {
           traded = true;
-          await host.getByRole('button', { name: 'Trade', exact: true }).click();
-          await host.waitForTimeout(300);
-          await host.getByLabel('Trade with').selectOption({ index: 0 });
-          await host.locator('.bz-trade input[type=number]').first().fill('500');
-          await shot(host, '11-trade-builder-desktop');
-          await host.getByRole('button', { name: 'Send offer' }).click();
-          await host.waitForTimeout(600);
+          try {
+            await host.getByRole('button', { name: 'Trade', exact: true }).click();
+            await host.waitForTimeout(300);
+            await host.getByLabel('Trade with').selectOption({ index: 0 });
+            await host.locator('.bz-trade input[type=number]').first().fill('500');
+            await shot(host, '11-trade-builder-desktop');
+            await host.getByRole('button', { name: 'Send offer' }).click();
+            await host.waitForTimeout(600);
+          } catch {
+            console.log('trade step skipped');
+          }
           continue;
         }
       }
