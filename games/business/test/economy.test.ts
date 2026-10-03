@@ -2,34 +2,30 @@ import { describe, expect, it } from 'vitest';
 import { simulateEconomy } from '../src/server';
 
 /**
- * Guards the tuned economy (design §10) with a smaller simulation than the full
- * report (`pnpm --filter @cg/game-business sim`): a regression in prices, fees or
- * the bot shows up here.
+ * Guards the tuned economy (BUSINESS_REDESIGN.md §20) with a small simulation; the full
+ * report is `pnpm --filter @cg/game-business sim`. Luck-heavy targets, not optimisation.
  */
-describe('economy (400 seeded bot matches, 16 rounds, 2–6 players)', () => {
-  const r = simulateEconomy({ games: 400, seed: 11, rounds: [16] });
+describe('economy (300 seeded matches, 15 rounds, 2–6 players, half casual)', () => {
+  const r = simulateEconomy({ games: 300, seed: 11, rounds: [15], casual: 0.5 });
 
-  it('keeps games open: the early leader often loses and runaway wins are rare', () => {
-    expect(r.earlyLeaderWinRate).toBeLessThan(0.6);
-    expect(r.runawayRate).toBeLessThan(0.2);
+  it('keeps games open: the early leader often loses, runaways are rare', () => {
+    expect(r.earlyLeaderWinRate).toBeLessThanOrEqual(0.55);
+    expect(r.runawayRate).toBeLessThan(0.15);
   });
 
-  it('rarely leaves anyone with nothing, yet money pressure exists', () => {
-    expect(r.brokeRate).toBeLessThan(0.05);
-    expect(r.clearancePerGame).toBeGreaterThan(0);
+  it('has money pressure without wrecking players', () => {
+    expect(r.insolventRate).toBeLessThan(0.1);
     expect(r.meanSpread).toBeGreaterThan(0.15);
   });
 
-  it('balances the regions (return per coin invested within 1.6×) and keeps industries in line', () => {
-    const roi = Object.values(r.regionReturn);
-    expect(Math.max(...roi) / Math.min(...roi)).toBeLessThan(1.6);
-    expect(r.industryReturn).toBeLessThan(1.6 * Math.max(...roi));
-  });
-
-  it('develops cities and buys most places', () => {
-    const levels = Object.values(r.meanLevel);
-    expect(levels.reduce((a, b) => a + b, 0) / levels.length).toBeGreaterThan(1.6);
-    const owned = Object.values(r.ownedAtEnd);
-    expect(owned.reduce((a, b) => a + b, 0) / owned.length).toBeGreaterThan(0.6);
+  it('uses every system: buying, transport, building (incl. hotels), loans, trades, auctions', () => {
+    expect(r.ownedAtEnd).toBeGreaterThan(0.5);
+    expect(r.transportOwnedAtEnd).toBeGreaterThan(0.5);
+    expect(r.housesPerGame + r.hotelsPerGame).toBeGreaterThan(1.5);
+    expect(r.hotelsPerGame).toBeGreaterThan(0.3);
+    expect(r.loansPerGame).toBeGreaterThan(0);
+    expect(r.tradesPerGame).toBeGreaterThan(0);
+    expect(r.auctionsPerGame).toBeGreaterThan(0);
+    for (const g of ['A', 'B', 'C', 'D'] as const) expect(r.groupOwned[g]).toBeGreaterThan(0.4);
   });
 });

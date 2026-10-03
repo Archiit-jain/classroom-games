@@ -10,28 +10,29 @@ import {
 } from '@cg/game-sdk';
 import { z } from 'zod';
 import {
+  ASSET_SPACES,
   BOARD,
   BOARD_SIZE,
-  CARDS,
+  CITY_SPACES,
   DEFAULT_ECONOMY,
-  INDUSTRY_SPACES,
-  MAX_LEVEL,
+  DEFAULT_ROUNDS,
+  HOTEL,
   MAX_PLAYERS,
+  MAX_ROUNDS,
   MIN_PLAYERS,
-  OWNABLE_SPACES,
-  ROUND_OPTIONS,
-  WHEEL,
-  cardById,
-  cityFee,
-  developCost,
+  MIN_ROUNDS,
+  TRANSPORT_SPACES,
+  buildCost,
+  buildingsValue,
+  cityRent,
+  eventOutcome,
+  groupOf,
+  groupSpaces,
   isCity,
-  isIndustry,
+  isTransport,
   priceOf,
-  regionOf,
-  regionSpaces,
-  round5,
-  type Card,
-  type Deck,
+  round10,
+  transportRent,
   type Economy,
 } from '../shared/board';
 import type {
@@ -41,24 +42,31 @@ import type {
   BusinessState,
   BusinessTiming,
   BusinessView,
-  Choice,
-  Decision,
+  FinalWealth,
   LogEntry,
+  Offer,
+  Payment,
   PayReason,
+  PlayerState,
   SeatMap,
-  Sold,
 } from '../shared/types';
 
 export const BUSINESS_GAME_ID = 'business';
 const PHASE_TIMER = 'phase';
-const LOG_SIZE = 30;
+const LOG_SIZE = 40;
+const BID_STEP = 100;
 
-/** Play-test values (design §2). */
+/** Play-test values; the 30 s decision time is frozen. */
 export const DEFAULT_TIMING: BusinessTiming = {
-  rollMs: 10_000,
-  decideMs: 15_000,
-  hopMs: 160,
-  landingMs: 1200,
+  turnMs: 30_000,
+  hopMs: 140,
+  landingMs: 900,
+  eventMs: 1800,
+  auctionMs: 15_000,
+  auctionExtendMs: 5000,
+  auctionMaxMs: 30_000,
+  tradeMs: 20_000,
+  skipMs: 1400,
 };
 
 export interface BusinessOptions {
@@ -69,63 +77,129 @@ export interface BusinessOptions {
   /** Bot delays (ms, scaled). */
   botRollMs?: [number, number];
   botThinkMs?: [number, number];
-  /** Share of close buy/develop calls a bot gets "wrong" (human-like). */
+  /** Share of close buy/build calls a bot gets "wrong". */
   botMistakeRate?: number;
   /** Consecutive automatic actions before a connected player is handed to a bot. */
   idleAfterAutoActs?: number;
-  /** The card set (the economy simulation swaps in no-op cards to measure their effect). */
-  cards?: readonly Card[];
   /** Tests only: script the dice (default: fair six-sided dice from the match RNG). */
-  dice?: (rng: SeededRng, count: number) => number[];
+  dice?: (rng: SeededRng) => [number, number];
+  /** Simulation only: events still show their roll but do nothing (measures their impact). */
+  eventsOff?: boolean;
 }
 
 type T = Transition<BusinessState, BusinessEvent>;
 
-const turnField = z.number().int().min(0).max(100_000);
-const spaceField = z
+// ───────────────────────────── schemas ─────────────────────────────
+
+const turn = z.number().int().min(0).max(1_000_000);
+const space = z
   .number()
   .int()
   .min(0)
   .max(BOARD_SIZE - 1);
+const money = z.number().int().min(0).max(10_000_000);
+const offer = z.strictObject({
+  cash: money,
+  assets: z.array(space).max(ASSET_SPACES.length),
+});
 const actionSchema = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('ROLL'), turn: turnField }),
-  z.strictObject({ type: z.literal('BUY'), turn: turnField, space: spaceField }),
-  z.strictObject({ type: z.literal('DEVELOP'), turn: turnField, space: spaceField }),
-  z.strictObject({ type: z.literal('SKIP'), turn: turnField }),
+  z.strictObject({ type: z.literal('ROLL'), turn }),
+  z.strictObject({ type: z.literal('EVENT_ROLL'), turn }),
+  z.strictObject({ type: z.literal('BUY'), turn, space }),
+  z.strictObject({
+    type: z.literal('BUILD'),
+    turn,
+    space,
+    levels: z.number().int().min(1).max(HOTEL),
+  }),
+  z.strictObject({ type: z.literal('SKIP'), turn }),
+  z.strictObject({ type: z.literal('JAIL_PAY'), turn }),
+  z.strictObject({ type: z.literal('JAIL_WAIT'), turn }),
+  z.strictObject({ type: z.literal('LOAN'), turn, amount: money }),
+  z.strictObject({ type: z.literal('REPAY'), turn, amount: money }),
+  z.strictObject({ type: z.literal('SELL_BUILDING'), turn, space }),
+  z.strictObject({ type: z.literal('SELL_ASSET'), turn, space }),
+  z.strictObject({ type: z.literal('BANK_HANDLES_IT'), turn }),
+  z.strictObject({ type: z.literal('AUCTION_START'), turn, space }),
+  z.strictObject({ type: z.literal('BID'), turn, amount: money }),
+  z.strictObject({
+    type: z.literal('TRADE_PROPOSE'),
+    turn,
+    to: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_PLAYERS - 1),
+    give: offer,
+    get: offer,
+  }),
+  z.strictObject({ type: z.literal('TRADE_ANSWER'), turn, accept: z.boolean() }),
 ]);
 
 // ───────────────────────────── pure helpers ─────────────────────────────
 
-/** Coins + price of everything owned + development spent (design §8). */
-export function wealthOf(
-  s: Pick<BusinessState, 'coins' | 'owner' | 'level' | 'economy'>,
-  seat: number,
-) {
-  let total = s.coins[seat] ?? 0;
-  for (const i of OWNABLE_SPACES) {
-    if (s.owner[i] !== seat) continue;
-    total += priceOf(i, s.economy);
-    if (isCity(BOARD[i])) total += Math.max(0, (s.level[i] ?? 1) - 1) * developCost(i, s.economy);
+type Owned = Pick<BusinessState, 'owner' | 'level' | 'economy'>;
+
+export const ownedBy = (s: Pick<BusinessState, 'owner'>, seat: number) =>
+  ASSET_SPACES.filter((i) => s.owner[i] === seat);
+
+/** Does `seat` hold enough cities of the group of `space` for the ×2 group rent? */
+export function hasGroupBonus(s: Owned, space: number, seat: number): boolean {
+  const g = groupOf(space);
+  if (!g) return false;
+  return groupSpaces(g).filter((i) => s.owner[i] === seat).length >= s.economy.groupThreshold;
+}
+
+/** The rent a visitor pays on landing on `space` (0 if unowned). */
+export function rentAt(s: Owned, space: number): number {
+  const owner = s.owner[space];
+  if (owner === null || owner === undefined) return 0;
+  if (isTransport(BOARD[space])) {
+    return transportRent(TRANSPORT_SPACES.filter((i) => s.owner[i] === owner).length, s.economy);
   }
+  return cityRent(space, s.level[space] ?? 0, hasGroupBonus(s, space, owner), s.economy);
+}
+
+/** What building `levels` more levels on `space` costs right now. */
+export function buildPrice(s: Owned, space: number, levels: number): number {
+  let total = 0;
+  for (let k = 0; k < levels; k++) total += buildCost(space, (s.level[space] ?? 0) + k, s.economy);
   return total;
 }
 
-export const ownsRegion = (s: Pick<BusinessState, 'owner'>, space: number, seat: number) => {
-  const region = regionOf(space);
-  return region !== null && regionSpaces(region).every((i) => s.owner[i] === seat);
-};
+/** List value of what a player owns (prices + buildings) — the base of property-backed loans. */
+export const listValue = (s: Owned, seat: number) =>
+  ownedBy(s, seat).reduce(
+    (sum, i) => sum + priceOf(i, s.economy) + buildingsValue(i, s.level[i] ?? 0, s.economy),
+    0,
+  );
 
-/** The visitor fee a player pays on landing on someone else's place (0 if none). */
-export function feeAt(
-  s: Pick<BusinessState, 'owner' | 'level' | 'economy'>,
-  space: number,
-): number {
-  const owner = s.owner[space];
-  if (owner === null || owner === undefined) return 0;
-  if (isIndustry(BOARD[space])) {
-    return s.economy.factoryVisit * INDUSTRY_SPACES.filter((i) => s.owner[i] === owner).length;
-  }
-  return cityFee(space, s.level[space] ?? 1, ownsRegion(s, space, owner), s.economy);
+export const borrowLimit = (s: Owned, seat: number) =>
+  s.economy.loanBase + round10(listValue(s, seat) * s.economy.loanBacking);
+
+/** How much more a player may borrow, in whole loan steps. */
+export function canBorrow(s: BusinessState, seat: number): number {
+  if (s.round >= s.rounds) return 0; // no new loans in the final round
+  const room = borrowLimit(s, seat) - (s.players[seat]?.debt ?? 0);
+  const step = s.economy.loanStep;
+  // A loan adds its amount plus the fee to the debt.
+  return Math.max(0, Math.floor(room / (step * (1 + s.economy.loanFee)) + 1e-9) * step);
+}
+
+/** Final wealth (frozen formula): cash + cumulative spending on properties, buildings, transport. */
+export function wealthOf(s: Pick<BusinessState, 'players'>, seat: number): FinalWealth {
+  const p = s.players[seat];
+  const cash = p?.cash ?? 0;
+  const property = p?.spend.property ?? 0;
+  const development = p?.spend.development ?? 0;
+  const transport = p?.spend.transport ?? 0;
+  return {
+    cash,
+    property,
+    development,
+    transport,
+    total: cash + property + development + transport,
+  };
 }
 
 const rank = (seats: number[], value: (seat: number) => number) =>
@@ -134,13 +208,27 @@ const rank = (seats: number[], value: (seat: number) => number) =>
     place: 1 + seats.filter((o) => value(o) > value(seat)).length,
   }));
 
+const newPlayer = (cash: number): PlayerState => ({
+  cash,
+  debt: 0,
+  position: 0,
+  spend: { property: 0, development: 0, transport: 0 },
+  skipNext: false,
+  noBuyNext: false,
+  noBuyActive: false,
+  rentHoliday: false,
+  insolvent: false,
+  autoActs: 0,
+});
+
 /** A mutable working copy for one transition (the input state is never touched). */
 interface Work {
   s: BusinessState;
-  /** Passed or landed on Start during this transition. */
-  passed?: boolean;
   events: Scoped<BusinessEvent>[];
   requests: RuntimeRequest[];
+  ctx: StepCtx;
+  /** Extra animation time this transition needs before the next step. */
+  hold: number;
 }
 
 export function createBusinessGame(
@@ -148,443 +236,575 @@ export function createBusinessGame(
 ): GameModule<BusinessState, BusinessAction, BusinessView, BusinessEvent, BusinessSettings> {
   const scale = options.timeScale ?? 1;
   const scaled = (v: number) => Math.max(0, Math.round(v * scale));
-  const timing: BusinessTiming = {
-    rollMs: scaled(options.timing?.rollMs ?? DEFAULT_TIMING.rollMs),
-    decideMs: scaled(options.timing?.decideMs ?? DEFAULT_TIMING.decideMs),
-    hopMs: scaled(options.timing?.hopMs ?? DEFAULT_TIMING.hopMs),
-    landingMs: scaled(options.timing?.landingMs ?? DEFAULT_TIMING.landingMs),
-  };
+  const timing = Object.fromEntries(
+    Object.entries({ ...DEFAULT_TIMING, ...options.timing }).map(([k, v]) => [k, scaled(v)]),
+  ) as unknown as BusinessTiming;
   const economy: Economy = { ...DEFAULT_ECONOMY, ...options.economy };
   const [rollMin, rollMax] = (options.botRollMs ?? [600, 1400]).map(scaled) as [number, number];
   const [thinkMin, thinkMax] = (options.botThinkMs ?? [800, 2000]).map(scaled) as [number, number];
   const mistakeRate = options.botMistakeRate ?? 0.1;
   const idleAfter = options.idleAfterAutoActs ?? 3;
-  const cards = options.cards ?? CARDS;
   const rollDice =
-    options.dice ??
-    ((rng: SeededRng, count: number) => Array.from({ length: count }, () => rng.int(1, 6)));
-  const cardOf = (id: string) => cards.find((c) => c.id === id) ?? cardById(id);
+    options.dice ?? ((rng: SeededRng): [number, number] => [rng.int(1, 6), rng.int(1, 6)]);
 
   // ── ledger ──
+  const P = (w: Work, seat: number) => w.s.players[seat] as PlayerState;
   const log = (w: Work, entry: LogEntry) => {
     w.s.log = [...w.s.log, entry].slice(-LOG_SIZE);
     w.events.push(toAll({ type: 'LOG', entry }));
   };
-  const gain = (w: Work, seat: number, amount: number) => {
-    w.s.coins[seat] = (w.s.coins[seat] ?? 0) + amount;
+  const fromBank = (w: Work, seat: number, amount: number) => {
+    P(w, seat).cash += amount;
     w.s.bankNet += amount;
   };
-
-  /** Sells assets back to the bank at the sell-back share until `seat` has `needed` coins. */
-  function clearance(w: Work, seat: number, needed: number) {
-    const s = w.s;
-    const sold: Sold[] = [];
-    let raised = 0;
-    const owned = () => OWNABLE_SPACES.filter((i) => s.owner[i] === seat);
-    const byPrice = (a: number, b: number) =>
-      priceOf(a, s.economy) - priceOf(b, s.economy) || a - b;
-    while ((s.coins[seat] ?? 0) < needed) {
-      const developed = owned()
-        .filter((i) => (s.level[i] ?? 0) > 1)
-        .sort((a, b) => (s.level[b] ?? 0) - (s.level[a] ?? 0) || byPrice(a, b));
-      const pick = developed[0];
-      if (pick !== undefined) {
-        const value = round5(developCost(pick, s.economy) * s.economy.sellBack);
-        s.level[pick] = (s.level[pick] ?? 1) - 1;
-        gain(w, seat, value);
-        raised += value;
-        sold.push({ space: pick, what: 'level', value });
-        continue;
-      }
-      const place = owned().sort(byPrice)[0];
-      if (place === undefined) break;
-      const value = round5(priceOf(place, s.economy) * s.economy.sellBack);
-      s.owner[place] = null;
-      s.level[place] = 0;
-      gain(w, seat, value);
-      raised += value;
-      sold.push({ space: place, what: 'place', value });
-    }
-    if (sold.length > 0) log(w, { type: 'CLEARANCE', seat, sold, raised });
-  }
-
-  /** Moves coins from a player to another player or the bank (null), selling up if needed. */
-  function pay(
-    w: Work,
-    from: number,
-    to: number | null,
-    amount: number,
-    reason: PayReason,
-    space?: number,
-  ) {
-    if (amount <= 0) return;
-    const s = w.s;
-    if ((s.coins[from] ?? 0) < amount) clearance(w, from, amount);
-    const paid = Math.min(amount, s.coins[from] ?? 0);
-    s.coins[from] = (s.coins[from] ?? 0) - paid;
-    if (to === null) s.bankNet -= paid;
-    else s.coins[to] = (s.coins[to] ?? 0) + paid;
-    const writtenOff = amount - paid;
-    s.writtenOff += writtenOff;
-    log(w, {
-      type: 'PAID',
-      from,
-      to,
-      amount: paid,
-      reason,
-      ...(space !== undefined ? { space } : {}),
-      writtenOff,
-    });
-  }
-
-  // ── movement and landing ──
-  function passStart(w: Work, seat: number) {
-    w.passed = true;
-    gain(w, seat, w.s.economy.salary);
-    log(w, { type: 'SALARY', seat, amount: w.s.economy.salary });
-    const industries = INDUSTRY_SPACES.filter((i) => w.s.owner[i] === seat).length;
-    if (industries > 0) {
-      const amount =
-        industries * w.s.economy.dividend +
-        (industries === INDUSTRY_SPACES.length ? w.s.economy.dividendSetBonus : 0);
-      gain(w, seat, amount);
-      log(w, { type: 'DIVIDEND', seat, amount });
-    }
-  }
-
-  /** Moves `steps` (negative = backwards; only forward moves pass Start). Returns the hops. */
-  function move(w: Work, seat: number, steps: number): number[] {
-    const from = w.s.positions[seat] ?? 0;
-    const path: number[] = [];
-    const dir = Math.sign(steps);
-    let at = from;
-    for (let k = 0; k < Math.abs(steps); k++) {
-      at = (at + dir + BOARD_SIZE) % BOARD_SIZE;
-      path.push(at);
-      if (dir > 0 && at === 0) passStart(w, seat);
-    }
-    w.s.positions[seat] = at;
-    return path;
-  }
-
-  function freeLevel(w: Work, seat: number, fallback: number, reason: 'card' | 'wheel') {
-    const s = w.s;
-    const pick = OWNABLE_SPACES.filter(
-      (i) => s.owner[i] === seat && isCity(BOARD[i]) && (s.level[i] ?? 0) < MAX_LEVEL,
-    ).sort(
-      (a, b) =>
-        (s.level[a] ?? 0) - (s.level[b] ?? 0) ||
-        priceOf(a, s.economy) - priceOf(b, s.economy) ||
-        a - b,
-    )[0];
-    if (pick === undefined) {
-      gain(w, seat, fallback);
-      log(w, { type: 'GAINED', seat, amount: fallback, reason });
-      return;
-    }
-    s.level[pick] = (s.level[pick] ?? 1) + 1;
-    log(w, { type: 'DEVELOPED', seat, space: pick, level: s.level[pick] as number, cost: 0 });
-  }
-
-  function draw(w: Work, deck: Deck, rng: SeededRng): string {
-    const d = w.s.decks[deck];
-    if (d.draw.length === 0) {
-      d.draw = rng.shuffle(d.discard);
-      d.discard = [];
-    }
-    const id = d.draw.shift() as string;
-    d.discard.push(id);
-    return id;
-  }
-
-  /** Applies a card; returns extra hops (movement cards) and any decision on the new space. */
-  function applyCard(
-    w: Work,
-    seat: number,
-    cardId: string,
-    ctx: StepCtx,
-  ): { hops: number; decision: Decision | null } {
-    const s = w.s;
-    const e = cardOf(cardId).effect;
-    const others = s.seats.filter((x) => x !== seat);
-    const owns = (spaces: number[]) => spaces.filter((i) => s.owner[i] === seat).length;
-    const gainLog = (target: number, amount: number) => {
-      gain(w, target, amount);
-      log(w, { type: 'GAINED', seat: target, amount, reason: 'card' });
-    };
-    switch (e.kind) {
-      case 'gain':
-        gainLog(seat, e.amount);
-        break;
-      case 'pay':
-        pay(w, seat, null, e.amount, 'card');
-        break;
-      case 'payPerLevel': {
-        const levels = OWNABLE_SPACES.filter((i) => s.owner[i] === seat && isCity(BOARD[i])).reduce(
-          (sum, i) => sum + (s.level[i] ?? 0),
-          0,
-        );
-        pay(w, seat, null, Math.min(e.max, levels * e.amount), 'card');
-        break;
-      }
-      case 'everyone':
-        for (const x of s.seats) {
-          if (e.amount >= 0) gainLog(x, e.amount);
-          else pay(w, x, null, -e.amount, 'card');
-        }
-        break;
-      case 'payEachOther':
-        for (const x of others) pay(w, seat, x, e.amount, 'card');
-        break;
-      case 'collectEachOther':
-        for (const x of others) pay(w, x, seat, e.amount, 'card');
-        break;
-      case 'industryOwner': {
-        const space = BOARD.findIndex((b) => isIndustry(b) && b.id === e.industry);
-        const owner = s.owner[space];
-        if (owner !== null && owner !== undefined) gainLog(owner, e.amount);
-        break;
-      }
-      case 'perIndustry':
-        gainLog(seat, Math.max(e.min, owns(INDUSTRY_SPACES) * e.amount));
-        break;
-      case 'regionOwners':
-        for (const x of s.seats) {
-          const n = regionSpaces(e.region).filter((i) => s.owner[i] === x).length;
-          if (n === 0) continue;
-          if (e.amount >= 0) gainLog(x, n * e.amount);
-          else pay(w, x, null, n * -e.amount, 'card');
-        }
-        break;
-      case 'mallOwners':
-        for (const x of s.seats) {
-          const malls = OWNABLE_SPACES.filter(
-            (i) => s.owner[i] === x && s.level[i] === MAX_LEVEL,
-          ).length;
-          if (malls > 0) gainLog(x, malls * e.amount);
-        }
-        break;
-      case 'freeLevel':
-        freeLevel(w, seat, e.fallback, 'card');
-        break;
-      case 'move':
-      case 'toStart': {
-        const from = s.positions[seat] ?? 0;
-        const steps =
-          e.kind === 'toStart' ? (BOARD_SIZE - from) % BOARD_SIZE || BOARD_SIZE : e.steps;
-        const path = move(w, seat, steps);
-        log(w, { type: 'MOVED', seat, from, to: s.positions[seat] ?? 0 });
-        // The new space resolves once; it never draws another card.
-        const decision = land(w, seat, ctx, false);
-        return { hops: path.length, decision };
-      }
-    }
-    return { hops: 0, decision: null };
-  }
-
-  /** Resolves the space `seat` stands on. Returns a decision for the player, if any. */
-  function land(w: Work, seat: number, ctx: StepCtx, cards = true): Decision | null {
-    const s = w.s;
-    const space = s.positions[seat] ?? 0;
-    const b = BOARD[space];
-    if (!b) return null;
-    if (b.kind === 'city' || b.kind === 'industry') {
-      const owner = s.owner[space];
-      if (owner === null || owner === undefined) {
-        const cost = priceOf(space, s.economy);
-        return (s.coins[seat] ?? 0) >= cost ? { kind: 'BUY', options: [{ space, cost }] } : null;
-      }
-      if (owner === seat) {
-        if (b.kind !== 'city' || (s.level[space] ?? 0) >= MAX_LEVEL) return null;
-        const cost = developCost(space, s.economy);
-        return (s.coins[seat] ?? 0) >= cost
-          ? { kind: 'DEVELOP', options: [{ space, cost }] }
-          : null;
-      }
-      pay(w, seat, owner, feeAt(s, space), b.kind === 'city' ? 'fee' : 'factory', space);
-      return null;
-    }
-    if (b.kind === 'card') {
-      if (!cards) return null;
-      const card = draw(w, b.deck, ctx.rng);
-      log(w, { type: 'CARD', seat, deck: b.deck, card });
-      const out = applyCard(w, seat, card, ctx);
-      extraHops += out.hops;
-      return out.decision;
-    }
-    switch (b.corner) {
-      case 'lucky': {
-        const slice = ctx.rng.int(0, WHEEL.length - 1);
-        log(w, { type: 'WHEEL', seat, slice });
-        const ws = WHEEL[slice];
-        if (ws?.kind === 'gain') {
-          gain(w, seat, ws.amount);
-          log(w, { type: 'GAINED', seat, amount: ws.amount, reason: 'wheel' });
-        } else if (ws) freeLevel(w, seat, ws.fallback, 'wheel');
-        return null;
-      }
-      case 'jam':
-        if (!s.slow.includes(seat)) s.slow = [...s.slow, seat];
-        log(w, { type: 'JAM', seat });
-        return null;
-      default:
-        return null; // Start (salary paid on arrival) and Chai Break
-    }
-  }
-  let extraHops = 0;
-
-  // ── turns ──
-  const enter = (s: BusinessState, phase: BusinessState['phase'], ms: number, ctx: StepCtx) => {
-    s.phase = phase;
-    s.phaseMs = ms;
-    s.phaseEndsAt = ctx.now + ms;
+  const toBank = (w: Work, seat: number, amount: number) => {
+    P(w, seat).cash -= amount;
+    w.s.bankNet -= amount;
   };
 
-  function startTurn(w: Work, seat: number, ctx: StepCtx): void {
+  function takeLoan(w: Work, seat: number, amount: number) {
+    const p = P(w, seat);
+    p.debt += round10(amount * (1 + w.s.economy.loanFee));
+    fromBank(w, seat, amount);
+    log(w, { type: 'LOAN', seat, amount, debt: p.debt });
+  }
+
+  function sellTopBuilding(w: Work, seat: number, at: number) {
+    const lv = w.s.level[at] ?? 0;
+    const value = round10(buildCost(at, lv - 1, w.s.economy) * w.s.economy.sellBack);
+    w.s.level[at] = lv - 1;
+    fromBank(w, seat, value);
+    log(w, { type: 'SOLD', seat, space: at, what: 'building', value });
+  }
+
+  function sellAsset(w: Work, seat: number, at: number) {
+    const e = w.s.economy;
+    const value = round10(
+      (priceOf(at, e) + buildingsValue(at, w.s.level[at] ?? 0, e)) * e.sellBack,
+    );
+    w.s.owner[at] = null;
+    w.s.level[at] = 0;
+    fromBank(w, seat, value);
+    log(w, { type: 'SOLD', seat, space: at, what: 'asset', value });
+  }
+
+  /** The bank raises money for `seat` (design §13 order) until they hold `needed`. */
+  function bankHandles(w: Work, seat: number, needed: number) {
     const s = w.s;
+    const p = P(w, seat);
+    while (p.cash < needed && canBorrow(s, seat) >= s.economy.loanStep) {
+      takeLoan(w, seat, s.economy.loanStep);
+    }
+    const byPrice = (a: number, b: number) =>
+      priceOf(a, s.economy) - priceOf(b, s.economy) || a - b;
+    while (p.cash < needed) {
+      const built = ownedBy(s, seat)
+        .filter((i) => (s.level[i] ?? 0) > 0)
+        .sort((a, b) => (s.level[b] ?? 0) - (s.level[a] ?? 0) || byPrice(a, b))[0];
+      if (built !== undefined) {
+        sellTopBuilding(w, seat, built);
+        continue;
+      }
+      const asset = ownedBy(s, seat).sort(byPrice)[0];
+      if (asset === undefined) break;
+      sellAsset(w, seat, asset);
+    }
+  }
+
+  /** Pays out a list of dues from `seat`'s cash, writing off what can't be paid. */
+  function payOut(w: Work, seat: number, payments: Payment[]) {
+    const p = P(w, seat);
+    let shortfall = 0;
+    for (const pay of payments) {
+      const paid = Math.min(pay.amount, p.cash);
+      p.cash -= paid;
+      if (pay.to === null) w.s.bankNet -= paid;
+      else P(w, pay.to).cash += paid;
+      const writtenOff = pay.amount - paid;
+      shortfall += writtenOff;
+      w.s.writtenOff += writtenOff;
+      log(w, {
+        type: 'PAID',
+        from: seat,
+        to: pay.to,
+        amount: paid,
+        reason: pay.reason,
+        ...(pay.space !== undefined ? { space: pay.space } : {}),
+        writtenOff,
+      });
+    }
+    if (shortfall > 0) {
+      // Insolvent: nothing left; the bank clears the loans; the player stays in the match.
+      p.debt = 0;
+      p.insolvent = true;
+      log(w, { type: 'INSOLVENT', seat, writtenOff: shortfall });
+    }
+  }
+
+  /**
+   * Settles dues. The current player who can't pay gets the Raise-money panel
+   * (returns 'RAISE'); anyone else (or `auto`) has the bank handle it at once.
+   */
+  function settle(
+    w: Work,
+    seat: number,
+    payments: Payment[],
+    interactive: boolean,
+  ): 'PAID' | 'RAISE' {
+    const due = payments.filter((x) => x.amount > 0);
+    if (due.length === 0) return 'PAID';
+    const total = due.reduce((a, b) => a + b.amount, 0);
+    if (P(w, seat).cash >= total) {
+      payOut(w, seat, due);
+      return 'PAID';
+    }
+    if (interactive) {
+      w.s.raise = { payments: due, total };
+      return 'RAISE';
+    }
+    bankHandles(w, seat, total);
+    payOut(w, seat, due);
+    return 'PAID';
+  }
+
+  // ── turns ──
+  const enter = (w: Work, phase: BusinessState['phase'], ms: number) => {
+    w.s.phase = phase;
+    w.s.phaseMs = ms;
+    w.s.phaseEndsAt = w.ctx.now + ms;
+  };
+
+  function startTurn(w: Work, seat: number) {
+    const s = w.s;
+    const p = P(w, seat);
     s.current = seat;
     s.turn += 1;
     s.decision = null;
-    enter(s, 'ROLL', s.timing.rollMs, ctx);
-    w.events.push(toAll({ type: 'TURN', seat, round: s.round, turn: s.turn }));
+    s.raise = null;
+    s.auctionsThisTurn = 0;
+    s.tradesThisTurn = 0;
+    p.noBuyActive = p.noBuyNext;
+    p.noBuyNext = false;
+    const skipped = p.skipNext;
+    w.events.push(toAll({ type: 'TURN', seat, round: s.round, turn: s.turn, skipped }));
+    if (skipped) {
+      p.skipNext = false;
+      log(w, { type: 'TURN_SKIPPED', seat });
+      enter(w, 'HOLD', s.timing.skipMs);
+      return;
+    }
+    enter(w, 'ROLL', s.timing.turnMs);
   }
 
-  function nextTurn(w: Work, ctx: StepCtx): void {
+  function finish(w: Work) {
     const s = w.s;
+    // Debts are repaid from cash before wealth is counted; loans never create free wealth.
+    for (const seat of s.seats) {
+      const p = P(w, seat);
+      if (p.debt <= 0) continue;
+      const debt = p.debt;
+      bankHandles(w, seat, debt);
+      const repaid = Math.min(debt, p.cash);
+      toBank(w, seat, repaid);
+      p.debt = 0;
+      if (repaid < debt) {
+        s.writtenOff += debt - repaid;
+        p.insolvent = true;
+        log(w, { type: 'INSOLVENT', seat, writtenOff: debt - repaid });
+      }
+      log(w, { type: 'SETTLED', seat, repaid });
+    }
+    s.final = Object.fromEntries(s.seats.map((x) => [x, wealthOf(s, x)])) as SeatMap<FinalWealth>;
+    s.decision = null;
+    s.raise = null;
+    enter(w, 'OVER', 0);
+    w.events.push(toAll({ type: 'MATCH_OVER', final: s.final }));
+  }
+
+  function nextTurn(w: Work) {
+    const s = w.s;
+    P(w, s.current).noBuyActive = false;
     let index = s.order.indexOf(s.current) + 1;
     if (index >= s.order.length) {
       index = 0;
       s.round += 1;
     }
-    if (s.round > s.rounds) {
-      enter(s, 'OVER', 0, ctx);
-      s.decision = null;
-      const wealth = Object.fromEntries(s.seats.map((x) => [x, wealthOf(s, x)])) as SeatMap<number>;
-      w.events.push(toAll({ type: 'MATCH_OVER', wealth }));
+    if (s.round > s.rounds) return finish(w);
+    startTurn(w, s.order[index] as number);
+  }
+
+  /** Ends the current player's resolution: hold for the animation, then the next turn. */
+  const endResolution = (w: Work) => enter(w, 'HOLD', w.hold + w.s.timing.landingMs);
+
+  function noteAuto(w: Work, seat: number, auto: boolean) {
+    const p = P(w, seat);
+    p.autoActs = auto ? p.autoActs + 1 : 0;
+    if (auto && p.autoActs === idleAfter) w.requests.push({ type: 'MARK_IDLE', seat });
+  }
+
+  /** Moves forward (passing START pays the salary) and returns the path. */
+  function move(w: Work, seat: number, steps: number): number[] {
+    const p = P(w, seat);
+    const path: number[] = [];
+    let at = p.position;
+    for (let k = 0; k < steps; k++) {
+      at = (at + 1) % BOARD_SIZE;
+      path.push(at);
+      if (at === 0) {
+        fromBank(w, seat, w.s.economy.salary);
+        p.insolvent = false;
+        log(w, { type: 'SALARY', seat, amount: w.s.economy.salary });
+      }
+    }
+    p.position = at;
+    w.hold += steps * w.s.timing.hopMs;
+    return path;
+  }
+
+  /** Free building on the least-developed city (cheapest first), or the fallback money. */
+  function freeBuilding(w: Work, seat: number, fallback: number) {
+    const s = w.s;
+    const pick = ownedBy(s, seat)
+      .filter((i) => isCity(BOARD[i]) && (s.level[i] ?? 0) < HOTEL)
+      .sort(
+        (a, b) =>
+          (s.level[a] ?? 0) - (s.level[b] ?? 0) ||
+          priceOf(a, s.economy) - priceOf(b, s.economy) ||
+          a - b,
+      )[0];
+    if (pick === undefined) {
+      fromBank(w, seat, fallback);
+      log(w, { type: 'GAINED', seat, amount: fallback, reason: 'event' });
       return;
     }
-    startTurn(w, s.order[index] as number, ctx);
+    s.level[pick] = (s.level[pick] ?? 0) + 1;
+    log(w, { type: 'BUILT', seat, space: pick, level: s.level[pick] as number, cost: 0 });
   }
 
-  const done = (w: Work): T => {
+  /** Resolves the space the current player stands on. */
+  function land(w: Work, seat: number): void {
     const s = w.s;
-    const timers: T['timers'] =
-      s.phase === 'OVER' ? [{ clear: PHASE_TIMER }] : [{ set: PHASE_TIMER, ms: s.phaseMs }];
-    return { state: s, events: w.events, timers, requests: w.requests };
-  };
-
-  /** Counts automatic actions; three in a row hands the seat to a bot (platform request). */
-  function noteAuto(w: Work, seat: number, auto: boolean) {
-    const n = auto ? (w.s.autoActs[seat] ?? 0) + 1 : 0;
-    w.s.autoActs[seat] = n;
-    if (auto && n === idleAfter) w.requests.push({ type: 'MARK_IDLE', seat });
+    const p = P(w, seat);
+    const at = p.position;
+    const b = BOARD[at];
+    if (!b) return endResolution(w);
+    if (b.kind === 'city' || b.kind === 'transport') {
+      const owner = s.owner[at];
+      if (owner === null || owner === undefined) {
+        if (p.noBuyActive) {
+          log(w, { type: 'NO_BUY', seat, space: at });
+          return endResolution(w);
+        }
+        s.decision = { kind: 'BUY', space: at, cost: priceOf(at, s.economy) };
+        return enter(w, 'DECIDE', w.hold + s.timing.landingMs + s.timing.turnMs);
+      }
+      if (owner === seat) {
+        if (b.kind === 'city' && (s.level[at] ?? 0) < HOTEL) {
+          s.decision = {
+            kind: 'BUILD',
+            space: at,
+            cost: buildCost(at, s.level[at] ?? 0, s.economy),
+          };
+          return enter(w, 'DECIDE', w.hold + s.timing.landingMs + s.timing.turnMs);
+        }
+        return endResolution(w);
+      }
+      const rent = rentAt(s, at);
+      if (p.rentHoliday) {
+        p.rentHoliday = false;
+        log(w, { type: 'RENT_WAIVED', seat, space: at, amount: rent });
+        return endResolution(w);
+      }
+      const reason: PayReason = b.kind === 'city' ? 'rent' : 'transport';
+      return afterPayment(
+        w,
+        settle(w, seat, [{ to: owner, amount: rent, reason, space: at }], true),
+      );
+    }
+    if (b.kind === 'event') {
+      return enter(w, 'EVENT', w.hold + s.timing.landingMs + s.timing.turnMs);
+    }
+    switch (b.corner) {
+      case 'jail':
+        s.decision = { kind: 'JAIL', space: at, cost: s.economy.jailFee };
+        return enter(w, 'DECIDE', w.hold + s.timing.landingMs + s.timing.turnMs);
+      case 'club':
+        for (const other of s.seats) {
+          if (other === seat) continue;
+          settle(w, other, [{ to: seat, amount: s.economy.clubCollect, reason: 'club' }], false);
+        }
+        return endResolution(w);
+      case 'resort':
+        return afterPayment(
+          w,
+          settle(
+            w,
+            seat,
+            s.seats
+              .filter((x) => x !== seat)
+              .map((x) => ({ to: x, amount: s.economy.resortPay, reason: 'resort' as const })),
+            true,
+          ),
+        );
+      default:
+        return endResolution(w); // START (salary already paid on arrival)
+    }
   }
 
-  function roll(s0: BusinessState, ctx: StepCtx, auto: boolean): T {
-    const w: Work = { s: structuredClone(s0), events: [], requests: [] };
+  function afterPayment(w: Work, result: 'PAID' | 'RAISE') {
+    if (result === 'RAISE')
+      return enter(w, 'RAISE', w.hold + w.s.timing.landingMs + w.s.timing.turnMs);
+    return endResolution(w);
+  }
+
+  /** Applies a deterministic event outcome (design §8). */
+  function applyEvent(w: Work, seat: number, deck: 'chance' | 'chest', sum: number) {
+    const s = w.s;
+    const p = P(w, seat);
+    const outcome = eventOutcome(deck, sum);
+    s.lastEvent = { seat, deck, sum, good: outcome.good, turn: s.turn };
+    log(w, { type: 'EVENT', seat, deck, sum, good: outcome.good });
+    w.hold += s.timing.eventMs;
+    if (options.eventsOff) return endResolution(w);
+    const e = outcome.effect;
+    const others = s.seats.filter((x) => x !== seat);
+    switch (e.kind) {
+      case 'gain':
+        fromBank(w, seat, e.amount);
+        log(w, { type: 'GAINED', seat, amount: e.amount, reason: 'event' });
+        return endResolution(w);
+      case 'pay':
+        return afterPayment(
+          w,
+          settle(w, seat, [{ to: null, amount: e.amount, reason: 'event' }], true),
+        );
+      case 'payEach':
+        return afterPayment(
+          w,
+          settle(
+            w,
+            seat,
+            others.map((x) => ({ to: x, amount: e.amount, reason: 'event' as const })),
+            true,
+          ),
+        );
+      case 'collectEach':
+        for (const x of others)
+          settle(w, x, [{ to: seat, amount: e.amount, reason: 'event' }], false);
+        return endResolution(w);
+      case 'repairs': {
+        const owned = ownedBy(s, seat).filter((i) => isCity(BOARD[i]));
+        const hotels = owned.filter((i) => s.level[i] === HOTEL).length;
+        const houses = owned.reduce(
+          (n, i) => n + ((s.level[i] ?? 0) < HOTEL ? (s.level[i] ?? 0) : 0),
+          0,
+        );
+        const amount = Math.min(e.max, houses * e.perHouse + hotels * e.perHotel);
+        return afterPayment(w, settle(w, seat, [{ to: null, amount, reason: 'event' }], true));
+      }
+      case 'freeBuilding':
+        freeBuilding(w, seat, e.fallback);
+        return endResolution(w);
+      case 'skipNextRoll':
+        p.skipNext = true;
+        return endResolution(w);
+      case 'noBuyNextTurn':
+        p.noBuyNext = true;
+        return endResolution(w);
+      case 'rentHoliday':
+        p.rentHoliday = true;
+        return endResolution(w);
+      case 'toStart': {
+        const steps = (BOARD_SIZE - p.position) % BOARD_SIZE || BOARD_SIZE;
+        const from = p.position;
+        const path = move(w, seat, steps);
+        w.events.push(toAll({ type: 'ROLLED', seat, dice: [], kind: 'move', from, to: 0, path }));
+        log(w, { type: 'MOVED', seat, to: 0 });
+        return endResolution(w);
+      }
+    }
+  }
+
+  const begin = (s0: BusinessState, ctx: StepCtx): Work => ({
+    s: structuredClone(s0),
+    events: [],
+    requests: [],
+    ctx,
+    hold: 0,
+  });
+  const done = (w: Work): T => ({
+    state: w.s,
+    events: w.events,
+    timers:
+      w.s.phase === 'OVER'
+        ? [{ clear: PHASE_TIMER }]
+        : [{ set: PHASE_TIMER, ms: Math.max(0, w.s.phaseEndsAt - w.ctx.now) }],
+    requests: w.requests,
+  });
+
+  // ── actions ──
+  function roll(w: Work, auto: boolean) {
     const s = w.s;
     const seat = s.current;
     noteAuto(w, seat, auto);
-    const slow = s.slow.includes(seat);
-    if (slow) s.slow = s.slow.filter((x) => x !== seat);
-    const dice = rollDice(ctx.rng, slow ? 1 : 2);
-    const from = s.positions[seat] ?? 0;
-    const steps = dice.reduce((a, b) => a + b, 0);
-    // Announce the roll before anything it causes (salary on the way, the landing).
+    const dice = rollDice(w.ctx.rng);
+    const from = P(w, seat).position;
+    const steps = dice[0] + dice[1];
+    s.lastRoll = { seat, dice, kind: 'move', turn: s.turn };
     w.events.push(
       toAll({
         type: 'ROLLED',
         seat,
         dice,
+        kind: 'move',
         from,
         to: (from + steps) % BOARD_SIZE,
         path: Array.from({ length: steps }, (_, k) => (from + k + 1) % BOARD_SIZE),
       }),
     );
     move(w, seat, steps);
-    s.lastRoll = { seat, dice, from, to: s.positions[seat] ?? 0 };
-    log(w, { type: 'ROLLED', seat, dice, to: s.positions[seat] ?? 0 });
-    extraHops = 0;
-    const landed = land(w, seat, ctx);
-    const hold = (steps + extraHops) * s.timing.hopMs + s.timing.landingMs;
-    s.expandDue = w.passed === true;
-    const decision = landed ?? takeExpand(s, seat);
-    s.decision = decision;
-    if (decision) enter(s, 'DECIDE', hold + s.timing.decideMs, ctx);
-    else enter(s, 'HOLD', hold, ctx);
-    return done(w);
+    log(w, { type: 'ROLLED', seat, dice, to: P(w, seat).position });
+    land(w, seat);
   }
 
-  /** The Start expansion offer, if due and the player can afford any development. */
-  function takeExpand(s: BusinessState, seat: number): Decision | null {
-    if (!s.expandDue) return null;
-    s.expandDue = false;
-    const options = OWNABLE_SPACES.filter(
-      (i) => s.owner[i] === seat && isCity(BOARD[i]) && (s.level[i] ?? 0) < MAX_LEVEL,
-    )
-      .map((space) => ({ space, cost: developCost(space, s.economy) }))
-      .filter((o) => o.cost <= (s.coins[seat] ?? 0));
-    return options.length > 0 ? { kind: 'EXPAND', options } : null;
+  function eventRoll(w: Work, auto: boolean) {
+    const s = w.s;
+    const seat = s.current;
+    noteAuto(w, seat, auto);
+    const at = P(w, seat).position;
+    const b = BOARD[at];
+    const deck = b?.kind === 'event' ? b.deck : 'chance';
+    const dice = rollDice(w.ctx.rng);
+    s.lastRoll = { seat, dice, kind: 'event', turn: s.turn };
+    w.events.push(toAll({ type: 'ROLLED', seat, dice, kind: 'event', from: at, to: at, path: [] }));
+    applyEvent(w, seat, deck, dice[0] + dice[1]);
   }
 
   function decide(
-    s0: BusinessState,
-    kind: 'BUY' | 'DEVELOP' | 'SKIP',
-    space: number | null,
-    ctx: StepCtx,
+    w: Work,
+    kind: 'BUY' | 'BUILD' | 'SKIP' | 'JAIL_PAY' | 'JAIL_WAIT',
     auto: boolean,
-  ): T {
-    const w: Work = { s: structuredClone(s0), events: [], requests: [] };
+    levels = 1,
+  ) {
     const s = w.s;
     const seat = s.current;
-    const d = s.decision as Decision;
+    const d = s.decision;
     noteAuto(w, seat, auto);
-    const choice = d.options.find((o) => o.space === space) ?? (d.options[0] as Choice);
-    if (kind === 'BUY') {
-      s.coins[seat] = (s.coins[seat] ?? 0) - choice.cost;
-      s.bankNet -= choice.cost;
-      s.owner[choice.space] = seat;
-      s.level[choice.space] = 1;
-      log(w, { type: 'BOUGHT', seat, space: choice.space, price: choice.cost });
-    } else if (kind === 'DEVELOP') {
-      s.coins[seat] = (s.coins[seat] ?? 0) - choice.cost;
-      s.bankNet -= choice.cost;
-      s.level[choice.space] = (s.level[choice.space] ?? 1) + 1;
-      log(w, {
-        type: 'DEVELOPED',
-        seat,
-        space: choice.space,
-        level: s.level[choice.space] as number,
-        cost: choice.cost,
-      });
-    } else {
-      log(w, { type: 'SKIPPED', seat, space: d.kind === 'EXPAND' ? -1 : choice.space });
-    }
-    // After the landing decision, the Start expansion offer (if due) comes next.
-    const expand = d.kind === 'EXPAND' ? null : takeExpand(s, seat);
-    if (expand) {
-      s.decision = expand;
-      enter(s, 'DECIDE', s.timing.decideMs, ctx);
-      return done(w);
-    }
     s.decision = null;
-    nextTurn(w, ctx);
-    return done(w);
+    if (!d) return endResolution(w);
+    const p = P(w, seat);
+    if (kind === 'BUY') {
+      toBank(w, seat, d.cost);
+      s.owner[d.space] = seat;
+      s.level[d.space] = 0;
+      if (isTransport(BOARD[d.space])) p.spend.transport += d.cost;
+      else p.spend.property += d.cost;
+      log(w, { type: 'BOUGHT', seat, space: d.space, price: d.cost });
+    } else if (kind === 'BUILD') {
+      // One or more levels in one go (houses, then the hotel), each paid for.
+      for (let k = 0; k < levels; k++) {
+        const lv = s.level[d.space] ?? 0;
+        const cost = buildCost(d.space, lv, s.economy);
+        toBank(w, seat, cost);
+        s.level[d.space] = lv + 1;
+        p.spend.development += cost;
+        log(w, { type: 'BUILT', seat, space: d.space, level: lv + 1, cost });
+      }
+    } else if (kind === 'JAIL_PAY') {
+      toBank(w, seat, d.cost);
+      log(w, { type: 'PAID', from: seat, to: null, amount: d.cost, reason: 'jail', writtenOff: 0 });
+      log(w, { type: 'JAIL', seat, paid: true });
+    } else if (kind === 'JAIL_WAIT') {
+      p.skipNext = true;
+      log(w, { type: 'JAIL', seat, paid: false });
+    } else {
+      log(w, { type: 'DECLINED', seat, space: d.space });
+    }
+    w.hold = 0;
+    endResolution(w);
   }
 
-  const viewOf = (s: BusinessState): BusinessView => {
-    const { decks, ...rest } = s;
-    return {
-      ...rest,
-      decks: { news: { left: decks.news.draw.length }, mela: { left: decks.mela.draw.length } },
-      wealth: Object.fromEntries(s.seats.map((x) => [x, wealthOf(s, x)])) as SeatMap<number>,
-    };
-  };
+  /** After a raise action: once the dues are covered they are paid and the turn moves on. */
+  function maybeCovered(w: Work) {
+    const s = w.s;
+    const r = s.raise;
+    if (!r || P(w, s.current).cash < r.total) return enter(w, 'RAISE', s.phaseEndsAt - w.ctx.now);
+    s.raise = null;
+    payOut(w, s.current, r.payments);
+    endResolution(w);
+  }
+
+  function closeAuction(w: Work) {
+    const s = w.s;
+    const a = s.auction;
+    if (!a) return;
+    s.auction = null;
+    if (a.high && (P(w, a.high.seat).cash ?? 0) >= a.high.amount && s.owner[a.space] === a.seller) {
+      const buyer = P(w, a.high.seat);
+      buyer.cash -= a.high.amount;
+      P(w, a.seller).cash += a.high.amount;
+      if (isTransport(BOARD[a.space])) buyer.spend.transport += a.high.amount;
+      else buyer.spend.property += a.high.amount;
+      s.owner[a.space] = a.high.seat;
+      s.lockedUntil[a.space] = s.round + s.economy.auctionLockRounds;
+      log(w, {
+        type: 'AUCTION_WON',
+        seller: a.seller,
+        space: a.space,
+        seat: a.high.seat,
+        amount: a.high.amount,
+      });
+    } else {
+      log(w, { type: 'AUCTION_UNSOLD', seller: a.seller, space: a.space });
+    }
+    if (a.returnTo === 'RAISE' && s.raise) return maybeCovered({ ...w, s });
+    enter(w, 'ROLL', s.timing.turnMs);
+  }
+
+  /** Cash paid in a trade counts as spending on the assets received, split by list price. */
+  function tradeSpending(w: Work, seat: number, cash: number, received: number[]) {
+    if (cash <= 0 || received.length === 0) return;
+    const s = w.s;
+    const total = received.reduce((n, i) => n + priceOf(i, s.economy), 0);
+    const toTransport = received
+      .filter((i) => isTransport(BOARD[i]))
+      .reduce((n, i) => n + priceOf(i, s.economy), 0);
+    const transport = Math.round((cash * toTransport) / total);
+    P(w, seat).spend.transport += transport;
+    P(w, seat).spend.property += cash - transport;
+  }
+
+  function tradeValid(
+    s: BusinessState,
+    from: number,
+    to: number,
+    give: Offer,
+    get: Offer,
+  ): boolean {
+    const assetsOk = (seat: number, assets: number[]) =>
+      new Set(assets).size === assets.length &&
+      assets.every((i) => s.owner[i] === seat && (s.lockedUntil[i] ?? 0) <= s.round);
+    return (
+      from !== to &&
+      s.seats.includes(to) &&
+      assetsOk(from, give.assets) &&
+      assetsOk(to, get.assets) &&
+      (s.players[from]?.cash ?? 0) >= give.cash &&
+      (s.players[to]?.cash ?? 0) >= get.cash &&
+      give.cash + give.assets.length + get.cash + get.assets.length > 0
+    );
+  }
+
+  const viewOf = (s: BusinessState): BusinessView => ({
+    ...s,
+    wealth: Object.fromEntries(s.seats.map((x) => [x, wealthOf(s, x).total])) as SeatMap<number>,
+    canBorrow: Object.fromEntries(s.seats.map((x) => [x, canBorrow(s, x)])) as SeatMap<number>,
+  });
 
   return {
     manifest: {
       id: BUSINESS_GAME_ID,
-      version: 1,
+      version: 2,
       players: { min: MIN_PLAYERS, max: MAX_PLAYERS },
       sync: 'TURN_PHASE',
       bots: { supported: true, canTakeOverSeat: true },
@@ -593,8 +813,12 @@ export function createBusinessGame(
       layout: { orientation: 'any' },
     },
 
-    settingsSchema: z.strictObject({ rounds: z.literal(ROUND_OPTIONS) }),
-    defaultSettings: { rounds: 16 },
+    settingsSchema: z.strictObject({
+      rounds: z.number().int().min(MIN_ROUNDS).max(MAX_ROUNDS),
+      board: z.literal('india-classic'),
+      eventFrequency: z.literal('normal'),
+    }),
+    defaultSettings: { rounds: DEFAULT_ROUNDS, board: 'india-classic', eventFrequency: 'normal' },
     actionSchema,
 
     setup(seats, settings, ctx) {
@@ -603,29 +827,28 @@ export function createBusinessGame(
       }
       const first = ctx.rng.int(0, seats.length - 1);
       const order = [...seats.slice(first), ...seats.slice(0, first)];
-      const per = (v: number) => Object.fromEntries(seats.map((x) => [x, v])) as SeatMap<number>;
-      const deckOf = (deck: Deck) => ({
-        draw: ctx.rng.shuffle(cards.filter((c) => c.deck === deck).map((c) => c.id)),
-        discard: [],
-      });
       const s: BusinessState = {
         phase: 'ROLL',
+        board: 'india-classic',
+        eventFrequency: 'normal',
         seats: [...seats],
         order,
         rounds: settings.rounds,
         round: 1,
         turn: 0,
         current: order[0] as number,
-        positions: per(0),
-        coins: per(economy.startCoins),
+        players: Object.fromEntries(seats.map((x) => [x, newPlayer(economy.startCash)])),
         owner: BOARD.map(() => null),
         level: BOARD.map(() => 0),
-        slow: [],
-        decks: { news: deckOf('news'), mela: deckOf('mela') },
+        lockedUntil: BOARD.map(() => 0),
         decision: null,
-        expandDue: false,
+        raise: null,
+        auction: null,
+        trade: null,
+        auctionsThisTurn: 0,
+        tradesThisTurn: 0,
         lastRoll: null,
-        autoActs: per(0),
+        lastEvent: null,
         log: [],
         economy,
         timing,
@@ -633,64 +856,266 @@ export function createBusinessGame(
         phaseMs: 0,
         bankNet: 0,
         writtenOff: 0,
+        final: null,
       };
-      const w: Work = { s, events: [], requests: [] };
-      startTurn(w, order[0] as number, ctx);
+      const w: Work = { s, events: [], requests: [], ctx, hold: 0 };
+      startTurn(w, order[0] as number);
       return done(w);
     },
 
     validateAction(s, seat, a) {
       if (s.phase === 'OVER' || a.turn !== s.turn) return { ok: false, code: 'INVALID_PHASE' };
-      if (seat !== s.current) return { ok: false, code: 'NOT_YOUR_TURN' };
-      if (a.type === 'ROLL')
-        return s.phase === 'ROLL' ? { ok: true } : { ok: false, code: 'INVALID_PHASE' };
-      if (s.phase !== 'DECIDE' || !s.decision) return { ok: false, code: 'INVALID_PHASE' };
-      if (a.type === 'SKIP') return { ok: true };
-      const d = s.decision;
-      const kindOk =
-        a.type === 'BUY' ? d.kind === 'BUY' : d.kind === 'DEVELOP' || d.kind === 'EXPAND';
-      const choice = d.options.find((o) => o.space === a.space);
-      if (!kindOk || !choice) return { ok: false, code: 'ILLEGAL_ACTION' };
-      if (d.kind !== 'EXPAND' && s.positions[seat] !== a.space) {
-        return { ok: false, code: 'ILLEGAL_ACTION' };
+      const p = s.players[seat];
+      if (!p) return { ok: false, code: 'NOT_ELIGIBLE' };
+      const ok = { ok: true } as const;
+      const no = (code: 'INVALID_PHASE' | 'ILLEGAL_ACTION' | 'NOT_YOUR_TURN' | 'NOT_ELIGIBLE') =>
+        ({ ok: false, code }) as const;
+      // Actions other players may take.
+      if (a.type === 'BID') {
+        const au = s.auction;
+        if (s.phase !== 'AUCTION' || !au) return no('INVALID_PHASE');
+        if (seat === au.seller) return no('NOT_ELIGIBLE');
+        const min = au.high ? au.high.amount + BID_STEP : au.open;
+        if (a.amount < min || a.amount % BID_STEP !== 0 || a.amount > p.cash)
+          return no('ILLEGAL_ACTION');
+        if (au.high?.seat === seat) return no('ILLEGAL_ACTION');
+        return ok;
       }
-      if ((s.coins[seat] ?? 0) < choice.cost) return { ok: false, code: 'ILLEGAL_ACTION' };
-      if (a.type === 'BUY' && s.owner[a.space] !== null)
-        return { ok: false, code: 'ILLEGAL_ACTION' };
-      if (
-        a.type === 'DEVELOP' &&
-        (s.owner[a.space] !== seat || (s.level[a.space] ?? 0) >= MAX_LEVEL)
-      ) {
-        return { ok: false, code: 'ILLEGAL_ACTION' };
+      if (a.type === 'TRADE_ANSWER') {
+        if (s.phase !== 'TRADE' || !s.trade) return no('INVALID_PHASE');
+        return seat === s.trade.to ? ok : no('NOT_ELIGIBLE');
       }
-      return { ok: true };
+      if (seat !== s.current) return no('NOT_YOUR_TURN');
+      switch (a.type) {
+        case 'ROLL':
+          return s.phase === 'ROLL' ? ok : no('INVALID_PHASE');
+        case 'EVENT_ROLL':
+          return s.phase === 'EVENT' ? ok : no('INVALID_PHASE');
+        case 'BUY':
+        case 'BUILD': {
+          const d = s.decision;
+          if (s.phase !== 'DECIDE' || !d) return no('INVALID_PHASE');
+          if (d.kind !== a.type || d.space !== a.space || p.position !== a.space)
+            return no('ILLEGAL_ACTION');
+          if (a.type === 'BUY') {
+            return s.owner[a.space] === null && p.cash >= d.cost ? ok : no('ILLEGAL_ACTION');
+          }
+          const lv = s.level[a.space] ?? 0;
+          if (s.owner[a.space] !== seat || lv + a.levels > HOTEL) return no('ILLEGAL_ACTION');
+          return p.cash >= buildPrice(s, a.space, a.levels) ? ok : no('ILLEGAL_ACTION');
+        }
+        case 'SKIP':
+          if (s.phase !== 'DECIDE' || !s.decision) return no('INVALID_PHASE');
+          return s.decision.kind === 'JAIL' ? no('ILLEGAL_ACTION') : ok;
+        case 'JAIL_PAY':
+        case 'JAIL_WAIT':
+          if (s.phase !== 'DECIDE' || s.decision?.kind !== 'JAIL') return no('INVALID_PHASE');
+          return a.type === 'JAIL_PAY' && p.cash < s.decision.cost ? no('ILLEGAL_ACTION') : ok;
+        case 'LOAN':
+          if (!['ROLL', 'DECIDE', 'RAISE'].includes(s.phase)) return no('INVALID_PHASE');
+          if (
+            a.amount <= 0 ||
+            a.amount % s.economy.loanStep !== 0 ||
+            a.amount > canBorrow(s, seat)
+          ) {
+            return no('ILLEGAL_ACTION');
+          }
+          return ok;
+        case 'REPAY':
+          if (!['ROLL', 'DECIDE'].includes(s.phase)) return no('INVALID_PHASE');
+          return a.amount > 0 && a.amount <= p.debt && a.amount <= p.cash
+            ? ok
+            : no('ILLEGAL_ACTION');
+        case 'SELL_BUILDING':
+          if (s.phase !== 'RAISE') return no('INVALID_PHASE');
+          return s.owner[a.space] === seat && (s.level[a.space] ?? 0) > 0
+            ? ok
+            : no('ILLEGAL_ACTION');
+        case 'SELL_ASSET':
+          if (s.phase !== 'RAISE') return no('INVALID_PHASE');
+          return s.owner[a.space] === seat ? ok : no('ILLEGAL_ACTION');
+        case 'BANK_HANDLES_IT':
+          return s.phase === 'RAISE' ? ok : no('INVALID_PHASE');
+        case 'AUCTION_START':
+          if (s.phase !== 'ROLL' && s.phase !== 'RAISE') return no('INVALID_PHASE');
+          if (s.auctionsThisTurn >= 1) return no('ILLEGAL_ACTION');
+          if (s.owner[a.space] !== seat || (s.lockedUntil[a.space] ?? 0) > s.round)
+            return no('ILLEGAL_ACTION');
+          return ok;
+        case 'TRADE_PROPOSE':
+          if (s.phase !== 'ROLL') return no('INVALID_PHASE');
+          if (s.tradesThisTurn >= 1) return no('ILLEGAL_ACTION');
+          return tradeValid(s, seat, a.to, a.give, a.get) ? ok : no('ILLEGAL_ACTION');
+      }
     },
 
-    applyAction(s, _seat, a, ctx) {
-      if (a.type === 'ROLL') return roll(s, ctx, false);
-      return decide(s, a.type, a.type === 'SKIP' ? null : a.space, ctx, false);
+    applyAction(s0, seat, a, ctx) {
+      const w = begin(s0, ctx);
+      const s = w.s;
+      switch (a.type) {
+        case 'ROLL':
+          roll(w, false);
+          break;
+        case 'EVENT_ROLL':
+          eventRoll(w, false);
+          break;
+        case 'BUILD':
+          decide(w, 'BUILD', false, a.levels);
+          break;
+        case 'BUY':
+        case 'SKIP':
+        case 'JAIL_PAY':
+        case 'JAIL_WAIT':
+          decide(w, a.type, false);
+          break;
+        case 'LOAN':
+          P(w, seat).autoActs = 0;
+          takeLoan(w, seat, a.amount);
+          if (s.phase === 'RAISE') maybeCovered(w);
+          break;
+        case 'REPAY': {
+          const p = P(w, seat);
+          toBank(w, seat, a.amount);
+          p.debt -= a.amount;
+          log(w, { type: 'REPAID', seat, amount: a.amount, debt: p.debt });
+          break;
+        }
+        case 'SELL_BUILDING':
+          sellTopBuilding(w, seat, a.space);
+          maybeCovered(w);
+          break;
+        case 'SELL_ASSET':
+          sellAsset(w, seat, a.space);
+          maybeCovered(w);
+          break;
+        case 'BANK_HANDLES_IT': {
+          const r = s.raise;
+          s.raise = null;
+          if (r) {
+            bankHandles(w, seat, r.total);
+            payOut(w, seat, r.payments);
+          }
+          endResolution(w);
+          break;
+        }
+        case 'AUCTION_START': {
+          const value =
+            priceOf(a.space, s.economy) + buildingsValue(a.space, s.level[a.space] ?? 0, s.economy);
+          const open = Math.max(
+            BID_STEP,
+            Math.round((value * s.economy.auctionOpenShare) / BID_STEP) * BID_STEP,
+          );
+          s.auctionsThisTurn += 1;
+          s.auction = {
+            seller: seat,
+            space: a.space,
+            open,
+            high: null,
+            startedAt: ctx.now,
+            endsAt: ctx.now + s.timing.auctionMs,
+            returnTo: s.phase === 'RAISE' ? 'RAISE' : 'ROLL',
+          };
+          log(w, { type: 'AUCTION', seller: seat, space: a.space, open });
+          enter(w, 'AUCTION', s.timing.auctionMs);
+          break;
+        }
+        case 'BID': {
+          const au = s.auction;
+          if (!au) break;
+          au.high = { seat, amount: a.amount };
+          log(w, { type: 'BID', seat, amount: a.amount });
+          const left = au.endsAt - ctx.now;
+          const cap = au.startedAt + s.timing.auctionMaxMs;
+          au.endsAt = Math.min(
+            cap,
+            left < s.timing.auctionExtendMs ? ctx.now + s.timing.auctionExtendMs : au.endsAt,
+          );
+          enter(w, 'AUCTION', au.endsAt - ctx.now);
+          break;
+        }
+        case 'TRADE_PROPOSE':
+          s.tradesThisTurn += 1;
+          s.trade = {
+            from: seat,
+            to: a.to,
+            give: a.give,
+            get: a.get,
+            endsAt: ctx.now + s.timing.tradeMs,
+          };
+          log(w, { type: 'TRADE_OFFER', from: seat, to: a.to });
+          enter(w, 'TRADE', s.timing.tradeMs);
+          break;
+        case 'TRADE_ANSWER': {
+          const t = s.trade;
+          s.trade = null;
+          if (t && a.accept && tradeValid(s, t.from, t.to, t.give, t.get)) {
+            P(w, t.from).cash += t.get.cash - t.give.cash;
+            P(w, t.to).cash += t.give.cash - t.get.cash;
+            for (const i of t.give.assets) s.owner[i] = t.to;
+            for (const i of t.get.assets) s.owner[i] = t.from;
+            for (const i of [...t.give.assets, ...t.get.assets]) {
+              s.lockedUntil[i] = s.round + s.economy.auctionLockRounds;
+            }
+            tradeSpending(w, t.from, t.give.cash, t.get.assets);
+            tradeSpending(w, t.to, t.get.cash, t.give.assets);
+            log(w, { type: 'TRADE_DONE', from: t.from, to: t.to, give: t.give, get: t.get });
+          } else if (t) {
+            log(w, { type: 'TRADE_DECLINED', from: t.from, to: t.to });
+          }
+          enter(w, 'ROLL', s.timing.turnMs);
+          break;
+        }
+      }
+      return done(w);
     },
 
-    onTimer(s, timer, ctx) {
-      if (timer !== PHASE_TIMER) return { state: s, events: [] };
+    onTimer(s0, timer, ctx) {
+      if (timer !== PHASE_TIMER || s0.phase === 'OVER') return { state: s0, events: [] };
+      const w = begin(s0, ctx);
+      const s = w.s;
       switch (s.phase) {
         case 'ROLL':
-          return roll(s, ctx, true);
+          roll(w, true);
+          break;
+        case 'EVENT':
+          eventRoll(w, true);
+          break;
         case 'DECIDE':
-          return decide(s, 'SKIP', null, ctx, true);
-        case 'HOLD': {
-          const w: Work = { s: structuredClone(s), events: [], requests: [] };
-          nextTurn(w, ctx);
-          return done(w);
+          decide(w, s.decision?.kind === 'JAIL' ? 'JAIL_WAIT' : 'SKIP', true);
+          break;
+        case 'RAISE': {
+          noteAuto(w, s.current, true);
+          const r = s.raise;
+          s.raise = null;
+          if (r) {
+            bankHandles(w, s.current, r.total);
+            payOut(w, s.current, r.payments);
+          }
+          endResolution(w);
+          break;
         }
-        case 'OVER':
-          return { state: s, events: [] };
+        case 'AUCTION':
+          closeAuction(w);
+          break;
+        case 'TRADE':
+          if (s.trade) log(w, { type: 'TRADE_DECLINED', from: s.trade.from, to: s.trade.to });
+          s.trade = null;
+          enter(w, 'ROLL', s.timing.turnMs);
+          break;
+        case 'HOLD':
+          nextTurn(w);
+          break;
       }
+      return done(w);
     },
 
     onSeatChange(s, seat, change) {
-      if (change === 'BOT_TOOK_OVER' || change === 'RECLAIMED') {
-        return { state: { ...s, autoActs: { ...s.autoActs, [seat]: 0 } }, events: [] };
+      const p = s.players[seat];
+      if (p && (change === 'BOT_TOOK_OVER' || change === 'RECLAIMED')) {
+        return {
+          state: { ...s, players: { ...s.players, [seat]: { ...p, autoActs: 0 } } },
+          events: [],
+        };
       }
       return { state: s, events: [] };
     },
@@ -699,18 +1124,23 @@ export function createBusinessGame(
     isOver: (s) => s.phase === 'OVER',
 
     getResults(s) {
-      const wealth = (x: number) => wealthOf(s, x);
+      const total = (x: number) => (s.final?.[x] ?? wealthOf(s, x)).total;
       return {
-        placements: rank(s.seats, wealth),
+        placements: rank(s.seats, total),
         stats: Object.fromEntries(
-          s.seats.map((x) => [
-            x,
-            {
-              wealth: wealth(x),
-              coins: s.coins[x] ?? 0,
-              cities: OWNABLE_SPACES.filter((i) => s.owner[i] === x && isCity(BOARD[i])).length,
-            },
-          ]),
+          s.seats.map((x) => {
+            const f = s.final?.[x] ?? wealthOf(s, x);
+            return [
+              x,
+              {
+                wealth: f.total,
+                cash: f.cash,
+                property: f.property,
+                development: f.development,
+                transport: f.transport,
+              },
+            ];
+          }),
         ),
       };
     },
@@ -719,71 +1149,137 @@ export function createBusinessGame(
       createMemory: () => null,
       observe: (memory) => memory,
       decide(view, _memory, ctx) {
-        if (view.phase === 'OVER' || view.current !== ctx.seat) return null;
-        if (view.phase === 'ROLL') {
-          return {
-            kind: 'ACTION',
-            action: { type: 'ROLL', turn: view.turn },
-            thinkMs: ctx.rng.int(rollMin, rollMax),
-          };
-        }
-        if (view.phase !== 'DECIDE' || !view.decision) return null;
+        const action = botAction(view, ctx.seat, ctx.rng, mistakeRate);
+        if (!action) return null;
+        const quick = action.type === 'ROLL' || action.type === 'EVENT_ROLL';
         return {
           kind: 'ACTION',
-          action: botChoice(view, ctx.seat, ctx.rng, mistakeRate),
-          thinkMs: ctx.rng.int(thinkMin, thinkMax),
+          action,
+          thinkMs: quick ? ctx.rng.int(rollMin, rollMax) : ctx.rng.int(thinkMin, thinkMax),
         };
       },
     },
   };
 }
 
-/** The bot's buy/develop call (design §11). Public view only. */
-export function botChoice(
+/** The bot's reserve: cash it tries to keep after spending. */
+export const botReserve = (view: Pick<BusinessView, 'seats'>) =>
+  1500 + 250 * (view.seats.length - 1);
+
+/** A stable pseudo-random factor in [lo, hi] for a bot and a situation (no memory needed). */
+const factor = (key: number, lo: number, hi: number) =>
+  lo + ((((key * 2654435761) >>> 0) % 1000) / 1000) * (hi - lo);
+
+/** One simple, imperfect bot (design §16). Public view only; the same actions as people. */
+export function botAction(
   view: BusinessView,
   seat: number,
   rng: SeededRng,
   mistakeRate: number,
-): BusinessAction {
-  const d = view.decision as Decision;
-  const coins = view.coins[seat] ?? 0;
-  const reserve = 150 + 25 * (view.seats.length - 1);
+): BusinessAction | null {
+  const turn = view.turn;
+  const me = view.players[seat];
+  if (!me || view.phase === 'OVER') return null;
+  const reserve = botReserve(view);
+
+  // Other players' auctions and trade offers.
+  if (view.phase === 'AUCTION' && view.auction && view.auction.seller !== seat) {
+    const a = view.auction;
+    if (a.high?.seat === seat) return null;
+    const value =
+      priceOf(a.space, view.economy) +
+      buildingsValue(a.space, view.level[a.space] ?? 0, view.economy);
+    const limit = value * factor(a.space * 31 + seat * 7 + turn, 0.8, 1.1);
+    const next = a.high ? a.high.amount + BID_STEP : a.open;
+    return next <= limit && me.cash - next >= reserve / 2
+      ? { type: 'BID', turn, amount: next }
+      : null;
+  }
+  if (view.phase === 'TRADE' && view.trade?.to === seat) {
+    const t = view.trade;
+    const worth = (o: Offer) =>
+      o.cash +
+      o.assets.reduce(
+        (n, i) =>
+          n + priceOf(i, view.economy) + buildingsValue(i, view.level[i] ?? 0, view.economy),
+        0,
+      );
+    let accept = worth(t.give) >= 1.1 * worth(t.get) && me.cash >= t.get.cash;
+    if (rng.int(1, 10) === 1) accept = !accept && me.cash >= t.get.cash;
+    return { type: 'TRADE_ANSWER', turn, accept };
+  }
+  if (view.current !== seat) return null;
+
   const completes = (space: number) => {
-    const region = regionOf(space);
+    const g = groupOf(space);
     return (
-      region !== null && regionSpaces(region).every((i) => i === space || view.owner[i] === seat)
+      g !== null &&
+      groupSpaces(g).filter((i) => view.owner[i] === seat).length + 1 >= view.economy.groupThreshold
     );
   };
-  // EXPAND: the best city to develop — a complete region first, then the dearest.
-  const ranked = [...d.options].sort(
-    (a, b) =>
-      Number(completes(b.space)) - Number(completes(a.space)) ||
-      priceOf(b.space, view.economy) - priceOf(a.space, view.economy),
-  );
-  const pick = (d.kind === 'EXPAND' ? ranked[0] : d.options[0]) as Choice;
-  const after = coins - pick.cost;
-  let wants = after >= reserve || (d.kind === 'BUY' && completes(pick.space) && after >= 50);
-  // Human-like: close calls sometimes go the other way.
-  if (Math.abs(after - reserve) < 0.2 * reserve && rng.int(1, 1000) <= mistakeRate * 1000) {
-    wants = !wants;
+  const close = (after: number) =>
+    Math.abs(after - reserve) < 0.2 * reserve && rng.int(1, 1000) <= mistakeRate * 1000;
+
+  switch (view.phase) {
+    case 'ROLL': {
+      // Now and then, offer cash for the city that completes a group.
+      if (view.tradesThisTurn === 0 && view.round % 5 === seat % 5) {
+        for (const i of CITY_SPACES) {
+          const owner = view.owner[i];
+          if (owner === null || owner === undefined || owner === seat) continue;
+          if ((view.lockedUntil[i] ?? 0) > view.round || !completes(i)) continue;
+          const cash = Math.round((priceOf(i, view.economy) * 1.3) / 100) * 100;
+          if (me.cash - cash < reserve) continue;
+          return {
+            type: 'TRADE_PROPOSE',
+            turn,
+            to: owner,
+            give: { cash, assets: [] },
+            get: { cash: 0, assets: [i] },
+          };
+        }
+      }
+      return { type: 'ROLL', turn };
+    }
+    case 'EVENT':
+      return { type: 'EVENT_ROLL', turn };
+    case 'RAISE':
+      return { type: 'BANK_HANDLES_IT', turn };
+    case 'DECIDE': {
+      const d = view.decision;
+      if (!d) return null;
+      if (d.kind === 'JAIL') {
+        return me.cash >= 3 * d.cost ? { type: 'JAIL_PAY', turn } : { type: 'JAIL_WAIT', turn };
+      }
+      if (d.kind === 'BUILD') {
+        // As many levels as keep the reserve (houses first, then the hotel).
+        let levels = 0;
+        while (
+          (view.level[d.space] ?? 0) + levels < HOTEL &&
+          me.cash - buildPrice(view, d.space, levels + 1) >= reserve
+        ) {
+          levels++;
+        }
+        if (close(me.cash - buildPrice(view, d.space, Math.max(1, levels))))
+          levels = levels > 0 ? levels - 1 : 1;
+        if (levels === 0 || me.cash < buildPrice(view, d.space, levels))
+          return { type: 'SKIP', turn };
+        return { type: 'BUILD', turn, space: d.space, levels };
+      }
+      const after = me.cash - d.cost;
+      let wants = after >= reserve || (completes(d.space) && after >= 500);
+      if (close(after)) wants = !wants;
+      if (!wants || after < 0) return { type: 'SKIP', turn };
+      return { type: 'BUY', turn, space: d.space };
+    }
+    default:
+      return null;
   }
-  if (!wants || after < 0) return { type: 'SKIP', turn: view.turn };
-  return { type: d.kind === 'BUY' ? 'BUY' : 'DEVELOP', turn: view.turn, space: pick.space };
 }
 
 export const businessGame = createBusinessGame();
 
-/** Leak-checker helper: reshuffles the hidden deck order; views must not change. */
-export function perturbBusinessHidden(
-  s: BusinessState,
-  _viewer: SeatIndex,
-  rng: SeededRng,
-): BusinessState {
-  return {
-    ...s,
-    decks: {
-      news: { ...s.decks.news, draw: rng.shuffle(s.decks.news.draw) },
-      mela: { ...s.decks.mela, draw: rng.shuffle(s.decks.mela.draw) },
-    },
-  };
-}
+/** Business has no hidden information (dice are rolled on the server; no deck). */
+export const perturbBusinessHidden = (s: BusinessState, _viewer: SeatIndex, _rng: SeededRng) => s;
+
+export { round10 };

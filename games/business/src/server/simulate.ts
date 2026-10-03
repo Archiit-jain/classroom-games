@@ -1,227 +1,297 @@
-import { createRng } from '@cg/game-sdk';
+import { createRng, type SeededRng, type TimerCommand } from '@cg/game-sdk';
 import {
+  ASSET_SPACES,
   BOARD,
-  CARDS,
-  OWNABLE_SPACES,
-  REGIONS,
-  developCost,
-  isCity,
-  priceOf,
-  regionOf,
+  CITY_SPACES,
+  GROUPS,
+  HOTEL,
+  TRANSPORT_SPACES,
+  groupOf,
   type Economy,
-  type Region,
+  type Group,
 } from '../shared/board';
-import type { BusinessEvent, BusinessState, LogEntry } from '../shared/types';
+import type { BusinessAction, BusinessEvent, BusinessState, LogEntry } from '../shared/types';
 import { createBusinessGame, wealthOf, type BusinessOptions } from './engine';
 
 /**
- * The economy simulation (design §10): complete bot-only matches through the real
- * engine and bot, measured. Pure and fast (no harness overhead); used by the
- * economy tests and `pnpm --filter @cg/game-business sim`.
+ * The economy simulation (BUSINESS_REDESIGN.md §20): complete matches through the
+ * real engine, bots and timers, measured. `casual` seats imitate relaxed human play
+ * (random buying, fewer buildings, occasional auctions) so guardrails and auctions are
+ * measured too; bot-only numbers are a sanity check, not the target.
  */
 export interface SimulationConfig {
   games: number;
   seed: number;
   players?: number[];
-  rounds?: (12 | 16 | 20)[];
+  rounds?: number[];
   economy?: Partial<Economy>;
-  /** Replace every card with a no-op (to measure what cards do). */
-  noCards?: boolean;
+  eventsOff?: boolean;
+  /** Share of seats played "casually" (0–1). */
+  casual?: number;
 }
 
 export interface EconomyReport {
   games: number;
   meanWealth: number;
-  /** Mean of each game's coefficient of variation of final wealth. */
+  /** Mean coefficient of variation of final wealth. */
   meanSpread: number;
-  /** Winner's wealth / runner-up's, averaged. */
-  meanWinMargin: number;
-  /** Games where the leader after the first third won by more than 2× second place. */
-  runawayRate: number;
-  /** Games won by the leader after the first third. */
   earlyLeaderWinRate: number;
-  /** Player-games ending with nothing (0 coins, no property). */
-  brokeRate: number;
-  /** Clearance sales per game. */
-  clearancePerGame: number;
-  /** Share of turns that began with the current player under 100 coins. */
-  lowCashTurnRate: number;
-  writtenOffPerGame: number;
+  /** Winner over 2× the runner-up, having led after the first third. */
+  runawayRate: number;
+  insolventRate: number;
+  loansPerGame: number;
+  meanDebtBeforeSettle: number;
+  tradesPerGame: number;
+  auctionsPerGame: number;
+  auctionSoldRate: number;
+  /** Share of final wealth that came from trades/auctions between players. */
+  transferShare: number;
+  ownedAtEnd: number;
+  transportOwnedAtEnd: number;
+  housesPerGame: number;
+  hotelsPerGame: number;
+  /** Mean coins moved by events per game (absolute). */
+  eventMoneyPerGame: number;
+  jailPayRate: number;
   meanTurns: number;
-  /** Estimated minutes at human pace (≈ 9 s per turn). */
+  /** At ≈ 11 s a turn (human pace with animations). */
   estimatedMinutes: number;
-  /** Share of games each ownable space was owned at the end. */
-  ownedAtEnd: Record<string, number>;
-  /** Mean final development level of each city when owned. */
-  meanLevel: Record<string, number>;
-  /** Per region: fees collected / coins invested (price + development) by owners. */
-  regionReturn: Record<Region, number>;
-  industryReturn: number;
-  /** Coins moved per card draw (mean absolute effect on the drawing player). */
-  cardsDrawnPerGame: number;
+  /** Purchase rate per group (owned at the end). */
+  groupOwned: Record<Group, number>;
+  /** Mean final level of owned cities per group. */
+  groupLevel: Record<Group, number>;
 }
 
-const HUMAN_SECONDS_PER_TURN = 9;
+const HUMAN_SECONDS_PER_TURN = 11;
+
+/** A relaxed "human" player: more random buying, fewer buildings, occasional auctions. */
+function casualAction(
+  s: BusinessState,
+  seat: number,
+  rng: SeededRng,
+  bot: () => BusinessAction | null,
+): BusinessAction | null {
+  const me = s.players[seat];
+  if (!me || s.current !== seat) return bot();
+  if (s.phase === 'ROLL' && s.auctionsThisTurn === 0 && rng.int(1, 40) === 1) {
+    const mine = ASSET_SPACES.filter(
+      (i) => s.owner[i] === seat && (s.lockedUntil[i] ?? 0) <= s.round,
+    );
+    if (mine.length > 0) return { type: 'AUCTION_START', turn: s.turn, space: rng.pick(mine) };
+  }
+  if (s.phase === 'DECIDE' && s.decision && s.decision.kind !== 'JAIL') {
+    const d = s.decision;
+    const kind = d.kind === 'BUY' ? 'BUY' : 'BUILD';
+    const wants = d.kind === 'BUY' ? rng.int(1, 100) <= 70 : rng.int(1, 100) <= 45;
+    if (wants && me.cash >= d.cost) {
+      return kind === 'BUY'
+        ? { type: 'BUY', turn: s.turn, space: d.space }
+        : { type: 'BUILD', turn: s.turn, space: d.space, levels: 1 };
+    }
+    return { type: 'SKIP', turn: s.turn };
+  }
+  return bot();
+}
 
 export function simulateEconomy(config: SimulationConfig): EconomyReport {
   const rng = createRng(config.seed);
-  const noOps = CARDS.map((c) => ({ ...c, effect: { kind: 'gain' as const, amount: 0 } }));
   const options: BusinessOptions = {
     ...(config.economy ? { economy: config.economy } : {}),
-    ...(config.noCards ? { cards: noOps } : {}),
+    ...(config.eventsOff ? { eventsOff: true } : {}),
   };
   const game = createBusinessGame(options);
-  const playersChoice = config.players ?? [2, 3, 4, 5, 6];
-  const roundsChoice = config.rounds ?? [16];
-
-  let wealthSum = 0;
-  let wealthN = 0;
-  let spreadSum = 0;
-  let marginSum = 0;
-  let runaway = 0;
-  let earlyWins = 0;
-  let broke = 0;
-  let playerGames = 0;
-  let clearances = 0;
-  let turns = 0;
-  let lowCash = 0;
-  let writtenOff = 0;
-  let cardsDrawn = 0;
-  const owned: Record<string, number> = {};
-  const levelSum: Record<string, number> = {};
-  const levelN: Record<string, number> = {};
-  const feesByRegion: Record<string, number> = {};
-  const investByRegion: Record<string, number> = {};
+  const players = config.players ?? [2, 3, 4, 5, 6];
+  const roundsChoice = config.rounds ?? [15];
+  const totals = {
+    wealth: 0,
+    wealthN: 0,
+    spread: 0,
+    early: 0,
+    runaway: 0,
+    insolvent: 0,
+    playerGames: 0,
+    loans: 0,
+    debt: 0,
+    trades: 0,
+    auctions: 0,
+    sold: 0,
+    transfers: 0,
+    finalSum: 0,
+    owned: 0,
+    transports: 0,
+    houses: 0,
+    hotels: 0,
+    eventMoney: 0,
+    jailPay: 0,
+    jailTotal: 0,
+    turns: 0,
+  };
+  const groupOwned: Record<string, number> = {};
+  const groupLevelSum: Record<string, number> = {};
+  const groupLevelN: Record<string, number> = {};
 
   for (let g = 0; g < config.games; g++) {
-    const seats = Array.from({ length: rng.pick(playersChoice) }, (_, i) => i);
+    const seats = Array.from({ length: rng.pick(players) }, (_, i) => i);
     const rounds = rng.pick(roundsChoice);
+    const casual = new Set(seats.filter(() => rng.int(1, 1000) <= (config.casual ?? 0) * 1000));
     const gameRng = createRng(rng.int(1, 2 ** 30));
     let now = 0;
-    const ctx = () => ({ now, rng: gameRng });
-    let t = game.setup(seats, { rounds }, ctx(), { bots: seats });
-    let s: BusinessState = t.state;
-    const third = Math.ceil(rounds / 3);
-    let earlyLeader = -1;
-    const seen = (events: readonly { event: BusinessEvent }[]) => {
-      for (const { event } of events) {
-        if (event.type !== 'LOG') continue;
-        const e: LogEntry = event.entry;
-        if (e.type === 'CLEARANCE') clearances++;
-        if (e.type === 'CARD') cardsDrawn++;
-        if (e.type === 'PAID' && e.reason === 'fee' && e.space !== undefined) {
-          const region = regionOf(e.space) as Region;
-          feesByRegion[region] = (feesByRegion[region] ?? 0) + e.amount;
-        }
-        if (e.type === 'PAID' && e.reason === 'factory') {
-          feesByRegion.industry = (feesByRegion.industry ?? 0) + e.amount;
-        }
-        if (e.type === 'DIVIDEND') feesByRegion.industry = (feesByRegion.industry ?? 0) + e.amount;
-        if (e.type === 'BOUGHT' || (e.type === 'DEVELOPED' && e.cost > 0)) {
-          const key = regionOf(e.space) ?? 'industry';
-          investByRegion[key] =
-            (investByRegion[key] ?? 0) + (e.type === 'BOUGHT' ? e.price : e.cost);
-        }
+    const timers = new Map<string, number>();
+    const track = (cmds: readonly TimerCommand[] | undefined) => {
+      for (const c of cmds ?? []) {
+        if ('set' in c) timers.set(c.set, now + c.ms);
+        else timers.delete(c.clear);
       }
     };
-    seen(t.events);
+    let t = game.setup(
+      seats,
+      { rounds, board: 'india-classic', eventFrequency: 'normal' },
+      { now, rng: gameRng },
+      { bots: seats },
+    );
+    let s: BusinessState = t.state;
+    track(t.timers);
+    const third = Math.ceil(rounds / 3);
+    let early = -1;
+    let debtPeak = 0;
+    const observe = (events: readonly { event: BusinessEvent }[]) => {
+      for (const { event } of events) {
+        if (event.type === 'TURN') totals.turns++;
+        if (event.type !== 'LOG') continue;
+        const e: LogEntry = event.entry;
+        if (e.type === 'LOAN') totals.loans++;
+        if (e.type === 'TRADE_DONE') {
+          totals.trades++;
+          totals.transfers += e.give.cash + e.get.cash;
+        }
+        if (e.type === 'AUCTION') totals.auctions++;
+        if (e.type === 'AUCTION_WON') {
+          totals.sold++;
+          totals.transfers += e.amount;
+        }
+        if (e.type === 'JAIL') {
+          totals.jailTotal++;
+          if (e.paid) totals.jailPay++;
+        }
+        if (e.type === 'GAINED' && e.reason === 'event') totals.eventMoney += e.amount;
+        if (e.type === 'PAID' && e.reason === 'event') totals.eventMoney += e.amount;
+      }
+    };
+    observe(t.events);
     let guard = 0;
     while (s.phase !== 'OVER') {
-      if (++guard > 10_000) throw new Error('simulation did not finish');
-      now += 1000;
-      if (s.phase === 'ROLL') {
-        turns++;
-        if ((s.coins[s.current] ?? 0) < 100) lowCash++;
-        if (s.round === third + 1 && earlyLeader < 0) {
-          earlyLeader = [...seats].sort((a, b) => wealthOf(s, b) - wealthOf(s, a))[0] as number;
-        }
+      if (++guard > 50_000) throw new Error('simulation did not finish');
+      if (s.round === third + 1 && early < 0) {
+        early = [...seats].sort((a, b) => wealthOf(s, b).total - wealthOf(s, a).total)[0] as number;
       }
-      if (s.phase === 'HOLD') {
-        t = game.onTimer(s, 'phase', ctx());
+      // The earliest bot action (by think time) or the next timer.
+      let best: { seat: number; action: BusinessAction; at: number } | null = null;
+      for (const seat of seats) {
+        const view = game.getPlayerView(s, seat);
+        const viaBot = () => {
+          const d = game.bot.decide(view, null, { seat, now, rng: gameRng });
+          return d && d.kind === 'ACTION' ? d.action : null;
+        };
+        const action = casual.has(seat) ? casualAction(s, seat, gameRng, viaBot) : viaBot();
+        if (!action) continue;
+        const at = now + gameRng.int(300, 2000);
+        if (!best || at < best.at) best = { seat, action, at };
+      }
+      const next = [...timers.entries()].sort((a, b) => a[1] - b[1])[0];
+      if (best && (!next || best.at < next[1])) {
+        now = best.at;
+        const v = game.validateAction(s, best.seat, best.action);
+        if (!v.ok) {
+          // A stale casual intent (e.g. an auction that just became impossible): skip it.
+          if (casual.has(best.seat)) continue;
+          throw new Error(`bot action rejected: ${v.code} ${JSON.stringify(best.action)}`);
+        }
+        t = game.applyAction(s, best.seat, best.action, { now, rng: gameRng });
+      } else if (next) {
+        now = Math.max(now, next[1]);
+        timers.delete(next[0]);
+        t = game.onTimer(s, next[0], { now, rng: gameRng });
       } else {
-        const d = game.bot.decide(game.getPlayerView(s, s.current), null, {
-          seat: s.current,
-          now,
-          rng: gameRng,
-        });
-        if (!d || d.kind !== 'ACTION') throw new Error('bot did not act');
-        const verdict = game.validateAction(s, s.current, d.action);
-        if (!verdict.ok) throw new Error(`bot action rejected: ${verdict.code}`);
-        t = game.applyAction(s, s.current, d.action, ctx());
+        throw new Error('simulation stalled');
       }
       s = t.state;
-      seen(t.events);
+      track(t.timers);
+      observe(t.events);
+      if (s.phase !== 'OVER') {
+        for (const x of seats) debtPeak = Math.max(debtPeak, s.players[x]?.debt ?? 0);
+      }
     }
 
-    const wealth = seats.map((x) => wealthOf(s, x));
-    const mean = wealth.reduce((a, b) => a + b, 0) / wealth.length;
-    const sd = Math.sqrt(wealth.reduce((a, b) => a + (b - mean) ** 2, 0) / wealth.length);
-    wealthSum += wealth.reduce((a, b) => a + b, 0);
-    wealthN += wealth.length;
-    spreadSum += mean > 0 ? sd / mean : 0;
-    const sorted = [...wealth].sort((a, b) => b - a);
-    marginSum += (sorted[0] ?? 0) / Math.max(1, sorted[1] ?? 1);
-    const winner = seats[wealth.indexOf(sorted[0] as number)] as number;
-    if (earlyLeader === winner) {
-      earlyWins++;
-      if ((sorted[0] ?? 0) > 2 * (sorted[1] ?? 0)) runaway++;
+    const final = seats.map((x) => s.final?.[x]?.total ?? 0);
+    const mean = final.reduce((a, b) => a + b, 0) / final.length;
+    const sd = Math.sqrt(final.reduce((a, b) => a + (b - mean) ** 2, 0) / final.length);
+    totals.wealth += final.reduce((a, b) => a + b, 0);
+    totals.finalSum += final.reduce((a, b) => a + b, 0);
+    totals.wealthN += final.length;
+    totals.spread += mean > 0 ? sd / mean : 0;
+    totals.debt += debtPeak;
+    const sorted = [...final].sort((a, b) => b - a);
+    const winner = seats[final.indexOf(sorted[0] as number)] as number;
+    if (early === winner) {
+      totals.early++;
+      if ((sorted[0] ?? 0) > 2 * (sorted[1] ?? 0)) totals.runaway++;
     }
     for (const x of seats) {
-      playerGames++;
-      if ((s.coins[x] ?? 0) === 0 && OWNABLE_SPACES.every((i) => s.owner[i] !== x)) broke++;
+      totals.playerGames++;
+      if (s.log.some((e) => e.type === 'INSOLVENT' && e.seat === x) || s.players[x]?.insolvent) {
+        totals.insolvent++;
+      }
     }
-    writtenOff += s.writtenOff;
-    for (const i of OWNABLE_SPACES) {
-      const key = String(i);
+    totals.owned += ASSET_SPACES.filter((i) => s.owner[i] !== null).length / ASSET_SPACES.length;
+    totals.transports +=
+      TRANSPORT_SPACES.filter((i) => s.owner[i] !== null).length / TRANSPORT_SPACES.length;
+    for (const i of CITY_SPACES) {
+      const lv = s.level[i] ?? 0;
+      if (lv === HOTEL) totals.hotels++;
+      else totals.houses += lv;
+      const group = groupOf(i) as Group;
       if (s.owner[i] !== null) {
-        owned[key] = (owned[key] ?? 0) + 1;
-        if (isCity(BOARD[i])) {
-          levelSum[key] = (levelSum[key] ?? 0) + (s.level[i] ?? 0);
-          levelN[key] = (levelN[key] ?? 0) + 1;
-        }
+        groupOwned[group] = (groupOwned[group] ?? 0) + 1;
+        groupLevelSum[group] = (groupLevelSum[group] ?? 0) + lv;
+        groupLevelN[group] = (groupLevelN[group] ?? 0) + 1;
       }
     }
   }
 
-  const name = (i: number) => {
-    const b = BOARD[i];
-    return b?.kind === 'city' || b?.kind === 'industry' ? b.id : String(i);
-  };
   const n = config.games;
+  const groupSize = (gr: Group) => CITY_SPACES.filter((i) => groupOf(i) === gr).length;
+  const r3 = (x: number) => +x.toFixed(3);
   return {
     games: n,
-    meanWealth: Math.round(wealthSum / wealthN),
-    meanSpread: +(spreadSum / n).toFixed(3),
-    meanWinMargin: +(marginSum / n).toFixed(2),
-    runawayRate: +(runaway / n).toFixed(3),
-    earlyLeaderWinRate: +(earlyWins / n).toFixed(3),
-    brokeRate: +(broke / playerGames).toFixed(4),
-    clearancePerGame: +(clearances / n).toFixed(2),
-    lowCashTurnRate: +(lowCash / turns).toFixed(4),
-    writtenOffPerGame: Math.round(writtenOff / n),
-    meanTurns: Math.round(turns / n),
-    estimatedMinutes: +(((turns / n) * HUMAN_SECONDS_PER_TURN) / 60).toFixed(1),
-    ownedAtEnd: Object.fromEntries(
-      OWNABLE_SPACES.map((i) => [name(i), +((owned[String(i)] ?? 0) / n).toFixed(2)]),
-    ),
-    meanLevel: Object.fromEntries(
-      OWNABLE_SPACES.filter((i) => isCity(BOARD[i])).map((i) => [
-        name(i),
-        +((levelSum[String(i)] ?? 0) / Math.max(1, levelN[String(i)] ?? 0)).toFixed(2),
+    meanWealth: Math.round(totals.wealth / totals.wealthN),
+    meanSpread: r3(totals.spread / n),
+    earlyLeaderWinRate: r3(totals.early / n),
+    runawayRate: r3(totals.runaway / n),
+    insolventRate: r3(totals.insolvent / totals.playerGames),
+    loansPerGame: +(totals.loans / n).toFixed(2),
+    meanDebtBeforeSettle: Math.round(totals.debt / n),
+    tradesPerGame: +(totals.trades / n).toFixed(2),
+    auctionsPerGame: +(totals.auctions / n).toFixed(2),
+    auctionSoldRate: r3(totals.sold / Math.max(1, totals.auctions)),
+    transferShare: r3(totals.transfers / Math.max(1, totals.finalSum)),
+    ownedAtEnd: r3(totals.owned / n),
+    transportOwnedAtEnd: r3(totals.transports / n),
+    housesPerGame: +(totals.houses / n).toFixed(1),
+    hotelsPerGame: +(totals.hotels / n).toFixed(1),
+    eventMoneyPerGame: Math.round(totals.eventMoney / n),
+    jailPayRate: r3(totals.jailPay / Math.max(1, totals.jailTotal)),
+    meanTurns: Math.round(totals.turns / n),
+    estimatedMinutes: +(((totals.turns / n) * HUMAN_SECONDS_PER_TURN) / 60).toFixed(1),
+    groupOwned: Object.fromEntries(
+      GROUPS.map((gr) => [gr, r3((groupOwned[gr] ?? 0) / (n * groupSize(gr)))]),
+    ) as Record<Group, number>,
+    groupLevel: Object.fromEntries(
+      GROUPS.map((gr) => [
+        gr,
+        +((groupLevelSum[gr] ?? 0) / Math.max(1, groupLevelN[gr] ?? 0)).toFixed(2),
       ]),
-    ),
-    regionReturn: Object.fromEntries(
-      REGIONS.map((r) => [
-        r,
-        +((feesByRegion[r] ?? 0) / Math.max(1, investByRegion[r] ?? 1)).toFixed(2),
-      ]),
-    ) as Record<Region, number>,
-    industryReturn: +(
-      (feesByRegion.industry ?? 0) / Math.max(1, investByRegion.industry ?? 1)
-    ).toFixed(2),
-    cardsDrawnPerGame: +(cardsDrawn / n).toFixed(1),
+    ) as Record<Group, number>,
   };
 }
 
-/** Investment needed to fully develop a city (for reports). */
-export const fullCost = (i: number, e?: Economy) => priceOf(i, e) + 3 * developCost(i, e);
+export const BOARD_FOR_REPORTS = BOARD;
