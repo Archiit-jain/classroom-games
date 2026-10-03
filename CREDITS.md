@@ -28,14 +28,15 @@ Checked with `pnpm licenses list --prod` on 2026-10-02.
 
 ## Content
 
-| Content                                                                    | Source                                                                                        | License         |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------- |
-| Base English profanity dataset                                             | Bundled with `obscenity` (derived from [cuss](https://github.com/words/cuss) by Titus Wormer) | MIT             |
-| Hinglish / romanised Hindi word list, insult list, allow-list              | Written for this project (`packages/moderation/src/datasets.ts`)                              | Project license |
-| Draw & Guess word pack and bot drawing templates                           | Written for this project (`games/draw-and-guess/content/en`, `src/server/templates.ts`)       | Project license |
-| Nickname suggestions, game texts, role icons (crown, scroll, shield, mask) | Written/drawn for this project                                                                | Project license |
-| 16 Parchi categories, item labels and the 40 item icons, medals            | Written/drawn for this project (`games/sixteen-parchi`)                                       | Project license |
-| Quick-reaction emoji                                                       | Drawn by each device's own system emoji font — no emoji images or fonts are shipped           | —               |
+| Content                                                                              | Source                                                                                                                 | License         |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | --------------- |
+| Base English profanity dataset                                                       | Bundled with `obscenity` (derived from [cuss](https://github.com/words/cuss) by Titus Wormer)                          | MIT             |
+| Hinglish / romanised Hindi word list, insult list, allow-list                        | Written for this project (`packages/moderation/src/datasets.ts`)                                                       | Project license |
+| Draw & Guess word pack and bot drawing templates                                     | Written for this project (`games/draw-and-guess/content/en`, `src/server/templates.ts`)                                | Project license |
+| Nickname suggestions, game texts, role icons (crown, scroll, shield, mask)           | Written/drawn for this project                                                                                         | Project license |
+| 16 Parchi categories, item labels and the 40 item icons, medals                      | Written/drawn for this project (`games/sixteen-parchi`)                                                                | Project license |
+| Business board, city selection, prices, News/Mela card texts, coin, tokens and icons | Written/drawn for this project (`games/business`); city names are real geography; pretend coins only, never the ₹ sign |
+| Quick-reaction emoji                                                                 | Drawn by each device's own system emoji font — no emoji images or fonts are shipped                                    | —               |
 
 ## Development-only tools (not shipped)
 

@@ -104,6 +104,19 @@ Players can switch **Effects: Auto / Full / Lite** from the header.
   automatic check decides. Scores: a players × categories table with 10 / 5 / 0 stamps,
   round deltas and totals, held on screen before the podium (`revealMs`). Layout follows the
   board's own width (container queries) so it fits beside the chat.
+- Business (working title): a warm paper-map **ring road** of 28 tiles — 6 × 10 upright on
+  phones (~54 px tiles at 360 px), turned a quarter clockwise to 10 × 6 when the board is wide
+  (play always runs clockwise). Tiles: a region colour band, the name (smaller for long
+  names), the price while for sale, the owner's colour frame and a building icon (stall →
+  mall); tokens (auto-rickshaw, scooter, bicycle, kite, cricket bat, chai cup) hop tile by tile
+  (full), slide (lite) or appear (reduced). The **stage** inside the ring holds the round chip
+  and countdown, the dice, a **postcard** of the current space (tap any tile to see its
+  postcard: owner, level, fees for every level, development cost), News/Mela card and wheel
+  reveals, and the actions — a big **Roll**, **Buy / Build / Skip** (48 px), or the **Start
+  expansion** list (the options also glow on the board and can be tapped). Short landscape
+  stages hide the dice and fee table. A players strip shows tokens, names and rolling coins
+  (Broke badge); a "What happened" log keeps every change readable in Reduced motion. SOLD
+  stamp on purchases; the final board stays a moment before the podium (Wealth, Cities).
 
 ## Accessibility
 

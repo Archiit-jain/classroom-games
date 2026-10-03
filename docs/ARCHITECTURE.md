@@ -59,7 +59,7 @@ flowchart LR
 | Game SDK        | `packages/game-sdk`                  | Game contract, seeded RNG, audience helpers, test harness, fixture game, client module types                                                                                                                                                                                      |
 | Client platform | `apps/client/src/platform/`          | `GameConnection` (socket + store), clock offset, storage, action sender (ids, double-tap coalescing), animation director, effects controller                                                                                                                                      |
 | Design system   | `packages/ui`                        | Color Burst Arcade tokens/styles + animated primitives shared by screens and game boards ([ADR-015](decisions/ADR-015-shared-ui-package.md))                                                                                                                                      |
-| Games           | `games/<id>`                         | Each game's shared types, pure engine + bot (server) and board (client) — `games/rmcs`, `games/sixteen-parchi`, `games/draw-and-guess`, `games/pen-fight`, `games/dots-and-boxes`, `games/name-place-animal-thing`; one more planned ([catalogue](GAME_SYSTEM.md#game-catalogue)) |
+| Games           | `games/<id>`                         | Each game's shared types, pure engine + bot (server) and board (client) — `games/rmcs`, `games/sixteen-parchi`, `games/draw-and-guess`, `games/pen-fight`, `games/dots-and-boxes`, `games/name-place-animal-thing`, `games/business` ([catalogue](GAME_SYSTEM.md#game-catalogue)) |
 
 ## Request path (one game action)
 

@@ -3,13 +3,13 @@
 Quick multiplayer classroom and childhood games in the browser. No accounts, no login:
 pick a nickname, create or join a room, play.
 
-> **Status: Phase 7 of 12 — six of seven games playable, production-ready architecture.**
+> **Status: Phase 8 of 12 — all seven games playable, production-ready architecture.**
 > The multiplayer platform (sessions, private rooms, reconnect, bots, chat moderation, quick
 > reactions, live drawing streams, server-side physics) runs on several server instances with
 > shared state in Redis, built for **Vercel**. **Raja Mantri Chor Sipahi**, the flagship
-> **16 Parchi**, **Draw & Guess** (working name), **Pen Fight**, **Dots & Boxes** and **Name Place Animal Thing** are fully
+> **16 Parchi**, **Draw & Guess** (working name), **Pen Fight**, **Dots & Boxes**, **Name Place Animal Thing** and **Business** (working title) are fully
 > playable with friends and bots in the **Color Burst Arcade** design.
-> One more game is planned: Business. See the [roadmap](#roadmap).
+> Next: the public lobby and matchmaking. See the [roadmap](#roadmap).
 
 ## Why
 
@@ -42,6 +42,11 @@ server, not the browser, decides every outcome.
   automatically, then the players vote out doubtful ones (with 3+ players); 10 for a unique
   answer, 5 for a shared one. Rules:
   [docs/GAME_RULES/NAME_PLACE_ANIMAL_THING.md](docs/GAME_RULES/NAME_PLACE_ANIMAL_THING.md).
+- **Business** _(working title)_ — 2–6 players roll round a 28-space "ring road", buy
+  Indian cities and industries, build Stalls into Malls and pay visitor fees; News and Mela
+  cards, a Lucky Mela wheel; nobody is knocked out (automatic clearance sales); the richest
+  after 12, 16 or 20 rounds wins. Pretend coins only. Rules:
+  [docs/GAME_RULES/BUSINESS.md](docs/GAME_RULES/BUSINESS.md).
 - **Quick reactions** — eight emotes that pop over your seat for everyone (one per 1.5 s,
   only ever sent by a person).
 - **Color Burst Arcade design** — nostalgic classroom games × modern arcade: paper chits,
@@ -64,16 +69,16 @@ server, not the browser, decides every outcome.
 
 ## Games
 
-| Game                        | Players | Status                                                                  |
-| --------------------------- | ------- | ----------------------------------------------------------------------- |
-| Raja Mantri Chor Sipahi     | 4       | ✅ Playable (Phase 2)                                                   |
-| 16 Parchi (flagship)        | 4       | ✅ Playable (Phase 3)                                                   |
-| Draw & Guess (working name) | 3–6     | ✅ Playable (Phase 4)                                                   |
-| Pen Fight                   | 2–4     | ✅ Playable (Phase 5)                                                   |
-| Dots & Boxes                | 2–4     | ✅ Playable (Phase 6)                                                   |
-| Name Place Animal Thing     | 2–8     | ✅ Playable (Phase 7)                                                   |
-| Business (working title)    | 2–6     | Designed — Phase 8 (proposed); [design](docs/design/BUSINESS_DESIGN.md) |
-| Count Up (fixture)          | 2–4     | Development/test only, never in production                              |
+| Game                        | Players | Status                                     |
+| --------------------------- | ------- | ------------------------------------------ |
+| Raja Mantri Chor Sipahi     | 4       | ✅ Playable (Phase 2)                      |
+| 16 Parchi (flagship)        | 4       | ✅ Playable (Phase 3)                      |
+| Draw & Guess (working name) | 3–6     | ✅ Playable (Phase 4)                      |
+| Pen Fight                   | 2–4     | ✅ Playable (Phase 5)                      |
+| Dots & Boxes                | 2–4     | ✅ Playable (Phase 6)                      |
+| Name Place Animal Thing     | 2–8     | ✅ Playable (Phase 7)                      |
+| Business (working title)    | 2–6     | ✅ Playable (Phase 8)                      |
+| Count Up (fixture)          | 2–4     | Development/test only, never in production |
 
 The agreed rules for the first four games are in [docs/specs/PHASE_0_SPEC.md](docs/specs/PHASE_0_SPEC.md);
 the three newer games are specified by their design-verification documents in
@@ -108,6 +113,7 @@ games/
   rmcs/           Raja Mantri Chor Sipahi (shared types, engine + bot, board)
   sixteen-parchi/ 16 Parchi (shared types + categories, engine + bot, board, content/en labels)
   dots-and-boxes/ Dots & Boxes (shared grid + picking, engine + bot, board)
+  business/       Business (board, economy, cards, engine + bot, simulator, board client)
   name-place-animal-thing/ Name Place Animal Thing (answer checks, answer bank, engine + bot, worksheet)
   pen-fight/      Pen Fight (shared desk/replay helpers, engine + Planck physics + bot, board)
   draw-and-guess/ Draw & Guess (shared types + guess matching, engine + bot templates, board, content/en words)
@@ -173,17 +179,19 @@ See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) and [docs/GAME_SYSTEM.md](doc
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md). Current suite: 488 unit/integration tests (the Redis
-adapter and the multi-instance tests run against a real Redis in CI), 25 end-to-end runs
-(desktop + mobile, every game, reduced motion, 360 px layouts, a WebSocket leak scan) and a
-production smoke test (Dots & Boxes and a three-player Name Place Animal Thing round).
+See [docs/TESTING.md](docs/TESTING.md). Current suite: 529 unit/integration tests (the Redis
+adapter and the multi-instance tests run against a real Redis in CI), 32 end-to-end runs
+(desktop + mobile, every game, reduced motion, 360 px and landscape phones, a WebSocket leak
+scan) and a production smoke test (Dots & Boxes, a three-player Name Place Animal Thing round
+and a full Business match).
 
 ## Known limitations
 
 - A live deployment needs a Vercel project and a Redis database (see DEPLOYMENT.md).
 - One instance at a time hosts every room (others forward to it); sharding rooms across hosts is
   a later step if needed.
-- Six of the seven games so far; public lobby and matchmaking arrive in Phase 9.
+- All seven games are playable; public lobby and matchmaking arrive in Phase 9.
+- Business is best with 3–6 players (two-player games have few interactions).
 - Client bundle is ≈ 150 KB gzipped (Motion; game boards load separately); trimming is
   planned for Phase 11.
 - No sound (excluded from v1). English only (the UI is translation-ready).
@@ -197,7 +205,7 @@ production smoke test (Dots & Boxes and a three-player Name Place Animal Thing r
 5. ✅ Pen Fight
 6. ✅ Dots & Boxes + production architecture (Vercel + Redis)
 7. ✅ Name Place Animal Thing
-8. Business (working title) _(proposed order)_
+8. ✅ Business (working title)
 9. Public lobby, Quick Play, bot fill, "Play with Bots"
 10. Moderation hardening and abuse testing
 11. Performance, mobile and animation polish

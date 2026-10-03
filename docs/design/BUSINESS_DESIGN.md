@@ -1,6 +1,6 @@
 # Business (working title) — Phase 8 design verification
 
-**Status:** design pass, written **before** implementation (Phase 8). Internal game id:
+**Status:** design pass, written before implementation; **built in Phase 8** — rules as implemented: [GAME_RULES/BUSINESS.md](../GAME_RULES/BUSINESS.md); decision record: [ADR-025](../decisions/ADR-025-business-economy.md). Internal game id:
 `business`. **"Business" is a provisional working title** — the public name needs a
 trademark / name-availability check before launch and nothing may suggest a link to any
 existing product. Built on the existing `GameModule` / server-authoritative runtime and the
@@ -22,6 +22,25 @@ no new networking.
 > play-test value until the economy simulation (§10) and play-testing. **Clarifications of
 > the baseline** are listed in §21. **Implementation blockers:** none. **Launch blocker:** the
 > final public name.
+
+> **Implementation results (Phase 8) — these override the proposals below.** The economy
+> simulation (§10) changed four things; every number stays a play-test value.
+>
+> 1. **Start expansion:** with "develop only when you land on your own city again", cities
+>    reached an average level of only ~1.25 — development barely happened. Now, in addition,
+>    **each time you pass or land on Start you may develop any one of your cities by one
+>    level** (after any landing decision). Average final level rose to ~2–3 for the dearer
+>    cities.
+> 2. **Economy:** start **1,200** coins; salary **150**; visitor fee at Stall **25 %** of the
+>    price; level multipliers **×1 / ×3 / ×5 / ×8**; each level costs **50 %** of the price;
+>    region bonus **×1.5**; industries **200**, dividend **25** per industry at Start (+40 for
+>    all three), factory visit **20** per industry; clearance sales at **50 %**. (The first
+>    proposal — 1,500 coins, fees 10 %, ×1/3/6/10, dividend 40 — gave fees worth only ~10 %
+>    of what was invested, wealth spreads of ~8 % and industries five times better than
+>    cities.)
+> 3. **Rounds:** options **12 / 16 / 20**, default **16** (12 rounds was only ~7 minutes for 4
+>    players).
+> 4. Timers unchanged (roll 10 s, decide 15 s); token hops 160 ms, landing pause 1.2 s.
 
 ---
 
@@ -233,20 +252,38 @@ fairs. Movement cards resolve the new space once (no chains beyond one card).
 
 ## 10. Economy simulation (before freezing prices)
 
-Built with the engine: a seeded simulator plays **≥ 5,000 complete bot matches** (2–6
-players, every round setting) through the same engine and bot, and reports: average and
-spread of final wealth; Gini-style spread; city purchase and development frequencies per
-city and region; clearance-sale and Broke frequency; game length (turns, estimated minutes);
-**runaway leader** (leader at round ⌈rounds/3⌉ still wins by > 2× second place); share of
-turns spent under 100 coins; card effects (wealth with vs without each card, by swapping it
-for a no-op); regional return on investment. Values in §4–§9 are adjusted until:
+`games/business/src/server/simulate.ts` plays complete bot-only matches through the real
+engine and bot; `pnpm --filter @cg/game-business sim` prints the report and `scripts/sweep.ts`
+compares candidate economies. A 400-game guard runs in the test suite.
 
-- no region's return per coin invested is more than ~1.5× another's;
-- runaway wins (as defined) in < 20 % of games; Broke in < 5 % of player-games;
-- the leader at one third of the game wins well under 60 % of games (comebacks happen);
-- a 4-player default game lasts ≈ 15–20 minutes at human pace.
+**Targets:** no region's return per coin invested more than ~1.5× another's; runaway wins
+(the leader after the first third wins with more than 2× second place) < 20 %; players ending
+with nothing < 5 %; the leader after the first third wins well under 60 % of games.
 
-The final numbers and the measured statistics are recorded in this document and the rules.
+**Final values, 5,000 games per row** (2–6 players unless stated; seed 42):
+
+| Setting                 | Wealth spread¹ | Early leader wins | Runaway   | Ends with nothing | Clearance sales / game | Low-cash turns² | Turns  | ≈ minutes³ |
+| ----------------------- | -------------- | ----------------- | --------- | ----------------- | ---------------------- | --------------- | ------ | ---------- |
+| 12 rounds               | 0.24           | 43 %              | 1.5 %     | 0.2 %             | 0.24                   | 0.5 %           | 48     | 7          |
+| **16 rounds (default)** | **0.35**       | **45 %**          | **4.2 %** | **1.3 %**         | **0.79**               | **1.5 %**       | **64** | **10**     |
+| 20 rounds               | 0.46           | 46 %              | 8.1 %     | 3.3 %             | 1.49                   | 2.8 %           | 80     | 12         |
+| 16 rounds, 2 players    | 0.18           | 63 %              | 11 %      | 0.2 %             | 0.30                   | 1.6 %           | 32     | 5          |
+| 16 rounds, 4 players    | 0.37           | 42 %              | 2.8 %     | 1.0 %             | 0.87                   | 1.7 %           | 64     | 10         |
+| 16 rounds, 6 players    | 0.48           | 35 %              | 1.7 %     | 2.1 %             | 1.06                   | 1.3 %           | 96     | 14         |
+| 16 rounds, no cards     | 0.35           | 45 %              | 4.7 %     | 1.3 %             | 0.78                   | 1.6 %           | 64     | 10         |
+
+¹ coefficient of variation of final wealth. ² turns starting under 100 coins. ³ at ≈ 9 s a
+turn (human pace).
+
+- **Regions (16 rounds), fees collected ÷ coins invested:** Central 0.46 · East 0.57 · North
+  0.60 · South 0.60 · West 0.59 (max/min 1.30); industries 0.54.
+- **Purchases (16 rounds):** every city ends owned in 72–85 % of games (cheaper first);
+  **average final level** from 1.6 (Indore) to 3.0 (Mumbai) — the dearer cities are
+  developed more, by design of the bot's expansion choice.
+- **Cards:** with all cards replaced by no-ops the spread and runaway rate barely move
+  (0.35 vs 0.35; 4.7 % vs 4.2 %): cards add ~80 coins per player and colour, not swings.
+- **Two players** stay the weakest setting (the early leader wins ~60 %, with few
+  interactions); 20 rounds helps a little. Recorded as a known limitation.
 
 ## 11. Bot ("Normal", one level)
 
@@ -390,6 +427,10 @@ title marked provisional everywhere.
 6. **Industries:** dividend at Start + a small factory-visit fee (numbers proposed).
 7. **Starting coins 1,500, salary 150, rounds 8/12/16 (default 12), timers 10 s / 15 s** —
    proposals, final values set by §10.
+
+8. **Start expansion** (from the simulation, see the box at the top): passing or landing on
+   Start also lets you develop any one of your cities by one level.
+9. **Final economy and rounds** replaced the proposals in 7 (see the box at the top).
 
 Open for the owner (non-blocking): the city list and region assignment; all numbers after
 simulation; the token set; the provisional title.
