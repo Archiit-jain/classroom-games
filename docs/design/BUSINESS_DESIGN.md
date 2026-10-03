@@ -1,174 +1,395 @@
-# Business (working title) — design verification
+# Business (working title) — Phase 8 design verification
 
-**Status:** design only (not implemented). Proposed phase: 8. Internal game id: `business`.
-Built on the existing `GameModule` / server-authoritative runtime (`sync: 'TURN_PHASE'`); no
-new networking.
+**Status:** design pass, written **before** implementation (Phase 8). Internal game id:
+`business`. **"Business" is a provisional working title** — the public name needs a
+trademark / name-availability check before launch and nothing may suggest a link to any
+existing product. Built on the existing `GameModule` / server-authoritative runtime and the
+Phase 6 production architecture ([ADR-023](../decisions/ADR-023-multi-instance-cluster.md));
+no new networking.
 
-> **Decision status.** **Binding** — product-owner brief (2026-10-01): 2–6 players; an
-> original Indian-style property game that copies nothing from Monopoly; original board,
-> places, currency, cards, pieces, icons and rules; fictional money only; "Business" is a
-> working title; properties, purchases, upgrades, rent/income, events and turns are
-> server-authoritative. Product-owner decisions (2026-10-01): see below. **Everything else** —
-> the board layout and city list, every number (cash, prices, rents, salaries, fees),
-> corners, industries, cards, development levels, timers, bankruptcy handling, bot behaviour,
-> UI and animation — is a **developer proposal** awaiting owner sign-off and bot-simulation
-> tuning, not a frozen decision. **Implementation blockers:** none. **Launch blocker:** the
-> final public name (trademark / name-availability check).
+> **Decision status.**
+>
+> **Frozen (product owner; spec C12/C14 and the Phase 8 brief):** 2–6 players · a fixed number
+> of rounds · the richest player wins · **no player-to-player trading** in v1 · **real Indian
+> city names** with our own selection, prices, board, rules and art · **fictional currency
+> only** (never real money, never the ₹ symbol) · an original Indian theme.
+>
+> **Baseline from the earlier design (kept):** a 28-space board · 15 cities in 5 regions ·
+> 3 industries (Tea Garden, Textile Mill, Film Studio) · News and Mela cards · Start, Chai
+> Break, Traffic Jam and Lucky Mela · development levels Stall → Shop → Showroom → Mall.
+>
+> **Everything else is a developer proposal** marked _(proposed)_; every number is a
+> play-test value until the economy simulation (§10) and play-testing. **Clarifications of
+> the baseline** are listed in §21. **Implementation blockers:** none. **Launch blocker:** the
+> final public name.
 
-**Working title.** "Business" is a working title. Several commercial Indian board games use
-the same word, so the public name must pass a **trademark / name-availability check before
-launch**, and nothing may suggest a link to any existing product.
+---
 
-**Product-owner decisions (2026-10-01):** **fixed number of rounds, richest player wins** ·
-**no player-to-player trading in v1** · **real Indian city names** as the properties, with our
-own city selection, grouping, prices, board layout, rules and artwork (this supersedes the
-brief's "fictional locations" for the properties).
+## 0. Originality guardrails
 
-## 1. Originality guardrails
+Dice, a looping track and owning places are generic game mechanics; names, artwork, text and
+distinctive presentation are protected. So:
 
-Game mechanics like dice, a looping track and owning places are generic and free to use;
-what is protected is names, artwork, text and distinctive presentation. We therefore:
-
-- **Never use:** the Monopoly name, its 40-space board, its corner set or their names (GO,
-  Jail, Free Parking, Go To Jail), Chance / Community Chest, railroads / utilities, houses /
-  hotels, mortgages, auctions, title-deed card design, the mascot, money designs or colours,
-  or any card text.
-- **Never copy** the city line-up, prices, card texts or artwork of commercial Indian
+- **We never use:** the Monopoly name or logo; its square 40-space board or any square ring
+  with four equal sides; its corner set or corner names; Chance / Community Chest or their
+  wording; railroads / utilities; houses / hotels; title-deed cards; mortgages; auctions;
+  jail; "rent", "GO", "Free Parking", "bank error"-style card texts; its tokens, mascot,
+  money designs or colours.
+- **We never copy** the city line-up, prices or card texts of commercial Indian
   "Business"-style boards.
-- **Use our own:** 28-space board, corner ideas, region groups, prices, development levels
-  (Stall → Shop → Showroom → Mall), industries, News/Mela cards, tokens and art, plus a
-  fictional currency, **Coins**, with its own coin icon. The ₹ symbol and real notes are
-  never used, and there is no real money anywhere (no purchases, no stakes).
+- **Ours:** a **tall "ring road" board** (6 × 10 tiles, §3) with uneven sides; our corners;
+  regions; prices; **visitor fees**; Stall → Shop → Showroom → Mall; industries that pay a
+  **dividend**; **News** and **Mela** cards with our own texts and effects; a
+  **Lucky Mela wheel**; automatic **clearance sales** instead of mortgages; tokens (auto-
+  rickshaw, scooter, bicycle, kite, cricket bat, chai cup) and art drawn for this project; a
+  fictional currency, **Coins** (its own coin icon, written "120 coins").
 
-## 2. Board (28 spaces) _(proposed)_
+## 1. Player journey
 
-| #   | Space            | #   | Space             | #   | Space               | #   | Space              |
-| --- | ---------------- | --- | ----------------- | --- | ------------------- | --- | ------------------ |
-| 0   | **Start**        | 7   | **Chai Break**    | 14  | **Traffic Jam**     | 21  | **Lucky Mela**     |
-| 1   | Indore           | 8   | Guwahati          | 15  | Delhi               | 22  | Jaipur             |
-| 2   | News             | 9   | Tea Garden (ind.) | 16  | Textile Mill (ind.) | 23  | Film Studio (ind.) |
-| 3   | Bhopal           | 10  | Kolkata           | 17  | Kochi               | 24  | Ahmedabad          |
-| 4   | Nagpur           | 11  | News              | 18  | News                | 25  | News               |
-| 5   | Electricity Bill | 12  | Amritsar          | 19  | Chennai             | 26  | Mumbai             |
-| 6   | Bhubaneswar      | 13  | Chandigarh        | 20  | Bengaluru           | 27  | Repair Bill        |
+| #   | Step              | What happens                                                                                                                                                      |
+| --- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Room              | Host creates a private room, picks Business, sets **rounds**; friends join by code; host may add bots (2–6 seats).                                                |
+| 2   | Seating           | Seats in join order; each seat gets its token and colour.                                                                                                         |
+| 3   | Start             | The usual 3-2-1 countdown. Board set up: everyone on **Start** with the starting coins; all cities and industries with the bank; decks shuffled (server).         |
+| 4   | First player      | Drawn by the match's seeded RNG and announced ("Asha goes first"); play goes round in seat order.                                                                 |
+| 5   | Turn              | The current player taps **Roll**. The server rolls two dice and moves the token; the board animates the hops.                                                     |
+| 6   | Landing           | The space resolves: buy a free city/industry (decision), develop your own city (decision), pay a visitor fee, draw a card, spin the Lucky Mela wheel, or nothing. |
+| 7   | Decision          | Buy / Develop / Skip with a countdown. Cash, price, fees and level are shown on a postcard of the space.                                                          |
+| 8   | End of turn       | Automatically after the decision (or immediately when there is none) and after the animation hold. Next seat.                                                     |
+| 9   | Round progression | A round = every player has had one turn. The round counter is always visible ("Round 7 of 12").                                                                   |
+| 10  | Final settlement  | After the last round: every player's **wealth** = coins + the value of what they own (§8), revealed with a counting animation.                                    |
+| 11  | Results           | The platform podium and results table (Wealth, Cities).                                                                                                           |
 
-- **Regions** (3 cities each, one colour each): Central (Indore 100, Bhopal 110, Nagpur 120) ·
-  East (Bhubaneswar 150, Guwahati 160, Kolkata 180) · North (Amritsar 210, Chandigarh 220,
-  Delhi 250) · South (Kochi 270, Chennai 290, Bengaluru 310) · West (Jaipur 330, Ahmedabad
-  350, Mumbai 400). Order and prices are gameplay tiers, not a ranking of cities; the owner
-  may edit the list.
-- **Industries** (Tea Garden, Textile Mill, Film Studio): 200 each.
+## 2. Turn system _(timers proposed)_
 
-## 3. Proposed rules
+| Topic            | Rule                                                                                                                                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First player     | Seeded server RNG at setup.                                                                                                                                                                        |
+| Order            | Seat order from the first player, wrapping round.                                                                                                                                                  |
+| Movement         | **Two six-sided dice**, rolled on the server (seeded match RNG); move forward that many spaces. No extra roll for doubles.                                                                         |
+| Roll timer       | **10 s**. On timeout the server rolls for the player (counts as an automatic action).                                                                                                              |
+| Decision timer   | **15 s** after the move animation. Timeout = Skip (counts as an automatic action).                                                                                                                 |
+| Animation hold   | The server waits for the move/card animation (≈ 160 ms per hop + 1.2 s card/landing, scaled) before the next turn or before starting the decision timer, so the board stays readable for everyone. |
+| What ends a turn | The decision (or its timeout), or the end of the hold when there is no decision.                                                                                                                   |
+| Disconnected     | The platform's 30 s reconnect grace; meanwhile the timers act for the player (auto-roll, skip). After the grace a bot takes the seat; the player can **reclaim immediately** ("I'm back").         |
+| Idle             | 3 automatic actions in a row (while connected) → `MARK_IDLE` → bot takes over, reclaimable.                                                                                                        |
+| Server authority | Dice, movement, landing effects, fees, card effects, liquidation, wealth and the winner are computed only by the engine. Clients send only `ROLL`, `BUY`, `DEVELOP`, `SKIP`.                       |
 
-| Topic         | Rule                                                                                                                                                                                                                            |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Players       | 2–6. Public target 4, minHumans 2. Start: 1,800 Coins each; seat order from a seeded random first player.                                                                                                                       |
-| Turn          | Roll two dice (server RNG) → move clockwise → resolve the space. No extra rolls for doubles.                                                                                                                                    |
-| Start         | Passing or landing: **+150** salary.                                                                                                                                                                                            |
-| Free city     | Buy it at its price, or skip (it stays with the bank — no auction).                                                                                                                                                             |
-| Your city     | You may develop it **one level**: Stall → Shop → Showroom → Mall; each level costs 50 % of the city price.                                                                                                                      |
-| Others' city  | Pay rent: 10 % of price × level multiplier (Stall ×1, Shop ×3, Showroom ×6, Mall ×10); **×1.5** if the owner holds the whole region.                                                                                            |
-| Industry      | Owner gets a **dividend of 50** per industry each time they pass or land on Start. Anyone else landing there pays 40 × the number of industries the owner has.                                                                  |
-| News          | Draw from a shuffled 16-card News deck (original texts: festival bonus, road repairs, collect from / pay each player, move to a space…).                                                                                        |
-| Lucky Mela    | Draw a Mela card — always good (+50 to +150, a free development, or move to Start).                                                                                                                                             |
-| Chai Break    | Nothing happens.                                                                                                                                                                                                                |
-| Traffic Jam   | Miss your next turn.                                                                                                                                                                                                            |
-| Bills         | Electricity Bill: pay 60. Repair Bill: pay 20 per development level you own (at least 40).                                                                                                                                      |
-| Short of cash | **Raise money:** sell cities/industries back to the bank for 50 % of price + development spent. If you still can't pay, you are **bankrupt**: pay what you have, all your property returns to the bank, and you leave the game. |
-| Trading       | None in v1 (owner decision).                                                                                                                                                                                                    |
-| End           | After the set number of **rounds** (host setting 10 / **15** / 20), or when only one player is not bankrupt.                                                                                                                    |
-| Winner        | Highest **net worth** = cash + price of owned property + development spent. Ties share a place. Bankrupt players rank below everyone else, earliest bankruptcy last.                                                            |
+## 3. Board — 28 spaces, "ring road" geometry
 
-**Timers:** roll 10 s (auto-roll), buy / develop decision 15 s (default: don't), raise money
-20 s (default: sell the lowest-value property first). **Idle:** 3 consecutive automatic
-decisions → `MARK_IDLE` → bot. Bankrupt players stay in the room as spectators (chat and
-reactions still work).
+The board is a **tall rectangle of 6 × 10 tiles** (corners shared): top and bottom edges
+have 6 tiles, the long sides 10. Perimeter = 2·6 + 2·10 − 4 = **28**. It is played
+**clockwise** from the top-left corner. Portrait phones show it upright (6 tiles across);
+landscape screens show it turned 90° (10 across). The corners are therefore **not evenly
+spaced** (5 and 9 steps apart) — unlike any square board.
 
-## 4. Turn flow (state machine) _(proposed)_
+| #   | Space                     | #   | Space                       |
+| --- | ------------------------- | --- | --------------------------- |
+| 0   | **Start** (corner)        | 14  | **Traffic Jam** (corner)    |
+| 1   | Indore — Central          | 15  | Delhi — North               |
+| 2   | News                      | 16  | **Textile Mill** (industry) |
+| 3   | Bhopal — Central          | 17  | Mela                        |
+| 4   | Nagpur — Central          | 18  | Kochi — South               |
+| 5   | **Chai Break** (corner)   | 19  | **Lucky Mela** (corner)     |
+| 6   | Bhubaneswar — East        | 20  | Chennai — South             |
+| 7   | Mela                      | 21  | News                        |
+| 8   | Guwahati — East           | 22  | Bengaluru — South           |
+| 9   | **Tea Garden** (industry) | 23  | **Film Studio** (industry)  |
+| 10  | Kolkata — East            | 24  | Jaipur — West               |
+| 11  | News                      | 25  | Mela                        |
+| 12  | Lucknow — North           | 26  | Ahmedabad — West            |
+| 13  | Chandigarh — North        | 27  | Mumbai — West               |
 
-```text
-TURN_START(seat) → [Traffic Jam? skip] → ROLL (10 s) → MOVING (hold ≈ 200 ms per step)
-→ LANDED: BUY_DECISION | DEVELOP_DECISION (15 s) | auto rent / bill / dividend | CARD reveal (2 s)
-→ [RAISE_MONEY (20 s) if a payment can't be covered] → TURN_END → next seat (round + 1 after the last seat)
-→ … → GAME_END (round limit or one solvent player)
-```
+Edges: top 0–5, right 5–14, bottom 14–19, left 19–27 → 0. Counts: 15 cities, 3 industries,
+3 News, 3 Mela, 4 corners = 28.
 
-One engine timer per decision; every amount moves through a single pure ledger function so
-money is conserved and testable.
+## 4. Cities, regions and industries _(all values proposed, tuned by §10)_
 
-## 5. Bot ("Normal") _(proposed)_
+Regions follow a loose journey around India: **Central → East → North → South → West**,
+cheapest to dearest around the loop. Order and prices are gameplay tiers, not a ranking of
+real cities.
 
-- **Buy** if, after paying, cash stays above a reserve (300) and the price is at most 40 % of
-  its cash — or the city completes / extends a region it is collecting. Always buy an
-  industry if the reserve allows.
-- **Develop** on landing if cash ≥ cost + reserve, preferring cities in a complete region.
-- **Raise money** by selling the property that loses the least rent, keeping complete
-  regions as long as possible.
-- Delays 0.8–2.5 s. Bots see only the public view; they never chat or react.
+| Region  | Cities (board order)             | Price           | Visitor fee at Stall / Shop / Showroom / Mall |
+| ------- | -------------------------------- | --------------- | --------------------------------------------- |
+| Central | Indore · Bhopal · Nagpur         | 100 · 110 · 120 | 10% · ×3 · ×6 · ×10 of price (§5)             |
+| East    | Bhubaneswar · Guwahati · Kolkata | 140 · 150 · 170 |                                               |
+| North   | Lucknow · Chandigarh · Delhi     | 190 · 200 · 230 |                                               |
+| South   | Kochi · Chennai · Bengaluru      | 240 · 250 · 270 |                                               |
+| West    | Jaipur · Ahmedabad · Mumbai      | 290 · 300 · 340 |                                               |
 
-## 6. Hidden information
+- **Region bonus:** owning all three cities of a region multiplies their visitor fees by
+  **1.5** (rounded to 5).
+- **Industries** (Tea Garden, Textile Mill, Film Studio): price **200**. They pay their owner
+  a **dividend of 40 per industry** every time the owner passes or lands on Start, **+40**
+  extra when they own all three. A visitor landing on someone's industry pays a **factory
+  visit** of 25 per industry the owner has.
+- **Balancing intent:** cheaper regions recover their price faster (fees are a fixed share
+  of price) but earn less per visit; dearer regions dominate late. The simulation checks
+  that no region is strictly best or worst (§10).
 
-Almost everything is public (positions, cash, ownership). The only hidden thing is the order
-of the shuffled card decks; views and events never include it (leak test: perturb deck order
-→ views unchanged). Dice are rolled on the server.
+All amounts are whole coins; percentages round to the nearest 5.
 
-## 7. Phone and desktop UI _(proposed)_
+## 5. Development
 
-- **Board:** a square ring of 28 tiles (8 per side incl. corners — ≈ 41 px tiles on a 360 px
-  phone). Tiles show the region colour band and a small icon; tapping a tile opens a
-  postcard-style detail sheet (city name, price, rent by level, owner).
-- **Centre of the board:** dice, the current space as a large postcard, news cards.
-- **Bottom sheet:** the current decision (Buy / Skip with price and rent; Develop / Skip;
-  Raise money list), big buttons, countdown ring.
-- **Players strip:** token, name, cash (rolling number), net worth on desktop.
-- Desktop: board left, players/log panel right. Tokens (original): auto-rickshaw, scooter,
-  bicycle, kite, cricket bat, chai cup.
+| Level        | How you get it                    | Cost (proposed)  | Visitor fee (× Stall fee) |
+| ------------ | --------------------------------- | ---------------- | ------------------------- |
+| **Stall**    | Buy the city                      | the city's price | ×1                        |
+| **Shop**     | Develop when you land on it again | 50 % of price    | ×3                        |
+| **Showroom** | Develop when you land on it again | 50 % of price    | ×6                        |
+| **Mall**     | Develop when you land on it again | 50 % of price    | ×10                       |
 
-## 8. Animation (Color Burst Arcade) _(proposed)_
+- **One level per landing**, only on **your own city**, only if you can pay the cost.
+  (A Mela card can also give a free level, §9.) No region requirement, no build-anywhere
+  phase, no limits beyond Mall — deliberately simple.
+- Not enough coins: the Develop button is disabled; you can only Skip.
 
-| Moment     | Full                                                     | Lite        | Reduced |
-| ---------- | -------------------------------------------------------- | ----------- | ------- |
-| Dice       | Two dice tumble and bounce on the table                  | flat spin   | instant |
-| Move       | Token hops tile by tile with a squash                    | slide       | jump    |
-| Buy        | "SOLD" stamp on the postcard; coins fly to the bank      | stamp only  | instant |
-| Rent / pay | A coin stream from payer to receiver; cash counters roll | single coin | numbers |
-| Develop    | The building grows (stall → shop → showroom → mall)      | swap        | instant |
-| Cards      | News / Mela card flips and slides out                    | fade        | instant |
-| Bankrupt   | Avatar greys out; property flies back to the bank        | fade        | instant |
-| End        | Net-worth bars race up into the podium                   | bars        | podium  |
+## 6. No trading
 
-## 9. Content and licensing
+No trades, deals, loans, player auctions or mortgages in v1. Money management needs none of
+them: see §7.
 
-City names are real geography (owner decision); illustrations are our own simple
-silhouettes. Board, tokens, cards (texts written by us), coin and all art are original. No
-religious, political or caste content in cards; no real brands. Fictional money only.
-**Before launch:** trademark / name-availability check for the final public name.
+## 7. Short of coins — clearance sales, never elimination
 
-## 10. Major technical risks
+Players are **never eliminated** (the game always lasts the chosen rounds, and nobody sits out
+in a classroom). The rule is one sentence: **if you must pay more than you have, the bank
+automatically sells your assets at half value until you can pay; whatever still can't be
+covered is written off.**
 
-1. **Length and pacing:** 6 players × 15 rounds × ~10 s per turn ≈ 15–25 min; idle players
-   handled by timers and bot takeover. Tune rounds via bot simulation.
-2. **Phone board legibility** (41 px tiles): tap-to-inspect sheet, large centre postcard.
-3. **Economy balance:** run thousands of seeded bot games to tune prices, salary and rents
-   (target: few bankruptcies, a clear winner, no runaway leader by round 5).
-4. **Multi-step turns and edge cases** (raise money, bankruptcy mid-card, payments to several
-   players): one ledger function + money-conservation invariant + fuzzing.
-5. **Animation pacing vs timers:** server holds include move/coin animation time (spec §15).
+| Situation                                | What happens                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Land on a free city you can't afford     | You can't buy it (Buy disabled); it stays with the bank.                                                                                                                                                                                                                                                                                              |
+| Can't afford a development               | Develop disabled.                                                                                                                                                                                                                                                                                                                                     |
+| Owe a fee / card payment you can't cover | **Clearance sale** (automatic, deterministic): first sell development levels back at **50 % of their cost**, one level at a time from your most developed city (ties: cheapest city first); then sell whole cities/industries at **50 % of price**, cheapest first. Stops as soon as you can pay. Sold places return to the bank (free to buy again). |
+| Still short with nothing left            | You pay **everything you have**; the rest is **written off** (the receiver gets less). You are **"Broke"**: 0 coins, nothing owned — you keep playing, collecting the Start salary, and can rebuild.                                                                                                                                                  |
+| Reach exactly zero                       | Nothing special.                                                                                                                                                                                                                                                                                                                                      |
 
-## 11. Testing
+All of it is shown as one event ("Clearance sale: Ravi sold a Shop in Bhopal and Indore for
+120 coins") — no menus, no accounting decisions.
 
-Engine: every space type, rent table, region bonus, development, dividends, cards, Traffic
-Jam, raise money, bankruptcy, end conditions, net worth, ties. Invariants: money is
-conserved (all Coins accounted for between players and bank), ownership consistent,
-positions valid. Fuzz: 1,000+ seeded bot games with economy statistics. Real sockets:
-decision timeouts, simultaneous buy race impossible (turn-based), reconnect mid-decision.
-Playwright: desktop + phone match vs bots.
+## 8. Rounds, wealth and the winner _(round counts proposed)_
 
-## 12. Decisions and open points
+- Host setting: **8 / 12 / 16 rounds**, default **12** (to be confirmed by §10 for game
+  length).
+- Start: **1,500 coins** each _(proposed)_; **Start salary 150** when passing or landing on
+  Start.
+- After the final player's turn in the final round the match ends (no extra turns).
+- **Wealth = coins + Σ price of owned cities and industries + Σ development cost spent on
+  them.** Upgrades count at full cost (so developing never lowers your wealth score, only
+  your cash). Computed by the engine; identical for every client.
+- **Ranking:** highest wealth first; equal wealth shares a place (1, 1, 3). No secondary
+  tie-break (deterministic and explainable).
 
-**Implementation blockers:** none. **Launch blocker:** the final public name (trademark /
-name-availability check). **Proposed — awaiting owner sign-off (non-blocking):** the 28-space layout and city list;
-starting cash 1,800, salary 150, prices, rent multipliers, development cost, region ×1.5,
-industry dividend/fee, bills; rounds default 15; timers 10 / 15 / 20 s; idle after 3; no
-auctions; sell-back at 50 %; bankrupt players spectate.
+## 9. Cards and the Lucky Mela wheel _(texts ours; values proposed)_
+
+Two decks of **12 cards**, shuffled by the server at setup; drawn from the top; a drawn card
+goes to its deck's discard pile; when a deck runs out its discards are reshuffled (seeded).
+The deck order is the only hidden information in the game. Every effect is bounded: **no
+single card moves more than 150 coins from or to any one player**.
+
+**News** — business events (some affect everyone or a region):
+
+| #   | Card                                               | Effect                                          |
+| --- | -------------------------------------------------- | ----------------------------------------------- |
+| N1  | Monsoon comes early and tea prices climb.          | Tea Garden owner +100 (if owned)                |
+| N2  | Your little shop trends online overnight.          | You +80                                         |
+| N3  | Fuel prices go up.                                 | You −40                                         |
+| N4  | Power cuts across town: generators for every shop. | You −15 per development level you own (max 120) |
+| N5  | Wedding season — malls are packed.                 | Every Mall owner +50 per Mall                   |
+| N6  | Big export order for local industry.               | You +40 per industry you own (at least +40)     |
+| N7  | Tech fair in the South.                            | South city owners +30 per South city            |
+| N8  | Road works slow business in the West.              | West city owners −20 per West city              |
+| N9  | Markets dip for a day.                             | Everyone −25                                    |
+| N10 | You catch the express train.                       | Move forward 4 spaces (resolve the new space)   |
+| N11 | A film shoots in your city — crowds everywhere.    | Film Studio owner +100 (if owned)               |
+| N12 | Cotton harvest is excellent.                       | Textile Mill owner +100 (if owned)              |
+
+**Mela** — fair and festival fun (mostly good, a few small treats to pay for):
+
+| #   | Card                                            | Effect                                                                         |
+| --- | ----------------------------------------------- | ------------------------------------------------------------------------------ |
+| M1  | You win the ring-toss!                          | +50                                                                            |
+| M2  | Giant-wheel ride — your treat for everyone.     | Pay 10 to each other player                                                    |
+| M3  | Your sweets stall sells out.                    | +70                                                                            |
+| M4  | You win the kite-flying contest.                | Collect 15 from each other player                                              |
+| M5  | Lost in the crowd!                              | Move back 3 spaces (resolve the new space)                                     |
+| M6  | Puppet-show tickets.                            | −30                                                                            |
+| M7  | Lucky-draw winner: free makeover for your shop. | Your least-developed city (cheapest first) goes up a level free; no city → +60 |
+| M8  | Folk-dance prize.                               | +60                                                                            |
+| M9  | A balloon for every child in the queue.         | −20                                                                            |
+| M10 | The magic show leaves everyone smiling.         | Everyone +30                                                                   |
+| M11 | Food-court feast.                               | −40                                                                            |
+| M12 | The mela train takes you home.                  | Move to Start (collect the salary)                                             |
+
+**Mela spaces** draw a Mela card; **News spaces** draw a News card.
+
+**Lucky Mela (corner):** spin the wheel — 6 equal slices: +50, +75, +100, +100, +150, or a
+free level on your least-developed city (no city → +75). Always good.
+
+**Other corners:** **Start** — salary (also when passing); **Chai Break** — a safe stop,
+nothing happens; **Traffic Jam** — your **next roll uses one die** (stuck in slow traffic).
+
+No content about religion, politics, caste, brands or real people; festivals are generic
+fairs. Movement cards resolve the new space once (no chains beyond one card).
+
+## 10. Economy simulation (before freezing prices)
+
+Built with the engine: a seeded simulator plays **≥ 5,000 complete bot matches** (2–6
+players, every round setting) through the same engine and bot, and reports: average and
+spread of final wealth; Gini-style spread; city purchase and development frequencies per
+city and region; clearance-sale and Broke frequency; game length (turns, estimated minutes);
+**runaway leader** (leader at round ⌈rounds/3⌉ still wins by > 2× second place); share of
+turns spent under 100 coins; card effects (wealth with vs without each card, by swapping it
+for a no-op); regional return on investment. Values in §4–§9 are adjusted until:
+
+- no region's return per coin invested is more than ~1.5× another's;
+- runaway wins (as defined) in < 20 % of games; Broke in < 5 % of player-games;
+- the leader at one third of the game wins well under 60 % of games (comebacks happen);
+- a 4-player default game lasts ≈ 15–20 minutes at human pace.
+
+The final numbers and the measured statistics are recorded in this document and the rules.
+
+## 11. Bot ("Normal", one level)
+
+- **Buy** when, after paying, it keeps a **reserve** (≈ 150 + 25 per opponent) — always for a
+  city that completes a region; industries when the reserve allows; otherwise it buys when
+  the price is at most ~45 % of its coins. Late in the game (last 2 rounds) it buys only
+  if the purchase cannot lower its wealth (it never does — buying converts coins to equal
+  wealth) **and** keeps the reserve.
+- **Develop** when the reserve remains after paying; prefers cities in a complete region.
+- **Mistakes** _(play-test)_: 10 % of buy decisions are flipped when the call is close
+  (within 20 % of the threshold); never buys below zero (impossible anyway).
+- **Pace:** thinks 0.8–2.0 s; rolls after 0.6–1.4 s.
+- Uses the **same actions** (`ROLL`, `BUY`, `DEVELOP`, `SKIP`) through the same validation as
+  humans; sees only the public view.
+
+## 12. Phone UX (designed first)
+
+- **Portrait:** the 6 × 10 board fills the width (≈ 54 px tiles at 360 px — not shrunk to
+  unreadable). Each tile: region colour band, a bold short label (city names wrap to two
+  lines at ≥ 9 px; icons for industries, News, Mela, corners), owner colour edge and level
+  pips (1–4 dots). Tokens are small coloured discs with the token icon; several on one tile
+  fan out.
+- **The board's inside** (4 × 8 tiles of space) is the **stage**: dice, the current space as a
+  big **postcard** (name, region, price, fees by level, owner, level), the card reveal, and
+  the **action buttons** (Roll / Buy / Develop / Skip, 48 px) with the countdown — so the
+  player's eyes never leave the board.
+- **Tapping any tile** shows its postcard in the stage (tap again or after the next event to
+  return to the current space).
+- **Players strip** above the board: token, name, coins (rolling), current player ring.
+  "Wealth" appears on the results; a small "Round 7/12" chip.
+- **Landscape phone:** the board turns (10 across, 6 tall) and fills the height; the players
+  strip moves to a column on the right.
+
+## 13. Desktop UX
+
+The board dominates (landscape orientation, ~70 % of the width); the right column holds the
+players (coins, cities owned, wealth so far), a short **event log** ("Priya paid 45 to Ravi
+in Kolkata") and the room chat. Color Burst Arcade: a warm paper-map board with the ring road,
+regional colours and small hand-drawn landmarks drawn for this project (no photographs), a
+festive Lucky Mela corner, chunky dice, tokens that hop tile by tile, a "SOLD" stamp on
+purchases, buildings growing on upgrades (stall → shop → showroom → mall icons), cards that
+flip out of the centre, coins streaming between players, and a final wealth count-up into
+the podium. Not childish, not a finance dashboard: no charts, few numbers at once.
+
+## 14. Animation modes
+
+| Moment         | Full                                        | Lite       | Reduced                    |
+| -------------- | ------------------------------------------- | ---------- | -------------------------- |
+| Dice           | dice tumble and land                        | quick spin | the numbers                |
+| Move           | token hops tile by tile                     | slides     | appears on the tile        |
+| Buy            | "SOLD" stamp + coin flight                  | stamp      | owner edge + log line      |
+| Fee / payment  | coin stream payer → receiver, counters roll | one coin   | counters change + log line |
+| Develop        | building grows                              | icon swaps | pips change + log line     |
+| Card           | card flips out of the deck                  | fade       | card shown                 |
+| Clearance sale | places fade back to the bank                | fade       | log line                   |
+| Final          | wealth bars race to the podium              | bars       | table                      |
+
+Every state change also appears as text (event log, postcard, counters), so Reduced mode
+loses nothing but movement.
+
+## 15. Server authority and protocol
+
+Actions (strict schemas, with the platform's action ids and versions):
+
+| Action    | Payload                 | Rejected when                                                                                             |
+| --------- | ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `ROLL`    | `{ type, turn }`        | not your turn (`NOT_YOUR_TURN`), not the roll phase / wrong turn number (`INVALID_PHASE`)                 |
+| `BUY`     | `{ type, turn, space }` | not your turn; no buy decision; `space` ≠ where you stand; already owned; can't afford (`ILLEGAL_ACTION`) |
+| `DEVELOP` | `{ type, turn, space }` | not your turn; not your city; already a Mall; can't afford; no develop decision                           |
+| `SKIP`    | `{ type, turn }`        | not your turn; nothing to skip                                                                            |
+
+The `turn` number (and `space`) make stale or replayed intents harmless. No payload carries a
+dice value, an amount, a position or an owner — extra fields are rejected (`INVALID_PAYLOAD`).
+Platform protections unchanged: duplicate action ids, versions never issued, wrong seat,
+anything after the match ends.
+
+## 16. Information flow
+
+Positions, coins, ownership, levels, dice and card effects are **public**; the event log
+records them. The only hidden data is the **deck order** (never in views or events until a
+card is drawn — leak-checked). No client-side authoritative state.
+
+## 17. Production architecture
+
+An ordinary `GameModule` (`sync: 'TURN_PHASE'`): actions go gateway → host; the host owns
+state and timers; snapshots (coins, ownership, levels, decks, RNG) go to Redis fenced by the
+lease; failover restores everything and overdue timers fire once. The engine is pure and
+provider-agnostic (no I/O), so moving to another host or Redis provider never touches it.
+Traffic per turn: 1–2 small actions and one update per player — cheap on free tiers.
+
+Tested (§18): players on two instances in one room; actions stay in sync; a host crash
+mid-decision keeps coins and ownership exact (money-conservation invariant checked after
+restore); reconnect restores the exact board.
+
+## 18. Testing plan
+
+- **Engine:** board construction (28 spaces, counts, geometry indices), movement and wrap,
+  Start salary, turn order and first player, purchases, ownership, development (one level,
+  costs, Mall cap), visitor fees (levels, region bonus), industries (dividend, visit fee),
+  every card and the wheel, Traffic Jam, clearance sales and write-offs, final round end,
+  wealth, ties, victory; **invariants**: coins never negative, ledger balanced (every
+  transfer has a source and a destination; bank flows recorded), ownership consistent;
+  view-leak check on deck order; seeded full matches.
+- **Security/protocol:** wrong turn, wrong phase, stale turn numbers, buying owned / far-away
+  spaces, developing others' or Mall cities, forged fields, duplicate ids, stale versions,
+  post-game actions.
+- **Bots:** buy and develop decisions, reserve kept, complete matches.
+- **Economy:** the simulator (§10) as a test with guard thresholds plus a report script.
+- **Production:** real sockets, multi-instance (two instances, one room), host crash
+  mid-decision, reconnect.
+- **E2E:** desktop, Pixel 7, 360 px phone, landscape phone, reduced motion; repeated runs.
+- **Smoke:** a Business match on the production build (Redis in CI).
+
+## 19. Production smoke test
+
+Two or three browsers on the production build: create, join, start Business (fewest rounds),
+several turns each, a purchase on one screen appears owned on the others, a development
+appears on the others, a card effect changes coins everywhere, a reload restores the exact
+board, the match ends with the results podium.
+
+## 20. Documentation
+
+Rules, catalogue, game system, bots, UI/UX, architecture, deployment, testing, README,
+overview, credits, an ADR (economy & clearance-sale model, ring-road board), with the working
+title marked provisional everywhere.
+
+## 21. Clarifications of the baseline (not silent changes)
+
+1. **Board spaces:** the earlier draft also had an "Electricity Bill" and a "Repair Bill"
+   space. The baseline list has none, so they are **removed**; their role (occasional costs)
+   lives in News cards (N3, N4). The six non-city, non-industry, non-corner spaces are
+   **3 News + 3 Mela**.
+2. **Mela vs Lucky Mela:** Mela **spaces** draw a Mela **card**; the **Lucky Mela** corner
+   spins a wheel that is always good — two different things with one theme.
+3. **Geometry:** the earlier draft's square ring (8 per side) is replaced by the 6 × 10
+   "ring road", for originality and because it fits phones far better.
+4. **Bankruptcy:** the earlier draft eliminated bankrupt players; replaced by automatic
+   clearance sales and "Broke but still playing" (§7), so fixed-round games never leave
+   anyone out and nobody manages debts.
+5. **Traffic Jam:** "miss a turn" (jail-like) is replaced by "next roll uses one die".
+6. **Industries:** dividend at Start + a small factory-visit fee (numbers proposed).
+7. **Starting coins 1,500, salary 150, rounds 8/12/16 (default 12), timers 10 s / 15 s** —
+   proposals, final values set by §10.
+
+Open for the owner (non-blocking): the city list and region assignment; all numbers after
+simulation; the token set; the provisional title.
