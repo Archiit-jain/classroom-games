@@ -176,6 +176,9 @@ export class Cluster {
   async abandon(): Promise<void> {
     this.stopped = true;
     this.lease = null;
+    // A crashed process loses its in-memory services too: without this, the dead
+    // instance's match timers would still fire later (after the test's store is closed).
+    this.options.stopHosting();
     await this.leave();
   }
 
