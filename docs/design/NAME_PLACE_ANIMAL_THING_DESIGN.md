@@ -1,21 +1,28 @@
 # Name Place Animal Thing — Phase 7 design verification
 
-**Status:** design pass, written **before** implementation (Phase 7). Game id:
+**Status:** design pass, written before implementation; **built in Phase 7** — rules as implemented: [GAME_RULES/NAME_PLACE_ANIMAL_THING.md](../GAME_RULES/NAME_PLACE_ANIMAL_THING.md). Game id:
 `name-place-animal-thing`; display name **Name Place Animal Thing** (the traditional name — no
 other public name is proposed). Built on the existing `GameModule` / server-authoritative
 runtime and the Phase 6 production architecture
 ([ADR-023](../decisions/ADR-023-multi-instance-cluster.md)); no new networking.
 
-> **Decision status.** **Frozen (product owner; spec C13 and the Phase 7 brief):** 2–8 players;
-> everyone gets the same random letter; default categories Name, Place, Animal, Thing, Food,
-> Profession; simultaneous typing; answers privately autosaved while typing and hidden from
-> everyone else until the round is locked; a round ends when the **timer expires** or when a
-> player who has completed **every** category presses **STOP**; answers are **checked
-> automatically first**, then players may **vote** on answers they believe are wrong;
-> scoring **10** valid unique · **5** valid duplicated · **0** invalid/rejected; server
-> authoritative; bots never press STOP and never vote; the existing moderation stays active.
-> **Everything else is a developer proposal** marked _(proposed)_ — every number is a
-> play-test value — and is listed for sign-off in §16. **Implementation blockers:** none.
+> **Final product decisions (owner, end of Phase 7) — these override anything below.**
+>
+> - **Categories: Name, Place, Animal, Thing — only these four.** (Food and Profession, in the
+>   original brief, were removed by the owner; no other categories are added.)
+> - **Voting:** a strict majority of the **human players** rejects an answer:
+>   ⌊H/2⌋ + 1 votes from the humans who did not write it (3 → 2, 4 → 3, 5 → 3, 6 → 4, 7 → 4,
+>   8 → 5). **With 2 (or fewer) human players there is no voting at all**, so one player can
+>   never reject the other's answer alone. Bots never vote and never count.
+> - **Automatic check + voting:** an automatically accepted answer (recognised or not) **can**
+>   be challenged and voted out; an automatically rejected answer **cannot** be voted back in.
+>   Flow: automatic check → reveal → challenges → majority vote → final scoring.
+> - **Timers: 90 s to answer (fixed, no host setting); STOP available after 15 s.** The other
+>   timings stay play-test values.
+> - Unchanged from the brief: 2–8 players; one shared random letter; simultaneous private
+>   typing with autosave; hidden until lock; round ends on the timer or STOP by a player with a
+>   complete sheet; scoring 10 / 5 / 0; server authoritative; bots never STOP or vote;
+>   moderation active.
 
 Earlier drafts of this document (2026-10-01) proposed a per-player **Submit** button and "every
 human has submitted" as a third way to end a round. That would add a round-end rule the owner
@@ -27,12 +34,12 @@ did not decide, so it is **dropped**: a round ends only on the timer or STOP.
 
 | #   | Step            | What happens                                                                                                                                                                                                                                        |
 | --- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Room            | Host creates a private room, picks Name Place Animal Thing, sets **rounds** and **answer time**; friends join by code; host may add bots (2–8 seats).                                                                                               |
+| 1   | Room            | Host creates a private room, picks Name Place Animal Thing, sets the number of **rounds**; friends join by code; host may add bots (2–8 seats).                                                                                                     |
 | 2   | Seating         | Seats in join order, as in every game. Start is enabled at ≥ 2 seats.                                                                                                                                                                               |
-| 3   | Game start      | The usual 3-2-1 start countdown; the worksheet appears with six empty category cards.                                                                                                                                                               |
+| 3   | Game start      | The usual 3-2-1 start countdown; the worksheet appears with four empty category cards.                                                                                                                                                              |
 | 4   | Letter reveal   | `LETTER` phase (2.5 s _(proposed)_): "Get ready" with spinning decoy letters. The real letter is drawn and sent only when writing opens, so nobody (not even a modified client) knows it early; it stamps onto the sheet and inputs unlock at once. |
 | 5   | Answering       | `WRITING` phase: everyone types at once. Each sheet autosaves privately (§6). The timer counts down. Other players are shown only as present/away/bot — no progress.                                                                                |
-| 6   | STOP / timer    | A player whose six answers all pass the format check (§3.2) may press **STOP** once STOP unlocks (§2). STOP or the timer ends writing: inputs freeze for everyone, the last edits are flushed (§2.4), the server **locks** every sheet.             |
+| 6   | STOP / timer    | A player whose four answers all pass the format check (§3.2) may press **STOP** once STOP unlocks (§2). STOP or the timer ends writing: inputs freeze for everyone, the last edits are flushed (§2.4), the server **locks** every sheet.            |
 | 7   | Automatic check | The server checks every answer (§3) and groups identical answers (§4). Results: **invalid** (with a reason), **recognised** (in our word list) or **unverified** (looks fine, not in our list).                                                     |
 | 8   | Answer reveal   | `REVIEW` phase: all sheets are revealed at once, one card per category, identical answers grouped, invalid ones struck through with the reason.                                                                                                     |
 | 9   | Voting          | Human players vote ✗ on answers they believe are wrong (§5). Live counts, anonymous. Ends on the review timer or when every eligible voter taps **Done**.                                                                                           |
@@ -49,10 +56,10 @@ LETTER ─2.5 s─▶ WRITING ─(timer | STOP)─▶ LOCKING ─flush─▶ REV
 | Timer          | Value                                                    | Notes                                                                                                                                                                   |
 | -------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Letter reveal  | 2.5 s                                                    | Same for all effects modes (reduced shows the letter at once and a short "Get ready").                                                                                  |
-| Answer time    | host setting **60 / 90 / 120 s**, default **90 s**       | Six answers typed on a phone keyboard; 60 s is for fast groups.                                                                                                         |
+| Answer time    | **90 s — frozen** (no host setting)                      | Four answers typed on a phone keyboard.                                                                                                                                 |
 | STOP available | **15 s** after writing opens                             | Stops a STOP that nobody else had a fair chance to answer against; also guards against accidental taps right after the reveal. The button shows a fill ring until then. |
 | Flush window   | **1 s** after writing ends (`LOCKING`)                   | Accepts only the final autosave of what was typed before the client learned writing ended (§2.4).                                                                       |
-| Review         | **30 s**, ends early when every eligible voter taps Done | Up to 8 × 6 answers to read on a phone. With no eligible voters (only bots opposite) the review is a 5 s read-only reveal.                                              |
+| Review         | **30 s**, ends early when every eligible voter taps Done | Up to 8 × 4 answers to read on a phone. With fewer than 3 human players (no vote) the review is a 5 s read-only reveal.                                                 |
 | Round result   | 6 s                                                      |                                                                                                                                                                         |
 | Rounds         | host setting **3 / 5 / 8 / 10**, default **5**           |                                                                                                                                                                         |
 
@@ -123,7 +130,7 @@ own capitalisation, accents kept).
 | Starts with the letter | **Required.** The first letter of the normalised answer must be the round letter (accents ignored: `Élan` counts for E). Leading articles are not skipped: for D, "A Dog" is invalid — write "Dog".                                                                                   |
 | Length                 | At least **2 letters**; at most **30 characters** _(proposed)_.                                                                                                                                                                                                                       |
 | Moderation             | If the platform moderator censors anything (profanity, Hinglish abuse, contact details), the answer is **invalid — "Not allowed"** and is revealed only in its censored form.                                                                                                         |
-| Same answer twice      | A player may repeat a word across categories (Place "Chennai", Food "Chennai biryani" are different answers); no special rule.                                                                                                                                                        |
+| Same answer twice      | A player may repeat a word across categories (Place "Chennai", Thing "Chennai map" are different answers); no special rule.                                                                                                                                                           |
 
 Capitalisation, accents, extra spaces and punctuation never make an answer invalid — they are
 normalised away.
@@ -137,7 +144,7 @@ normalised away.
 - Recognition is a hint for voters, not a verdict: recognised answers can still be voted out
   (the list may be ambiguous, e.g. a place that is also a name) _(proposed)_.
 - Category-specific automatic rules beyond this are deliberately **not** attempted (e.g.
-  "is this a profession?"): that is what voting is for.
+  "is this a thing?"): that is what voting is for.
 
 ### 3.4 Plurals and common variants
 
@@ -180,21 +187,19 @@ covering none refuses to load. So bots can always answer every category.
   more** authors scores **5** for each. Duplicates are counted only among **accepted**
   answers (an invalid or rejected answer never makes someone else's answer a duplicate).
 
-## 5. Voting _(rules proposed — this is the main open product area)_
+## 5. Voting (frozen, Phase 7)
 
-| Question                    | Proposal                                                                                                                                                                                                                                                                                                 |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| What can be voted on        | Every **valid** answer group (recognised or unverified). Invalid answers cannot be voted back in.                                                                                                                                                                                                        |
-| Who can vote                | Human players controlling their seat (not bots — frozen; not a seat under bot control).                                                                                                                                                                                                                  |
-| Own answers                 | You cannot vote on a group you are an author of.                                                                                                                                                                                                                                                         |
-| How many votes              | One ✗ per voter per group; tap again to withdraw. Any number of groups. Changes allowed until review ends.                                                                                                                                                                                               |
-| Threshold                   | A group is **rejected** when its ✗ votes are **more than half** of its **eligible voters** (eligible humans who are not its authors). **Exactly half is a tie → the answer stands** (benefit of the doubt).                                                                                              |
-| No eligible voters          | A group whose eligible voters number 0 (e.g. everyone else is a bot, or all humans wrote it) stands on the automatic check alone.                                                                                                                                                                        |
-| Two humans                  | Each answer has exactly one eligible voter, so the other player's ✗ rejects it — like arguing over a paper sheet. Bots' answers (if any) need both humans. **Open decision for the owner (§16).**                                                                                                        |
-| Disconnect during review    | Eligibility is evaluated **when review ends**: votes of players who are disconnected (in grace) still count; a seat taken over by a bot or left loses eligibility and its votes are dropped. Done is not needed from disconnected players (review ends when every **connected** eligible voter is Done). |
-| Visibility                  | Counts are live and anonymous ("2 ✗ of 3"); voters' identities are never sent _(proposed)_.                                                                                                                                                                                                              |
-| Interaction with auto-check | Votes can only remove valid answers; they never override an invalid verdict and never touch the letter/format rules.                                                                                                                                                                                     |
-| Public matchmaking          | The "voting only with 3+ humans" idea is **not** part of this phase (no public rooms yet). It is recorded as a proposal for the public-lobby phase: with fewer than 3 humans, a public match would use the automatic check only.                                                                         |
+| Question                   | Rule                                                                                                                                                                                          |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| When is there a vote?      | Only with **3 or more human players** (seats a human controls). With 2 or fewer, the review is a short read-only reveal and the automatic check decides.                                      |
+| What can be voted on       | Every **automatically accepted** answer group (recognised or unverified). Automatically rejected answers cannot be voted back in.                                                             |
+| Who can vote               | Human players controlling their seat, on groups they did not write. Never bots, never a seat under bot control.                                                                               |
+| Votes needed               | **⌊H/2⌋ + 1** with H human players: 3 → 2, 4 → 3, 5 → 3, 6 → 4, 7 → 4, 8 → 5. Fewer is not enough (e.g. 2 of 4 — exactly half — lets the answer stand).                                       |
+| Consequence                | An answer whose non-authors are fewer than the votes needed (e.g. written by 2 of 3 players) cannot be rejected.                                                                              |
+| How many votes             | One ✗ per voter per group; tap again to withdraw; any number of groups; changes allowed until the review ends.                                                                                |
+| When counted               | When the review ends: H is the human players at that moment. A disconnected player's votes still count; a seat a bot takes over stops being a voter (and lowers H; below 3 there is no vote). |
+| Visibility                 | Live, anonymous counts ("1 of 2 ✗"); voters' identities are never sent.                                                                                                                       |
+| Public matchmaking (later) | Same rule; nothing extra needed.                                                                                                                                                              |
 
 ## 6. Anti-copying and information flow
 
@@ -238,7 +243,7 @@ reveal; the same scan runs across two instances (gateway ≠ host) and across a 
 - **One level.** Answers from a curated, original **answer bank** per category and letter
   (`content/en`), which doubles as the recognition list. Every entry passes the moderator and
   the format rules (tested); every allowed letter × category has at least 5 entries, so a bot
-  **always fills all six** (tested).
+  **always fills all four** (tested).
 - Picks a random entry per category (seeded RNG); two bots may collide — a natural duplicate.
 - **Same path as humans:** a bot's answers arrive as draft chunks through `stream.accept`
   (`BotDecision.STREAM`), with typing-like timing: first answer after 6–14 s, then one
@@ -251,7 +256,7 @@ reveal; the same scan runs across two instances (gateway ≠ host) and across a 
 
 ## 8. Phone UX (designed for 360 px first)
 
-- **Worksheet:** the round letter stamp and the timer pinned at the top; six full-width
+- **Worksheet:** the round letter stamp and the timer pinned at the top; four full-width
   category cards (icon, label, input) in one column.
 - **Inputs:** `autocapitalize="words"`, `autocomplete="off"`, `autocorrect="off"`,
   `spellcheck="false"`, `enterkeyhint="next"` (last one `done`), `maxlength="30"`; Enter /
@@ -259,7 +264,7 @@ reveal; the same scan runs across two instances (gateway ≠ host) and across a 
   (`visualViewport`); a small ✓ appears when the answer passes the **format** rules (letter,
   length, characters) — a local hint only, the server decides.
 - **Action bar** (sticks above the keyboard): timer bar + **STOP** button (disabled with a fill
-  ring until STOP unlocks; enabled only when all six pass the format hint).
+  ring until STOP unlocks; enabled only when all four pass the format hint).
 - **Locked:** inputs freeze, a "Pencils down!" stamp, sheets slide away.
 - **Review:** one category at a time as a swipeable card with a category stepper (Name ·
   Place · …); each answer row: player chip(s), answer, ✓/? badge, ✗ vote button (48 px) with
@@ -270,8 +275,8 @@ reveal; the same scan runs across two instances (gateway ≠ host) and across a 
 ## 9. Desktop UX
 
 A polished classroom worksheet, not a form: ruled-paper sheet on the arcade background, a
-large letter stamp in the margin, category cards in a 2 × 3 grid with playful icons and
-colour accents, the timer as a pencil-shaped bar, a big round STOP sign. Review shows all six
+large letter stamp in the margin, category cards in a 2 × 2 grid with playful icons and
+colour accents, the timer as a pencil-shaped bar, a big round STOP sign. Review shows all four
 categories as a grid of cards side by side; votes use the same ✗ buttons; the room chat stays
 beside the board. Keyboard: Tab/Enter move between fields; STOP is reachable by keyboard.
 
@@ -328,16 +333,16 @@ failover.
 | Area                         | Tests                                                                                                                                                                       |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Letter                       | seeded, uniform over allowed letters, never repeats in a match, excluded letters never drawn                                                                                |
-| Categories / settings        | default six, settings schema (rounds, time), unknown settings rejected                                                                                                      |
+| Categories / settings        | the four categories, settings schema (rounds only), unknown settings rejected                                                                                               |
 | Normalisation                | case, accents, spaces, punctuation, invisible chars, NFKC                                                                                                                   |
 | Format check                 | the full matrix of §3.2 (blank, digits, symbols, other scripts, wrong letter, short/long, moderated, articles)                                                              |
 | Duplicates                   | `Delhi`/`delhi`/`Delhi.`/`DELHI`, `St. Louis`/`st louis`, plurals (and the 3-letter guard), aliases, misspellings stay separate                                             |
 | Scoring                      | 10 / 5 / 0 table, duplicates only among accepted, totals, ties share places                                                                                                 |
-| Voting                       | threshold maths for 2–8 humans, tie stands, own-group ban, toggling, bots don't count, no-eligible-voter groups, disconnect/takeover during review, early end on all Done   |
-| STOP                         | requires all six format-valid answers carried in the action, unlock time, human only, ends writing immediately, flush window                                                |
+| Voting                       | the frozen threshold for 3–8 humans, no vote with 2, own-group ban, toggling, bots don't count, disconnect/takeover during review, early end on all Done                    |
+| STOP                         | requires all four format-valid answers carried in the action, unlock time, human only, ends writing immediately, flush window                                               |
 | Timer expiry                 | lock at the deadline, partial sheets, flush window                                                                                                                          |
 | Disconnect / reconnect       | draft kept and restored to its owner only, local-newer-wins on the client, takeover keeps answers and fills blanks, reclaim                                                 |
-| Bots                         | bank coverage (every letter × category ≥ 5, all pass moderator and format), always six answers, timing within the answer time, never STOP / VOTE / DONE, same path          |
+| Bots                         | bank coverage (every letter × category ≥ 5, all pass moderator and format), always four answers, timing within the answer time, never STOP / VOTE / DONE, same path         |
 | Information leaks            | `perturbHidden` view-leak checker on drafts; socket scan of every message player B receives; the same across two instances and after failover                               |
 | Protocol                     | malformed payloads, unknown categories, oversize answers, wrong round, after lock, votes outside review, duplicate votes, wrong seat, duplicate/stale action ids, after end |
 | Multi-instance (Redis in CI) | a match across two instances; host crash in `WRITING` and in `REVIEW`                                                                                                       |
@@ -360,22 +365,11 @@ the stream path for a turn-phase game), architecture, bots, moderation (answers 
 censored = invalid), UI/UX, testing, deployment (no changes needed — stated), README, project
 overview, ADR-024 (private autosaved drafts via the stream path).
 
-## 16. Decisions for the product owner
+## 16. Decisions
 
-**Implementation blockers:** none — the proposals below are implemented as play-test values and
-can be changed without code restructuring.
-
-1. Voting threshold "more than half of eligible voters; tie stands" — and the **two-human**
-   consequence (one player's ✗ rejects the other's answer).
-2. Recognised answers can still be voted out (alternative: recognised answers are immune).
-3. Timers: answer time 60/**90**/120 s; STOP unlocks after 15 s; 1 s flush; review 30 s;
-   letter 2.5 s; result 6 s; rounds 3/**5**/8/10.
-4. Letters exclude **Q, X, Z**; no repeats within a match.
-5. Answers: Latin letters only, no digits, 2 letters – 30 characters, must literally start with
-   the letter (no article skipping).
-6. Plural folding (`s`/`es`, ≥ 3 letters) and curated aliases count as duplicates; misspellings
-   are separate answers.
-7. No progress indicators for other players during writing.
-8. Bots: always fill all six, typing-like timing; on takeover keep the human's answers.
-9. Idle after 2 consecutive empty sheets.
-10. Public-lobby policy (later phase): voting only with 3+ humans.
+All decided by the owner at the end of Phase 7 (see the box at the top): four categories,
+the voting rule, accepted answers challengeable / rejected answers final, 90 s and STOP after
+15 s. The remaining play-test values (letter 2.5 s, flush 1 s, review 30 s, result 6 s,
+rounds 3/**5**/8/10, letters without Q X Z, answer format rules, plural/alias folding, no
+progress indicators, bot pacing, idle after 2 empty sheets) are implemented as proposed and
+can be tuned without code restructuring.

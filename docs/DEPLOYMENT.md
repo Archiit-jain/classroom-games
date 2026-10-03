@@ -1,6 +1,8 @@
 # Deployment
 
-> **Status (Phase 6):** the platform is built for production on **Vercel + Redis**
+> **Status (Phase 7):** Name Place Animal Thing added nothing to deploy (no new
+> environment variables, services or headers; it runs through the same Function and Redis).
+> Since Phase 6: the platform is built for production on **Vercel + Redis**
 > ([ADR-023](decisions/ADR-023-multi-instance-cluster.md)). The production build, the Vercel
 > configuration and a production smoke test exist and pass locally and in CI; a live
 > deployment needs the external setup below (a Vercel project and a Redis database).
@@ -70,7 +72,11 @@ pnpm smoke
 
 Two separate browsers open the site, create and join a private room, play Dots & Boxes and
 exchange moves, then one reloads (a new WebSocket, possibly on another instance): the room,
-board and seat must survive. Against `https://` it also checks HTTPS and that the socket is
+board and seat must survive. A second test plays a **Name Place Animal Thing** round with
+three separate browsers: everyone types, one reloads mid-round and gets the same seat and
+their own saved sheet back, no other browser's WebSocket carries a sheet before the reveal,
+STOP ends the round, the automatic check marks answers, two of the three players' votes
+(the frozen rule for 3 players) strike an answer out, and the scores are exactly 25 / 35 / 10. Against `https://` it also checks HTTPS and that the socket is
 `wss://` and WebSocket-only. CI runs the same test on every push against the production build
 with a real Redis.
 

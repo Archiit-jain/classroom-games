@@ -85,6 +85,15 @@ confirmed by the product owner in the Phase 2 review), no profanity or contact d
   the player). Words come only from the curated pack, which is tested against the moderator.
   The UI never claims drawings are moderated automatically.
 
+## Game answers (Name Place Animal Thing)
+
+Every revealed answer goes through the same `moderate` call as chat (the moderator is passed
+into the game engine). An answer the moderator changes at all — profanity, Hinglish abuse,
+contact details — is **invalid** ("Not allowed", 0 points), cannot be voted back in and is only
+ever shown in its censored form. STOP is refused while any of your answers would be censored.
+Drafts are never shown to anyone before the reveal. The answer bank is checked against the
+moderator in tests.
+
 ## Quick reactions
 
 A fixed set of eight emotes — 😂 😱 😤 🙏 👏 🔥 😭 🤫 (`LOL`, `SHOCK`, `ANGRY`, `PLEASE`,

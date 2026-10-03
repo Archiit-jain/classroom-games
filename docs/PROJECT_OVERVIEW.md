@@ -39,11 +39,11 @@ Expandability → Security → Performance → Documentation.
 
 ## Current status
 
-Phases 1–6 are complete: the platform (with quick reactions, streamed games, server-side
+Phases 1–7 are complete: the platform (with quick reactions, streamed games, server-side
 physics and a production-ready multi-instance architecture for Vercel + Redis) plus Raja
-Mantri Chor Sipahi, the flagship 16 Parchi, Draw & Guess (working name), Pen Fight and Dots &
-Boxes in the Color Burst Arcade design. Name Place Animal Thing and Business have
-design-verification documents in [design/](design/). The
+Mantri Chor Sipahi, the flagship 16 Parchi, Draw & Guess (working name), Pen Fight, Dots &
+Boxes and Name Place Animal Thing in the Color Burst Arcade design. Business has a
+design-verification document in [design/](design/). The
 12-phase plan is in the README [roadmap](../README.md#roadmap).
 
 ## Roles

@@ -90,6 +90,20 @@ Players can switch **Effects: Auto / Full / Lite** from the header.
   click and arrow keys + Enter on desktop. Your line appears at once while the server confirms
   it. On your turn the paper's edge glows; after 60 s a nudge appears. At the end the full
   board stays visible for a moment (`revealMs`) before the results.
+- Name Place Animal Thing: a ruled-paper worksheet with a stamped round letter, four
+  category cards (Name, Place, Animal, Thing; one column on phones, 2 × 2 from 640 px of board
+  width) with playful icons and colours; inputs ≥ 16 px with words capitalised and no
+  autocorrect, Enter / "Next" jumps to the next empty field, a green tick when an answer passes
+  the format rules (a local hint — the server decides). "Saved / Saving…" shows the private
+  autosave. A sticky bar holds the STOP sign (fill-ring hint until it opens, pulses when ready).
+  Get ready: spinning decoy letters (full), "?" (lite), plain text (reduced). STOP / time-up
+  stamp, then the review: swipeable category cards with tabs on phones, a grid on wider boards;
+  each answer shows its writer, "In our list" / "Not in our list" / the invalid reason, "Same as
+  n other(s)", a live "x of y ✗" count and a 44 px ✗ button (never on your own answers); a
+  voted-out answer gets a red-pen strike. With fewer than 3 players the review says the
+  automatic check decides. Scores: a players × categories table with 10 / 5 / 0 stamps,
+  round deltas and totals, held on screen before the podium (`revealMs`). Layout follows the
+  board's own width (container queries) so it fits beside the chat.
 
 ## Accessibility
 

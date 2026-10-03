@@ -74,6 +74,14 @@ sequenceDiagram
   safe lines left it plays an unsafe line 15 % of the time; in the end phase it gives a random
   chain 20 % of the time; it never misses an available box. Thinks 0.7–1.6 s (0.35–0.7 s per
   extra move in a chain); the decision itself is far below the 50 ms guard in the tests.
+- **Name Place Animal Thing bot** (one level): answers from the curated answer bank for the
+  round letter (at least 5 per letter and category, all passing the moderator), one category
+  at a time in random order — first after 6–14 s, then every 4–11 s, squeezed to finish by
+  ~80 % of the time left. Its sheet goes through the same private autosave path and the same
+  automatic check as a human's. It never sees anyone else's sheet, never presses STOP, never
+  votes or taps Done, and never counts toward the voting threshold. Standing in for a player
+  it keeps their saved answers and fills only the blanks
+  ([ADR-024](decisions/ADR-024-private-drafts-and-voting.md)).
 - **After a server hand-over** (production, [ADR-023](decisions/ADR-023-multi-instance-cluster.md))
   the new host re-attaches every bot seat and re-arms its thinking timer; a Draw & Guess bot's
   half-drawn template is not carried over (it stops drawing that turn).
