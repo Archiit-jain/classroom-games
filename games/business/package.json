@@ -1,0 +1,28 @@
+{
+  "name": "@cg/game-business",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Business (working title) — board, economy, engine, bot and client.",
+  "exports": {
+    "./shared": "./src/shared/index.ts",
+    "./server": "./src/server/index.ts",
+    "./client": "./src/client/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "sim": "tsx scripts/sim.ts"
+  },
+  "dependencies": {
+    "@cg/game-sdk": "workspace:*",
+    "@cg/protocol": "workspace:*",
+    "@cg/ui": "workspace:*",
+    "motion": "^13.4.6",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cg/moderation": "workspace:*",
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0"
+  }
+}
