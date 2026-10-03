@@ -135,9 +135,12 @@ test('Business: two humans and a bot play to the podium; boards stay in sync @mo
     await expect
       .poll(async () => (await owned(other)).length, { timeout: 10_000 })
       .toBeGreaterThan(0);
+    // Compared afresh on every attempt: others (the bot) keep buying meanwhile.
     await expect
-      .poll(async () => (await owned(other)).sort(), { timeout: 10_000 })
-      .toEqual((await owned(buyer)).sort());
+      .poll(async () => (await owned(other)).sort().join() === (await owned(buyer)).sort().join(), {
+        timeout: 10_000,
+      })
+      .toBe(true);
   });
   expect(seen.bought).toBeGreaterThan(0);
   for (const page of [host, guest]) await expectResults(page, 3);
