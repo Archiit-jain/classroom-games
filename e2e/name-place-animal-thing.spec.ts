@@ -199,8 +199,7 @@ test('Name Place Animal Thing: three humans and a bot write, STOP, vote and reac
   if (mobile) {
     for (const page of [host, guest, third]) {
       const report = await overflowReport(page);
-      expect(report.overflow, report.out.join('
-')).toBeLessThanOrEqual(0);
+      expect(report.overflow, report.out.join(' | ')).toBeLessThanOrEqual(0);
     }
   }
 });
