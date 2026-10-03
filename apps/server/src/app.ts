@@ -4,6 +4,7 @@ import type { AnyGameModule } from '@cg/game-sdk';
 import { fixtureGame } from '@cg/game-sdk/fixture';
 import { createDotsAndBoxesGame } from '@cg/game-dots-and-boxes/server';
 import { createDrawAndGuessGame } from '@cg/game-draw-and-guess/server';
+import { createNpatGame } from '@cg/game-name-place-animal-thing/server';
 import { createPenFightGame } from '@cg/game-pen-fight/server';
 import { createRmcsGame } from '@cg/game-rmcs/server';
 import { createSixteenParchiGame } from '@cg/game-sixteen-parchi/server';
@@ -29,7 +30,7 @@ import type { TimerService } from './util/TimerService';
 
 export interface GameServerOptions {
   config: ServerConfig;
-  /** Games to register. Defaults to `defaultGames(config)`. */
+  /** Games to register. Defaults to `defaultGames(config, moderator)`. */
   games?: AnyGameModule[];
   moderator?: Moderator;
   reportSink?: ReportSink;
@@ -72,13 +73,18 @@ export interface GameServer {
 }
 
 /** Product games (in menu order), plus the fixture game outside production. */
-export function defaultGames(config: ServerConfig): AnyGameModule[] {
+export function defaultGames(config: ServerConfig, moderator?: Moderator): AnyGameModule[] {
   return [
     createRmcsGame({ timeScale: config.gameTimeScale }),
     createSixteenParchiGame({ timeScale: config.gameTimeScale }),
     createDrawAndGuessGame({ timeScale: config.gameTimeScale }),
     createPenFightGame({ timeScale: config.gameTimeScale }),
     createDotsAndBoxesGame({ timeScale: config.gameTimeScale }),
+    createNpatGame({
+      timeScale: config.gameTimeScale,
+      // Answers go through the same moderator as chat (censored = invalid).
+      ...(moderator ? { moderate: (text: string) => moderator.moderate(text) } : {}),
+    }),
     ...(config.enableFixtureGame ? [fixtureGame] : []),
   ];
 }
@@ -93,13 +99,13 @@ export function createGameServer(options: GameServerOptions): GameServer {
   const log = options.log ?? createLogger(config.logLevel);
   let shuttingDown = false;
 
-  const registry = new GameRegistry();
-  for (const game of options.games ?? defaultGames(config)) registry.register(game);
   const moderator =
     options.moderator ??
     createModerator({
       nickname: { minLength: NICKNAME_MIN_LENGTH, maxLength: NICKNAME_MAX_LENGTH },
     });
+  const registry = new GameRegistry();
+  for (const game of options.games ?? defaultGames(config, moderator)) registry.register(game);
   const ownsStore = !options.store;
   const store: SharedStore =
     options.store ??

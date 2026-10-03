@@ -3,6 +3,9 @@ import type { FixtureEvent, FixtureView } from '@cg/game-sdk/fixture';
 import type { MatchStream, MatchUpdate } from '@cg/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDotsAndBoxesGame } from '@cg/game-dots-and-boxes/server';
+import { BANK } from '@cg/game-name-place-animal-thing/content';
+import { createNpatGame } from '@cg/game-name-place-animal-thing/server';
+import { CATEGORIES, type NpatView } from '@cg/game-name-place-animal-thing/shared';
 import { allEdges, edgeId, isDrawn, type DotsView } from '@cg/game-dots-and-boxes/shared';
 import { createGameServer, type GameServer } from '../src/app';
 import { KEYS } from '../src/cluster/Cluster';
@@ -353,5 +356,123 @@ describe('host hand-over and failover', () => {
     expect(await c.store.get(STATE_KEYS.session(a.ready.playerId))).toContain(
       '"nickname":"Archit"',
     );
+  });
+
+  describe('Name Place Animal Thing across instances', () => {
+    type NpatUpdate = MatchUpdate<NpatView, unknown>;
+    const SECRET = 'Qzorbadraft';
+    const npat = () =>
+      createNpatGame({
+        timing: { letterMs: 60, stopUnlockMs: 200, flushMs: 150, reviewMs: 8000, resultMs: 200 },
+        botFirstMs: [100, 200],
+        botNextMs: [30, 60],
+      });
+    const last = (cl: TestClient) => cl.all('match:update').at(-1) as NpatUpdate;
+    const leaked = (cl: TestClient) =>
+      JSON.stringify([...cl.received.entries()]).includes('Qzorba');
+    const sheet = (letter: string) =>
+      Object.fromEntries(CATEGORIES.map((cat) => [cat, BANK[cat][letter]?.[0]]));
+
+    /** Two players on the instance that is NOT the host; the host has no players. */
+    async function onGateway() {
+      c = await startCluster(2, { games: [npat()] });
+      await eventually(() => hostIndex(c as TestCluster) >= 0);
+      const host = hostIndex(c);
+      const gw = 1 - host;
+      const a = await c.player(gw, 'Archit');
+      const b = await c.player(gw, 'Priya');
+      await setupGameRoom('name-place-animal-thing', a, b);
+      await a.emit('room:updateSettings', { settings: { rounds: 3, answerSeconds: 120 } });
+      expect((await a.emit('room:start', {})).ok).toBe(true);
+      const w = (await a.waitFor(
+        'match:update',
+        (u) => (u as NpatUpdate).view.phase === 'WRITING',
+        5000,
+      )) as NpatUpdate;
+      return { a, b, host, gw, matchId: w.matchId, letter: w.view.letter as string };
+    }
+    const crashHost = async (host: number) => {
+      const crashed = (c as TestCluster).nodes[host]?.server as GameServer;
+      await crashed.cluster.abandon();
+      crashed.io.close();
+      await eventually(
+        () => (c as TestCluster).nodes[1 - host]?.server.cluster.isHost === true,
+        5000,
+      );
+    };
+
+    it('forwards private drafts through the gateway and keeps them private across a host crash', async () => {
+      const { a, b, host, matchId, letter } = await onGateway();
+      for (let seq = 1; seq <= 3; seq++) {
+        const r = await a.emit('match:stream', {
+          matchId,
+          chunk: { round: 1, seq, answers: { name: SECRET.slice(0, 8 + seq) } },
+        });
+        expect(r.ok).toBe(true);
+      }
+      await sleep(300); // the host's next snapshot write
+      // Server-side state in the shared store (never sent to clients) holds the draft for failover.
+      const rooms = await c!.store.loadPrefix(STATE_KEYS.rooms);
+      expect(rooms.some(([, json]) => json.includes(SECRET))).toBe(true);
+      expect(leaked(b)).toBe(false);
+
+      await crashHost(host);
+      // The owner's draft survived; an older autosave is still refused on the new host.
+      const mine = await a.emit('match:resync', { matchId });
+      expect(mine.ok && (mine.update.view as NpatView).mine.name).toBe(SECRET);
+      expect(
+        (await a.emit('match:stream', { matchId, chunk: { round: 1, seq: 2, answers: {} } })).ok,
+      ).toBe(false);
+      const theirs = await b.emit('match:resync', { matchId });
+      expect(JSON.stringify(theirs)).not.toContain('Qzorba');
+      expect(leaked(b)).toBe(false);
+
+      // The round still ends and reveals normally on the new host.
+      await b.waitFor('match:update', (u) => (u as NpatUpdate).view.stopOpen, 4000);
+      expect((await b.act(last(b), { type: 'STOP', round: 1, answers: sheet(letter) })).ok).toBe(
+        true,
+      );
+      await b.waitFor('match:update', (u) => (u as NpatUpdate).view.phase === 'REVIEW', 5000);
+      expect(leaked(b)).toBe(true);
+    }, 30_000);
+
+    it('keeps votes through a host crash during the review', async () => {
+      const { a, b, host, matchId, letter } = await onGateway();
+      const odd = `${letter}zorbaville`;
+      await a.emit('match:stream', {
+        matchId,
+        chunk: { round: 1, seq: 1, answers: { place: odd } },
+      });
+      await b.waitFor('match:update', (u) => (u as NpatUpdate).view.stopOpen, 4000);
+      await b.act(last(b), { type: 'STOP', round: 1, answers: sheet(letter) });
+      const review = (await b.waitFor(
+        'match:update',
+        (u) => (u as NpatUpdate).view.phase === 'REVIEW',
+        5000,
+      )) as NpatUpdate;
+      const aSeat = last(a).you;
+      const group = review.view.review?.answers.place.find((x) => x.seat === aSeat)
+        ?.group as string;
+      expect((await b.act(last(b), { type: 'VOTE', round: 1, group, out: true })).ok).toBe(true);
+      await sleep(300);
+      await crashHost(host);
+      const after = await b.emit('match:resync', { matchId });
+      const g =
+        after.ok && (after.update.view as NpatView).review?.groups.find((x) => x.id === group);
+      expect(g && g.votes).toBe(1);
+      // Voting twice is still refused after the restore; then both finish the review.
+      expect(await b.act(last(b), { type: 'VOTE', round: 1, group, out: true })).toMatchObject({
+        ok: false,
+      });
+      await a.emit('match:resync', { matchId });
+      expect((await a.act(last(a), { type: 'DONE', round: 1 })).ok).toBe(true);
+      expect((await b.act(last(b), { type: 'DONE', round: 1 })).ok).toBe(true);
+      const scored = (await a.waitFor(
+        'match:update',
+        (u) => Boolean((u as NpatUpdate).view.last),
+        5000,
+      )) as NpatUpdate;
+      expect(scored.view.last?.rejected).toEqual([group]);
+    }, 30_000);
   });
 });
