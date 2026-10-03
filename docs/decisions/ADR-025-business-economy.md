@@ -1,6 +1,6 @@
 # ADR-025: Business — ring-road board, clearance sales and a simulated economy
 
-**Status:** Accepted (Phase 8). "Business" is a provisional working title.
+**Status:** Superseded by [ADR-026](ADR-026-business-redesign.md) (Phase 8 redesign). Kept for history.
 
 ## Context
 

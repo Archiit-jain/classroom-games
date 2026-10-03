@@ -104,12 +104,21 @@ Players can switch **Effects: Auto / Full / Lite** from the header.
   automatic check decides. Scores: a players × categories table with 10 / 5 / 0 stamps,
   round deltas and totals, held on screen before the podium (`revealMs`). Layout follows the
   board's own width (container queries) so it fits beside the chat.
-- Business (working title): a warm paper-map **ring road** of 28 tiles — 6 × 10 upright on
-  phones (~54 px tiles at 360 px), turned a quarter clockwise to 10 × 6 when the board is wide
-  (play always runs clockwise). Tiles: a region colour band, the name (smaller for long
-  names), the price while for sale, the owner's colour frame and a building icon (stall →
-  mall); tokens (auto-rickshaw, scooter, bicycle, kite, cricket bat, chai cup) hop tile by tile
-  (full), slide (lite) or appear (reduced). The **stage** inside the ring holds the round chip
+- Business (working title): a **square 2.5D tabletop** — a teak-framed board with a gold
+  inlay on a night table, cream tiles with regional colour bands (North saffron, South
+  peacock teal, East rani pink, West indigo), steel transport tiles, sunburst Chance /
+  Community Chest tiles, tricolour START, barred JAIL, CLUB and RESORT corners, and a
+  peacock-felt centre with an original rotating rangoli medallion and two card stacks. Wide
+  screens tilt the board (CSS perspective on a flat layer, so every control stays clickable);
+  phones (narrow, or short in landscape) get a zoomed **camera that follows the play** with a
+  "See whole board" toggle, and a stage overlay for dice, event cards and auctions. Identity:
+  a turn banner (YOUR TURN / NAME'S TURN in the player's colour), YOU pills on your card and
+  token, a halo under the current token, the current player's card lifted and glowing, and an
+  action tray outlined in your colour (sticky on phones). Animations: 3D dice, tokens walking
+  the server's path tile by tile, a SOLD stamp, houses/hotels dropping in, rupee chips flying
+  between players and the bank (rent, purchases, loans, auctions), a flipping event card
+  (GOOD / BAD), a ₹0 insolvency badge, and the final wealth count-up per part — Full / Lite
+  (shorter) / Reduced (instant, everything also in the log). The **stage** inside the ring holds the round chip
   and countdown, the dice, a **postcard** of the current space (tap any tile to see its
   postcard: owner, level, fees for every level, development cost), News/Mela card and wheel
   reveals, and the actions — a big **Roll**, **Buy / Build / Skip** (48 px), or the **Start

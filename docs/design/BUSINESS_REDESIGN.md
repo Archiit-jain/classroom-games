@@ -1,9 +1,9 @@
 # Business (working title) — Phase 8 redesign
 
-**Status:** redesign proposal (revision 2, owner corrections applied), written **before** any
-code change. Awaiting product-owner approval (design checkpoint). Supersedes [BUSINESS_DESIGN.md](BUSINESS_DESIGN.md) for the
-game's rules, board, economy and presentation once approved; the platform, production
-architecture and testing infrastructure are unchanged.
+**Status:** **approved** (revision 2) and **implemented** (Phase 8 redesign). Supersedes
+[BUSINESS_DESIGN.md](BUSINESS_DESIGN.md). Rules as implemented:
+[GAME_RULES/BUSINESS.md](../GAME_RULES/BUSINESS.md); decision record:
+[ADR-026](../decisions/ADR-026-business-redesign.md); results: §23 below.
 
 > **Owner decisions in this brief that reverse earlier frozen decisions (spec C12 / C14):**
 > player-to-player **trading is allowed**; money is shown as fictional **₹ (Rupees)**; the
@@ -474,3 +474,71 @@ Rewritten Business tests (the platform tests stay):
 5. **Numbers:** all prices, rents, multipliers, building costs, transport values, loan values,
    auction steps/timings and event amounts are proposals until the simulation and a human
    play-test.
+
+## 23. Implementation results
+
+### Deviations from this document
+
+1. **Building several levels per landing** (simulation-driven): landing on your own city may
+   build **one or more** levels at once (House 1 → 2 → 3 → Hotel order unchanged, still only on
+   landing). With one level per landing, 5,000 simulated matches produced almost no hotels.
+   **Please confirm or reject** — it is a single-line rule switch (`BUILD.levels` max 1).
+2. Bots never _start_ auctions (they bid in them); auctions in the numbers below come from the
+   "casual" profile, which starts one about every 40 rolls.
+
+### Tuned values (`DEFAULT_ECONOMY`)
+
+Start ₹10,500 · START ₹1,500 · Club/Resort ₹200 each · Jail ₹500 · base rent 40 % of price ·
+levels ×1 / 3 / 6 / 10 / 15 · group bonus ×2 at 3+ cities · house 40 % / hotel 80 % of price ·
+transport ₹1,500, rent ₹300 / 700 / 1,200 / 1,800 / 2,500 / 3,200 · loans ₹1,000 steps, 10 %
+fee, limit ₹3,000 + 50 % of list value · sell-back 50 % · auction opening 50 %, ₹100 steps,
+15 s (+5 s, max 30 s) · lock 3 rounds. Event amounts as in §8 (unchanged).
+
+### Simulation (`pnpm --filter @cg/game-business sim`, seed 42, 25,000 matches in total)
+
+| Scenario (bots unless noted)     | Games | Early leader wins | Runaway | Insolvent (player-games) | Loans / game | Trades / game |  Auctions / game | Houses / hotels per game | Minutes\* |
+| -------------------------------- | ----: | ----------------: | ------: | -----------------------: | -----------: | ------------: | ---------------: | -----------------------: | --------: |
+| **15 rounds, 2–6 players**       | 5,000 |              45 % |   7.1 % |                    8.5 % |         2.32 |           2.0 |                0 |                2.2 / 1.6 |        11 |
+| 15 rounds, half "casual" players | 5,000 |              44 % |   4.7 % |                    4.7 % |         1.23 |           1.9 | 0.65 (99 % sold) |                2.0 / 0.9 |        11 |
+| 10 rounds                        | 1,250 |              49 % |   1.8 % |                    2.2 % |         0.36 |          0.95 |                0 |                1.1 / 0.7 |       7.3 |
+| 20 rounds                        | 1,250 |              46 % |  12.9 % |                   17.4 % |         5.74 |          2.85 |                0 |                2.9 / 2.3 |      14.5 |
+| 25 rounds                        | 1,250 |              51 % |  21.0 % |                   25.7 % |         10.4 |          3.64 |                0 |                3.1 / 3.1 |      18.1 |
+| 30 rounds                        | 1,250 |              51 % |  24.0 % |                   33.6 % |         15.9 |          4.33 |                0 |                3.1 / 3.9 |      21.8 |
+| 2 players (15 rounds)            | 1,667 |              63 % |   6.4 % |                    2.3 % |         0.47 |          0.75 |                0 |                1.7 / 0.8 |       5.5 |
+| 4 players                        | 1,667 |              43 % |   6.5 % |                    7.7 % |         2.30 |           2.2 |                0 |                2.4 / 1.6 |        11 |
+| 6 players                        | 1,667 |              33 % |   7.0 % |                   11.0 % |         4.21 |          2.96 |                0 |                2.6 / 2.3 |      16.5 |
+| casual, **no 3-round lock**      | 2,500 |              45 % |   5.0 % |                    4.8 % |         1.24 |           1.9 |             0.63 |                2.0 / 0.9 |        11 |
+| **events off**                   | 2,500 |              42 % |   6.9 % |                    8.6 % |         2.42 |          2.13 |                0 |                2.0 / 1.5 |        11 |
+
+\* At ~11 s per turn (human pace). "Early leader" = richest after a third of the game;
+"runaway" = winner more than twice the runner-up's final wealth.
+
+**Other measurements (15 rounds):** final wealth ₹15,346 on average, relative spread 0.34;
+two thirds of cities and transports owned at the end; group ownership A 59 %, B 72 %,
+C 70 %, D 66 % — **North (A, the most expensive) develops least** (mean level 0.34 vs
+0.49–0.78); events move ₹2,553 per game; bots pay to leave Jail 99.5 % of the time;
+player-to-player transfers are ~5–6 % of final wealth.
+
+**Reading:** at the default 15 rounds the game is luck-heavy with some strategy — the early
+leader wins under half the time, runaways and insolvency stay under 10 %, every system is
+used. Longer games (25–30 rounds) become decisive and harsh (a quarter to a third of players
+insolvent); 2-player games favour the early leader (63 %). **Events barely change outcomes**
+(flavour and swings, not decisive), and the 3-round lock shows **no measurable effect** in
+these profiles — both are owner decisions to revisit after a human play-test.
+
+### Visual review (§17 problems → what changed)
+
+| Problem in v1              | Now                                                                                                              |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Dull board                 | Teak-framed 2.5D board, regional colour bands, sunburst event tiles, peacock-felt centre with a rotating rangoli |
+| Insufficient properties    | 22 cities + 6 transports on 36 spaces                                                                            |
+| Not enough Indian identity | Indian cities with original line icons, tricolour START, rangoli medallion, ₹ with Indian digit grouping         |
+| Weak animations            | 3D dice, path walks, SOLD stamps, building drops, money-chip flights, flipping event cards, final count-up       |
+| Unclear player identity    | Turn banner in the player's colour, YOU pills on card and token, token halo, lifted current card, coloured tray  |
+| Confusing transitions      | The director waits for each animation; event roll → sum → card → effect; postcard stays until closed             |
+
+Review fixes found while capturing (desktop, Pixel 7, 360 px, landscape): board sized to the
+viewport height, phone camera padding, token positions nudged off tile names, truncated names
+on player cards, a landscape-phone camera, a stacked final table on phones, and — the
+important one — the desktop tilt's 3D context made controls in the centre unclickable
+(fixed with a flat transform; covered by the e2e auction and tile-tap tests).

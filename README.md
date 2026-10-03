@@ -42,10 +42,12 @@ server, not the browser, decides every outcome.
   automatically, then the players vote out doubtful ones (with 3+ players); 10 for a unique
   answer, 5 for a shared one. Rules:
   [docs/GAME_RULES/NAME_PLACE_ANIMAL_THING.md](docs/GAME_RULES/NAME_PLACE_ANIMAL_THING.md).
-- **Business** _(working title)_ — 2–6 players roll round a 28-space "ring road", buy
-  Indian cities and industries, build Stalls into Malls and pay visitor fees; News and Mela
-  cards, a Lucky Mela wheel; nobody is knocked out (automatic clearance sales); the richest
-  after 12, 16 or 20 rounds wins. Pretend coins only. Rules:
+- **Business** _(working title)_ — 2–6 players roll round a 36-space square board of
+  Indian cities and transport (Railways to Satellite), build houses and hotels, collect rent
+  (3+ cities of a group double it), roll for Chance / Community Chest by dice sum, trade,
+  auction and take loans; nobody is knocked out (insolvent players keep playing). Richest by
+  cash + everything spent on properties, buildings and transport after the host's number of
+  rounds wins. Pretend ₹ only. Rules:
   [docs/GAME_RULES/BUSINESS.md](docs/GAME_RULES/BUSINESS.md).
 - **Quick reactions** — eight emotes that pop over your seat for everyone (one per 1.5 s,
   only ever sent by a person).
@@ -113,7 +115,7 @@ games/
   rmcs/           Raja Mantri Chor Sipahi (shared types, engine + bot, board)
   sixteen-parchi/ 16 Parchi (shared types + categories, engine + bot, board, content/en labels)
   dots-and-boxes/ Dots & Boxes (shared grid + picking, engine + bot, board)
-  business/       Business (board, economy, cards, engine + bot, simulator, board client)
+  business/       Business (board, economy, events, engine + bot, simulator, board client)
   name-place-animal-thing/ Name Place Animal Thing (answer checks, answer bank, engine + bot, worksheet)
   pen-fight/      Pen Fight (shared desk/replay helpers, engine + Planck physics + bot, board)
   draw-and-guess/ Draw & Guess (shared types + guess matching, engine + bot templates, board, content/en words)
@@ -191,7 +193,7 @@ and a full Business match).
 - One instance at a time hosts every room (others forward to it); sharding rooms across hosts is
   a later step if needed.
 - All seven games are playable; public lobby and matchmaking arrive in Phase 9.
-- Business is best with 3–6 players (two-player games have few interactions).
+- Business is best with 3–6 players (two-player games are more decided by the early lead).
 - Client bundle is ≈ 150 KB gzipped (Motion; game boards load separately); trimming is
   planned for Phase 11.
 - No sound (excluded from v1). English only (the UI is translation-ready).

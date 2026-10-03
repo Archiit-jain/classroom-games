@@ -82,12 +82,13 @@ sequenceDiagram
   votes or taps Done, and never counts toward the voting threshold. Standing in for a player
   it keeps their saved answers and fills only the blanks
   ([ADR-024](decisions/ADR-024-private-drafts-and-voting.md)).
-- **Business bot** (one level): rolls after 0.6–1.4 s; buys a free place when it keeps a
-  **reserve** of 150 + 25 per opponent afterwards, and always (down to 50 coins) when the city
-  completes a region; develops when it keeps the reserve; at Start it develops its best city (a
-  complete region first, then the dearest); 10 % of close calls (within 20 % of the reserve)
-  go the other way. Thinks 0.8–2 s; same `ROLL` / `BUY` / `DEVELOP` / `SKIP` actions as people
-  ([ADR-025](decisions/ADR-025-business-economy.md)). The same bot plays every seat in the
+- **Business bot** (one level): rolls after 0.6–1.4 s, thinks 0.8–2 s; keeps a **reserve** of
+  ₹1,500 + ₹250 per opponent; buys when it keeps the reserve (and to complete a group while
+  keeping ₹500), builds as many levels as the reserve allows, pays Jail with cash ≥ 3× the
+  fee, bids up to 0.8–1.1× an asset's value keeping half the reserve, accepts trades worth
+  ≥ 1.1× what it gives (10 % whim), sometimes offers a group-completing trade, lets the bank
+  handle debts; 10 % of close calls go the other way. Same actions as people
+  ([ADR-026](decisions/ADR-026-business-redesign.md)). The same bot plays every seat in the
   economy simulation.
 - **After a server hand-over** (production, [ADR-023](decisions/ADR-023-multi-instance-cluster.md))
   the new host re-attaches every bot seat and re-arms its thinking timer; a Draw & Guess bot's

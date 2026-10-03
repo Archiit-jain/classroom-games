@@ -1,120 +1,145 @@
 # Business (working title) — rules as implemented
 
-> **"Business" is a provisional working title.** The public name needs a trademark /
-> name-availability check before launch. This is an original game: our own board, rules,
-> cards, art and pretend currency (**coins** — never real money, never the ₹ sign).
+> **"Business" is a provisional working title.** The public name, and the names Chance,
+> Community Chest and the corner/transport names, need a naming/legal review before launch.
+> All money is **pretend** fictional Rupees (₹) — nothing is ever real money.
 
-Code: `games/business` (board, economy and cards `src/shared/board.ts`, engine and bot
+Code: `games/business` (board, economy and event tables `src/shared/board.ts`, engine and bot
 `src/server/engine.ts`, simulation `src/server/simulate.ts`, board `src/client/Board.tsx`).
-Design and simulation results: [design/BUSINESS_DESIGN.md](../design/BUSINESS_DESIGN.md).
-Every number is a play-test value (tuned by the simulation).
+Approved design: [design/BUSINESS_REDESIGN.md](../design/BUSINESS_REDESIGN.md) (revision 2).
+Rules marked _frozen_ come from the product owner; every **number** is a play-test value tuned
+by the economy simulation (§ "Economy" below) until a human play-test.
 
-## Players and rounds
+## Players, rounds and the turn _(frozen)_
 
-- **2–6 players**, humans and/or bots. The host picks **12, 16 (default) or 20 rounds**; a
-  round is one turn each. About 10 minutes for 4 players at 16 rounds.
-- The first player is drawn at random; play goes round in seat order.
-- Everyone starts on **Start** with **1,200 coins**.
+- **2–6 players**, humans and/or bots (0–4 bots added by the host).
+- **Rounds:** the host types any number from **5 to 40** (default 15). A round is one turn
+  each; the game ends after the last turn of the last round. About 11 minutes for 4 players
+  at 15 rounds (simulated at human pace).
+- Everyone starts on **START** with **₹10,500**. First player drawn at random; then seat order.
+- **Two dice, sum 2–12, no doubles rule.** **30 s** per decision (ring timer). Timeouts take the
+  safe choice: roll for you · don't buy · don't build · Jail → lose next roll · decline a trade
+  · let the bank handle a debt. Three automatic actions in a row hand the seat to the
+  platform's idle bot ("I'm back" takes it back).
 
-## The board — a 28-space "ring road"
+## The board — India Classic, 36 spaces _(structure frozen)_
 
-A tall 6 × 10 ring (turned sideways on wide screens), played clockwise:
+A square board, played clockwise. Corners at 0 / 9 / 18 / 27; one event space per side,
+alternating Chance → Community Chest.
 
-| #   | Space                    | #   | Space                   |
-| --- | ------------------------ | --- | ----------------------- |
-| 0   | **Start**                | 14  | **Traffic Jam**         |
-| 1   | Indore — Central · 100   | 15  | Delhi — North · 230     |
-| 2   | News                     | 16  | **Textile Mill** · 200  |
-| 3   | Bhopal — Central · 110   | 17  | Mela                    |
-| 4   | Nagpur — Central · 120   | 18  | Kochi — South · 240     |
-| 5   | **Chai Break**           | 19  | **Lucky Mela**          |
-| 6   | Bhubaneswar — East · 140 | 20  | Chennai — South · 250   |
-| 7   | Mela                     | 21  | News                    |
-| 8   | Guwahati — East · 150    | 22  | Bengaluru — South · 270 |
-| 9   | **Tea Garden** · 200     | 23  | **Film Studio** · 200   |
-| 10  | Kolkata — East · 170     | 24  | Jaipur — West · 290     |
-| 11  | News                     | 25  | Mela                    |
-| 12  | Lucknow — North · 190    | 26  | Ahmedabad — West · 300  |
-| 13  | Chandigarh — North · 200 | 27  | Mumbai — West · 340     |
+| #   | Space                  | #   | Space                           | #   | Space                  | #   | Space                   |
+| --- | ---------------------- | --- | ------------------------------- | --- | ---------------------- | --- | ----------------------- |
+| 0   | **START**              | 9   | **JAIL**                        | 18  | **CLUB**               | 27  | **RESORT**              |
+| 1   | Patna · C · ₹600       | 10  | Kochi · B · ₹1,000              | 19  | Goa · D · ₹1,600       | 28  | Jammu · A · ₹2,000      |
+| 2   | Ranchi · C · ₹600      | 11  | Thiruvananthapuram · B · ₹1,000 | 20  | Surat · D · ₹1,600     | 29  | Dehradun · A · ₹2,000   |
+| 3   | Railways · ₹1,500      | 12  | Visakhapatnam · B · ₹1,100      | 21  | Airways · ₹1,500       | 30  | Lucknow · A · ₹2,100    |
+| 4   | Bhubaneswar · C · ₹700 | 13  | Community Chest                 | 22  | Pune · D · ₹1,800      | 31  | Community Chest         |
+| 5   | Chance                 | 14  | Chennai · B · ₹1,300            | 23  | Chance                 | 32  | Jaipur · A · ₹2,200     |
+| 6   | Guwahati · C · ₹700    | 15  | Waterways · ₹1,500              | 24  | Ahmedabad · D · ₹1,900 | 33  | Satellite · ₹1,500      |
+| 7   | Roadways · ₹1,500      | 16  | Hyderabad · B · ₹1,400          | 25  | Petroleum · ₹1,500     | 34  | Chandigarh · A · ₹2,300 |
+| 8   | Kolkata · C · ₹900     | 17  | Bengaluru · B · ₹1,500          | 26  | Mumbai · D · ₹2,400    | 35  | Delhi · A · ₹2,800      |
 
-15 cities in 5 regions (Central, East, North, South, West), 3 industries, 3 News and 3 Mela
-spaces, 4 corners. Prices are gameplay tiers, not a ranking of real cities.
+**22 cities in four groups** — A North (6), B South (6), C East (5), D West (5) — **6
+transports** and **4 event spaces**. Prices are gameplay tiers, not a ranking of real cities.
 
-## A turn
+### Corners _(frozen)_
 
-1. **Roll** two dice (on the server; 10 s, or it rolls for you). Move forward that many
-   spaces. Passing or landing on **Start** pays **150** coins, plus industry dividends.
-2. **Land** and resolve the space:
-   - **Free city or industry:** buy it at its price (Buy / Skip, 15 s; skip on timeout). Not
-     enough coins: no offer; it stays unowned.
-   - **Your own city:** develop it one level (Build / Skip).
-   - **Someone else's city:** pay them the **visitor fee**. **Someone's industry:** pay a
-     **factory visit** of 20 per industry they own.
-   - **News / Mela:** draw a card and follow it (below).
-   - **Lucky Mela:** spin the wheel — +50, +75, +100, +100, +150 or a free level (+75 if you
-     own no city). Always good.
-   - **Traffic Jam:** your next roll uses **one die**. **Chai Break:** a safe stop.
-3. **Start expansion:** if you passed or landed on Start this turn, you may also develop
-   **any one** of your cities by one level (after the landing decision).
-4. The turn ends; the next player rolls.
+- **START:** collect **₹1,500** every time you pass or land.
+- **JAIL:** pay **₹500** (and roll normally next turn) **or** lose your next roll.
+- **CLUB:** collect **₹200** from every other player.
+- **RESORT:** pay **₹200** to every other player.
 
-## Cities and development
+## Cities, rent and development _(rules frozen)_
 
-| Level        | How                                     | Cost           | Visitor fee       |
-| ------------ | --------------------------------------- | -------------- | ----------------- |
-| **Stall**    | buy the city                            | its price      | 25 % of the price |
-| **Shop**     | land on it again, or choose it at Start | half its price | × 3               |
-| **Showroom** | as above                                | half its price | × 5               |
-| **Mall**     | as above                                | half its price | × 8               |
+- **Land on a free city or transport:** buy it at its price, or don't (it stays unowned).
+- **Land on your own city:** build — **House 1 → House 2 → House 3 → Hotel**. You may build
+  **one or more levels at once** on that landing, paying each level's cost.
+  _(Simulation-driven: with one level per landing hotels never appeared — see the design
+  document's implementation results.)_ House = 40 % of the city price; hotel = 80 %.
+- **Land on someone else's city:** pay rent. Base rent = 40 % of the price, × **1 / 3 / 6 / 10
+  / 15** for empty / 1 / 2 / 3 houses / hotel. **Owning 3 or more cities of a group doubles
+  that group's rent** (2 owned: ×1; 3–6 owned: ×2).
+- **Transport rent** by how many transports the owner has: **₹300 / 700 / 1,200 / 1,800 /
+  2,500 / 3,200** for 1–6. Transports can't be built on.
 
-One level at a time. Owning **all three cities of a region** multiplies their fees by
-**1.5**. Fees round to 5. Example — Mumbai (340): Stall 85, Shop 255, Showroom 425, Mall 680.
+Example — Delhi (₹2,800): rent ₹1,120 empty, ₹3,360 / ₹6,720 / ₹11,200 with houses, ₹16,800
+with the hotel; double those with 3+ North cities. Houses ₹1,120 each, hotel ₹2,240.
 
-**Industries** (Tea Garden, Textile Mill, Film Studio — 200 each) can't be developed; they pay
-their owner **25 per industry** every time the owner passes Start (**+40** for all three).
+## Events — deterministic by dice sum _(mechanic frozen; amounts tuned)_
 
-## Cards
+Landing on Chance or Community Chest: **you roll two dice for the event**; everyone sees the
+sum, then the card for that sum flips over. **Chance: even sum = good, odd = bad. Community
+Chest: odd = good, even = bad.** Each sum has exactly one outcome per deck — no shuffled cards.
 
-Two decks of 12 (News: business news; Mela: fair-ground fun), shuffled by the server; a used
-card goes under; an empty deck is reshuffled. No card moves more than 150 coins to or from one
-player. Moving cards resolve the new space once (never a second card).
+| Sum | Chance                                                       | Community Chest                      |
+| --- | ------------------------------------------------------------ | ------------------------------------ |
+| 2   | Good: collect ₹1,500                                         | Bad: pay ₹1,500                      |
+| 3   | Bad: pay ₹1,000                                              | Good: collect ₹1,000                 |
+| 4   | Good: collect ₹200 from every player                         | Bad: pay ₹200 to every player        |
+| 5   | Bad: pay ₹300 to every player                                | Good: collect ₹150 from every player |
+| 6   | Good: collect ₹500                                           | Bad: pay ₹400                        |
+| 7   | Bad: pay ₹200                                                | Good: collect ₹300                   |
+| 8   | Good: a free building on your least-developed city (or ₹600) | Bad: you can't buy on your next turn |
+| 9   | Bad: lose your next roll                                     | Good: your next rent is waived       |
+| 10  | Good: go to START and collect ₹1,500                         | Bad: lose your next roll             |
+| 11  | Bad: repairs ₹100 per house, ₹250 per hotel (max ₹1,500)     | Good: a free building (or ₹600)      |
+| 12  | Good: collect ₹1,000                                         | Bad: pay ₹800                        |
 
-**News:** tea prices climb (Tea Garden owner +100) · your shop trends online (+80) · fuel
-prices up (−40) · power cuts (−15 per level you own, max 120) · wedding season (+50 per Mall,
-every owner) · export order (+40 per industry you own, at least 40) · tech fair in the South
-(+30 per South city, every owner) · road works in the West (−20 per West city, every owner) ·
-markets dip (everyone −25) · express train (forward 4) · film shoot (Film Studio owner +100) ·
-cotton harvest (Textile Mill owner +100).
+## Optional actions on your turn (before you roll)
 
-**Mela:** ring-toss win (+50) · giant-wheel treat (pay 10 to each other player) · sweets
-stall sells out (+70) · kite-flying contest (collect 15 from each other player) · lost in the
-crowd (back 3) · puppet show (−30) · lucky draw (a free level on your least-developed city, or
-+60) · folk-dance prize (+60) · balloons (−20) · magic show (everyone +30) · food-court feast
-(−40) · the mela train home (move to Start).
+- **Loans:** borrow in steps of ₹1,000; each step adds **₹1,100** to your debt (10 % fee).
+  Limit: debt ≤ ₹3,000 + 50 % of the list value of what you own. Several loans are allowed;
+  repay any amount at any time on your turn. **No new loans in the final round.** At the end
+  of the match, debt is repaid from cash first.
+- **Auction** one of your cities or transports (with its buildings): opening bid 50 % of its
+  value (rounded to ₹100), bids in ₹100 steps, 15 s, +5 s after a late bid (30 s at most).
+  You can't bid on your own auction. No bids: you keep it. **At most one auction per turn.**
+- **Trade** with one player: cash and/or assets each way; the other player confirms (20 s).
+  One trade offer per turn.
+- An asset that changed hands by auction or trade **can't be auctioned or traded again for 3
+  rounds** (provisional guardrail).
 
-## Short of coins — clearance sales
+## Can't pay? — Raise money and insolvency _(players are never eliminated)_
 
-Nobody is ever eliminated. If you must pay more than you have, the bank **automatically**
-sells your assets at **half value** until you can pay: development levels first (one at a
-time, from your most developed city, cheapest first on ties), then whole places, cheapest
-first. Sold places go back to the bank. If you still can't pay everything, you pay what you
-have and the rest is **written off**; you carry on with 0 coins ("Broke"), collecting the
-Start salary as usual.
+If you owe more than you have on your turn, the **Raise money** panel opens: take a loan, sell
+buildings or whole assets **back to the bank at 50 %** (only possible here — provisional
+guardrail), auction an asset, or **Let the bank handle it**. Debts that happen on other
+players' turns (Club, events) are settled by the bank automatically.
 
-## The end
+The bank's order: borrow up to the limit (not in the final round) → sell buildings (most
+developed first) → sell assets (cheapest first). Anything still unpaid is **written off**: you
+pay everything you have, your loans are cleared, and you are marked **INSOLVENT** (₹0 badge on
+your card and token). You **keep playing**: you roll, collect at START and can buy again.
 
-After the last turn of the last round: **wealth = coins + price of every place you own +
-everything spent on development.** Highest wealth wins; equal wealth shares a place
-(1, 1, 3). The results show **Wealth** and **Cities**.
+## Final wealth _(frozen formula)_
 
-## Fair play and timing
+**Final wealth = cash currently held + cumulative money spent on properties + cumulative money
+spent on houses/hotels + cumulative money spent on transport.**
 
-- No trading, loans, auctions or mortgages.
-- Rejected: acting out of turn, a stale turn number, buying an owned or far-away place,
-  developing someone else's city or a Mall, any dice, price, coins or position sent by a
-  client, repeated action ids, versions the server never issued, anything after the end.
-- Three automatic actions in a row (timeouts while connected) hand your seat to a bot; "I'm
-  back" takes it back at once. Disconnected players have the usual 30 s grace.
-- **Bots** buy when they keep a reserve (150 + 25 per opponent) — always to complete a
-  region — develop when they keep the reserve, choose their best city at Start (a complete
-  region first, then the dearest), sometimes misjudge a close call, and think 0.8–2 s.
+- Running totals from the first turn; they never go down (selling or insolvency doesn't reduce
+  them). Auction wins and the cash part of trades count toward the buyer's totals. Free
+  buildings from events cost nothing and add nothing.
+- At the end the board counts up each part for every player, then the total; the results show
+  **Final wealth · Cash · Properties · Houses & hotels · Transport**. Highest final wealth wins;
+  equal wealth shares a place.
+
+## Fair play
+
+- The server rolls every die, moves every token, computes every price, rent, loan and total.
+  Clients send intents only (`ROLL`, `EVENT_ROLL`, `BUY`, `BUILD {levels}`, `SKIP`,
+  `JAIL_PAY` / `JAIL_WAIT`, `LOAN`, `REPAY`, `SELL_BUILDING`, `SELL_ASSET`, `BANK_HANDLES_IT`,
+  `AUCTION_START`, `BID`, `TRADE_PROPOSE`, `TRADE_ANSWER`, each with the turn number).
+- Rejected: acting out of turn, stale turns or versions, repeated action ids, any extra field
+  (dice, prices, cash, owners, positions), bids below the minimum or above your cash, buying an
+  owned or far-away space, building on someone else's city or past a hotel, trading locked or
+  unowned assets, anything after the end.
+- No hidden information: every player sees the same board.
+
+## Bots
+
+One level. They roll after 0.6–1.4 s and decide after 0.8–2 s; keep a reserve (₹1,500 + ₹250
+per opponent); buy when they keep it (always to complete a group), build as many levels as the
+reserve allows, pay Jail when cash ≥ 3× the fee, bid up to 0.8–1.1× an asset's value while
+keeping half the reserve, accept trades worth ≥ 1.1× what they give (with a 10 % whim),
+sometimes propose a trade that completes a group, let the bank handle debts, and misjudge 10 %
+of close calls. Bots never spam reactions.

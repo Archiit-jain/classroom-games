@@ -91,7 +91,7 @@ games use this same server-authoritative runtime — none has its own networking
 | Pen Fight                   | `pen-fight`               | 2–4     | `SIMULATED`  | Shipped (Phase 5) | [rules](GAME_RULES/PEN_FIGHT.md), [design](design/PEN_FIGHT_DESIGN.md)                             |
 | Dots & Boxes                | `dots-and-boxes`          | 2–4     | `TURN_PHASE` | Shipped (Phase 6) | [rules](GAME_RULES/DOTS_AND_BOXES.md), [design](design/DOTS_AND_BOXES_DESIGN.md)                   |
 | Name Place Animal Thing     | `name-place-animal-thing` | 2–8     | `TURN_PHASE` | Shipped (Phase 7) | [rules](GAME_RULES/NAME_PLACE_ANIMAL_THING.md), [design](design/NAME_PLACE_ANIMAL_THING_DESIGN.md) |
-| Business (working title)    | `business`                | 2–6     | `TURN_PHASE` | Shipped (Phase 8) | [rules](GAME_RULES/BUSINESS.md), [design](design/BUSINESS_DESIGN.md)                               |
+| Business (working title)    | `business`                | 2–6     | `TURN_PHASE` | Shipped (Phase 8) | [rules](GAME_RULES/BUSINESS.md), [design](design/BUSINESS_REDESIGN.md)                             |
 | Count Up (fixture)          | `fixture`                 | 2–4     | `TURN_PHASE` | Dev/test only     | [below](#the-fixture-game-count-up)                                                                |
 
 Ids of games not yet built are planned names. Room capacity always comes from the game's

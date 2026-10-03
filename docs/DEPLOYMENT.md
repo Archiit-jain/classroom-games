@@ -73,8 +73,9 @@ pnpm smoke
 Two separate browsers open the site, create and join a private room, play Dots & Boxes and
 exchange moves, then one reloads (a new WebSocket, possibly on another instance): the room,
 board and seat must survive. A third test plays a **full Business match** with two
-browsers: a purchase, a development and a card effect must reach both devices, one reloads
-mid-match and gets the same seat and board, and both see the results. A second test plays a **Name Place Animal Thing** round with
+browsers: dice, a purchase, rent, a building, an event, a loan and an auction must reach both
+devices, one reloads mid-match and gets the same seat and board, and both see the results
+(Final wealth and its parts). A second test plays a **Name Place Animal Thing** round with
 three separate browsers: everyone types, one reloads mid-round and gets the same seat and
 their own saved sheet back, no other browser's WebSocket carries a sheet before the reveal,
 STOP ends the round, the automatic check marks answers, two of the three players' votes
