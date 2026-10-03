@@ -2,6 +2,8 @@ import type { AnyGameModule } from '@cg/game-sdk';
 import type { FixtureEvent, FixtureView } from '@cg/game-sdk/fixture';
 import type { MatchStream, MatchUpdate } from '@cg/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createBusinessGame } from '@cg/game-business/server';
+import type { BusinessView } from '@cg/game-business/shared';
 import { createDotsAndBoxesGame } from '@cg/game-dots-and-boxes/server';
 import { BANK } from '@cg/game-name-place-animal-thing/content';
 import { createNpatGame } from '@cg/game-name-place-animal-thing/server';
@@ -482,5 +484,120 @@ describe('host hand-over and failover', () => {
       )) as NpatUpdate;
       expect(scored.view.last?.rejected).toEqual([group]);
     }, 30_000);
+  });
+
+  describe('Business across instances', () => {
+    type BizUpdate = MatchUpdate<BusinessView, unknown>;
+    const biz = () =>
+      createBusinessGame({
+        timing: { rollMs: 5000, decideMs: 5000, hopMs: 0, landingMs: 0 },
+        dice: () => [1, 0], // everyone walks one space a turn: purchases every turn
+      });
+    const last = (cl: TestClient) => cl.all('match:update').at(-1) as BizUpdate;
+    const total = (v: BusinessView) => v.seats.reduce((n, x) => n + (v.coins[x] ?? 0), 0);
+
+    /** One move for whoever is current: roll, then buy what is offered. */
+    async function play(players: TestClient[]): Promise<void> {
+      const mover = players.find((p) => last(p).view.current === last(p).you) as TestClient;
+      const v = last(mover);
+      expect((await mover.act(v, { type: 'ROLL', turn: v.view.turn })).ok).toBe(true);
+      const d = (await mover.waitFor(
+        'match:update',
+        (u) => (u as BizUpdate).view.turn === v.view.turn && (u as BizUpdate).view.phase !== 'ROLL',
+        5000,
+      )) as BizUpdate;
+      let at = d;
+      // Answer every offer (a buy, then maybe the Start expansion): buy, or skip the rest.
+      while (at.view.phase === 'DECIDE' && at.view.turn === v.view.turn && at.view.decision) {
+        const decision = at.view.decision;
+        const action =
+          decision.kind === 'BUY'
+            ? { type: 'BUY', turn: at.view.turn, space: decision.options[0]?.space as number }
+            : { type: 'SKIP', turn: at.view.turn };
+        const before = at.version;
+        expect((await mover.act(at, action)).ok).toBe(true);
+        at = (await mover.waitFor(
+          'match:update',
+          (u) => (u as BizUpdate).version > before,
+          5000,
+        )) as BizUpdate;
+      }
+      await mover.waitFor('match:update', (u) => (u as BizUpdate).view.turn > v.view.turn, 5000);
+      for (const p of players) {
+        await p.waitFor('match:update', (u) => (u as BizUpdate).view.turn > v.view.turn, 5000);
+      }
+    }
+
+    it('keeps one Business room in sync with players on different instances, through a host crash', async () => {
+      c = await startCluster(2, { games: [biz()] });
+      await eventually(() => hostIndex(c as TestCluster) >= 0);
+      const host = hostIndex(c);
+      const a = await c.player(host, 'Archit'); // on the host
+      const b = await c.player(1 - host, 'Priya'); // on the other instance
+      await setupGameRoom('business', a, b);
+      await a.emit('room:updateSettings', { settings: { rounds: 12 } });
+      expect((await a.emit('room:start', {})).ok).toBe(true);
+      await a.waitFor('match:update');
+      await b.waitFor('match:update');
+      for (let k = 0; k < 4; k++) await play([a, b]);
+      expect(last(b).view.owner).toEqual(last(a).view.owner);
+      expect(last(b).view.coins).toEqual(last(a).view.coins);
+      // Both walk the same road one space at a time: the first to arrive buys, the other pays a fee.
+      expect(last(a).view.owner.filter((o) => o !== null).length).toBeGreaterThan(0);
+
+      // B (on the surviving instance) rolls until a roll ends in a decision; then the host crashes.
+      let deciding: BizUpdate | null = null;
+      for (let k = 0; k < 20 && !deciding; k++) {
+        if (last(b).view.current !== last(b).you) {
+          await play([a, b]);
+          continue;
+        }
+        const v = last(b);
+        expect((await b.act(v, { type: 'ROLL', turn: v.view.turn })).ok).toBe(true);
+        const next = (await b.waitFor(
+          'match:update',
+          (u) =>
+            (u as BizUpdate).view.turn === v.view.turn && (u as BizUpdate).view.phase !== 'ROLL',
+          5000,
+        )) as BizUpdate;
+        if (next.view.phase === 'DECIDE') deciding = next;
+        else await b.waitFor('match:update', (u) => (u as BizUpdate).view.turn > v.view.turn, 5000);
+      }
+      if (!deciding) throw new Error('no decision reached');
+      await sleep(300); // the host's next snapshot
+      const crashed = c.nodes[host]?.server as GameServer;
+      await crashed.cluster.abandon();
+      crashed.io.close();
+      await eventually(
+        () => (c as TestCluster).nodes[1 - host]?.server.cluster.isHost === true,
+        5000,
+      );
+
+      // The restored board is exactly the one before the crash, and coins are conserved.
+      const r = await b.emit('match:resync', { matchId: deciding.matchId });
+      if (!r.ok) throw new Error('resync failed');
+      const after = r.update.view as BusinessView;
+      expect(after.coins).toEqual(deciding.view.coins);
+      expect(after.owner).toEqual(deciding.view.owner);
+      expect(after.level).toEqual(deciding.view.level);
+      expect(after.positions).toEqual(deciding.view.positions);
+      expect(after.decision).toEqual(deciding.view.decision);
+      expect(total(after)).toBe(after.seats.length * after.economy.startCoins + after.bankNet);
+      // …and the decision can be finished on the new host.
+      const kind = after.decision?.kind;
+      const space = after.decision?.options[0]?.space as number;
+      const finish = kind === 'BUY' ? 'BUY' : 'DEVELOP';
+      expect((await b.act(r.update, { type: finish, turn: after.turn, space })).ok).toBe(true);
+      const bought = (await b.waitFor(
+        'match:update',
+        (u) =>
+          (u as BizUpdate).view.owner[space] === last(b).you &&
+          (u as BizUpdate).version > r.update.version,
+        5000,
+      )) as BizUpdate;
+      expect(total(bought.view)).toBe(
+        bought.view.seats.length * bought.view.economy.startCoins + bought.view.bankNet,
+      );
+    }, 40_000);
   });
 });
