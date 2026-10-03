@@ -28,6 +28,11 @@ export interface ServerConfig {
   releaseHostWhenIdle: boolean;
   trustProxy: boolean;
   enableFixtureGame: boolean;
+  /**
+   * Test-only Business scenario (e2e): `insolvency` scripts the dice and makes rent
+   * unpayable so a player goes insolvent on turn 2. Never set in production.
+   */
+  businessTestScenario: 'insolvency' | null;
   /** Multiplies game phase timers (dev/e2e speed-ups). Always 1 in production. */
   gameTimeScale: number;
   logLevel: LogLevel;
@@ -81,6 +86,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
   allowedOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://*.localhost:5173'],
   trustProxy: false,
   enableFixtureGame: true,
+  businessTestScenario: null,
   gameTimeScale: 1,
   logLevel: 'info',
   timing: {
@@ -167,6 +173,7 @@ const EnvSchema = z.object({
   ALLOWED_ORIGINS: z.string().optional(),
   TRUST_PROXY: bool.optional(),
   ENABLE_FIXTURE_GAME: bool.optional(),
+  BUSINESS_TEST_SCENARIO: z.enum(['insolvency']).optional(),
   GAME_TIME_SCALE: z.coerce.number().min(0.05).max(10).optional(),
   LOG_LEVEL: z.enum(['silent', 'error', 'warn', 'info', 'debug']).optional(),
 });
@@ -215,6 +222,7 @@ export function loadConfig(
     trustProxy: parsed.TRUST_PROXY ?? (onVercel ? true : undefined),
     // The fixture game is a test/dev tool and is never registered in production.
     enableFixtureGame: isProduction ? false : (parsed.ENABLE_FIXTURE_GAME ?? true),
+    businessTestScenario: isProduction ? null : (parsed.BUSINESS_TEST_SCENARIO ?? null),
     gameTimeScale: isProduction ? 1 : parsed.GAME_TIME_SCALE,
     logLevel: parsed.LOG_LEVEL,
   };

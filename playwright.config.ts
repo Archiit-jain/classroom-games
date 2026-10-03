@@ -11,6 +11,9 @@ const channel = process.env.PW_CHANNEL;
 const isCI = !!process.env.CI;
 const SERVER_PORT = 3101;
 const CLIENT_PORT = 5174;
+/** A second server + client with the test-only Business insolvency scenario. */
+export const SCENARIO_SERVER_PORT = 3102;
+export const SCENARIO_CLIENT_PORT = 5175;
 const browser = channel ? { channel } : {};
 
 export default defineConfig({
@@ -62,6 +65,26 @@ export default defineConfig({
       reuseExistingServer: !isCI,
       timeout: 60_000,
       env: { VITE_SERVER_URL: `http://localhost:${SERVER_PORT}` },
+    },
+    {
+      command: 'pnpm --filter @cg/server exec tsx src/index.ts',
+      url: `http://localhost:${SCENARIO_SERVER_PORT}/healthz`,
+      reuseExistingServer: !isCI,
+      timeout: 60_000,
+      env: {
+        PORT: String(SCENARIO_SERVER_PORT),
+        ALLOWED_ORIGINS: `http://localhost:${SCENARIO_CLIENT_PORT}`,
+        GAME_TIME_SCALE: '0.25',
+        LOG_LEVEL: 'warn',
+        BUSINESS_TEST_SCENARIO: 'insolvency',
+      },
+    },
+    {
+      command: `pnpm --filter @cg/client exec vite --port ${SCENARIO_CLIENT_PORT} --strictPort`,
+      url: `http://localhost:${SCENARIO_CLIENT_PORT}`,
+      reuseExistingServer: !isCI,
+      timeout: 60_000,
+      env: { VITE_SERVER_URL: `http://localhost:${SCENARIO_SERVER_PORT}` },
     },
   ],
 });

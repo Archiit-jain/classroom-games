@@ -61,6 +61,16 @@ describe('loadConfig', () => {
     expect(loadConfig({ ENABLE_FIXTURE_GAME: 'false' }).enableFixtureGame).toBe(false);
   });
 
+  it('never runs the Business test scenario in production', () => {
+    expect(loadConfig({ ...PROD, BUSINESS_TEST_SCENARIO: 'insolvency' }).businessTestScenario).toBe(
+      null,
+    );
+    expect(loadConfig({ BUSINESS_TEST_SCENARIO: 'insolvency' }).businessTestScenario).toBe(
+      'insolvency',
+    );
+    expect(loadConfig({}).businessTestScenario).toBe(null);
+  });
+
   it('refuses to run in production without shared state or with development origins', () => {
     expect(() => loadConfig({ ...PROD, REDIS_URL: undefined })).toThrow(/REDIS_URL/);
     expect(() => loadConfig({ NODE_ENV: 'production', REDIS_URL: PROD.REDIS_URL })).toThrow(

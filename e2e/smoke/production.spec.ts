@@ -207,7 +207,7 @@ test('production: three devices play a Name Place Animal Thing round with the fr
 test('production: two devices play a full Business match, staying in sync through a reconnect', async ({
   browser,
 }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(480_000);
   const a = await recordedDevice(browser, 'Smoke A');
   const b = await recordedDevice(browser, 'Smoke B');
   await a.page.getByRole('button', { name: 'Create room: Business' }).click();
@@ -215,19 +215,19 @@ test('production: two devices play a full Business match, staying in sync throug
   await b.page.getByLabel('Room code', { exact: true }).fill(code);
   await b.page.getByRole('button', { name: 'Join', exact: true }).click();
   await expect(b.page.getByTestId('room-code')).toHaveText(code);
-  await a.page.getByLabel('Rounds').selectOption('12');
+  await expect(a.page.getByLabel('Rounds', { exact: true })).toHaveValue('15');
   await a.page.getByRole('button', { name: 'Start game' }).click();
   for (const d of [a, b])
-    await expect(d.page.locator('.bz-tile')).toHaveCount(28, { timeout: 15_000 });
+    await expect(d.page.locator('.bz-tile')).toHaveCount(36, { timeout: 15_000 });
 
   const owned = (page: Page) =>
     page
       .locator('.bz-tile--owned')
       .evaluateAll((els) => els.map((e) => e.getAttribute('data-space')).sort())
       .catch(() => [] as (string | null)[]);
-  const coins = (page: Page) =>
+  const cash = (page: Page) =>
     page
-      .locator('.bz-player__coins')
+      .locator('.bz-player__cash')
       .evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))
       .catch(() => [] as (string | null)[]);
   const logText = (page: Page) =>
@@ -235,64 +235,130 @@ test('production: two devices play a full Business match, staying in sync throug
       .locator('.bz-log__item')
       .allInnerTexts()
       .catch(() => [] as string[]);
-  const seen = { bought: false, built: false, card: false, reconnected: false };
+  const enabled = (l: ReturnType<Page['locator']>) =>
+    l.isEnabled({ timeout: 30 }).catch(() => false);
+  const click = (l: ReturnType<Page['locator']>) =>
+    l.click({ timeout: 1000 }).catch(() => undefined);
+  const seen = {
+    rolled: false,
+    bought: false,
+    rent: false,
+    built: false,
+    event: false,
+    loan: false,
+    auction: false,
+    reconnected: false,
+  };
   const pages = () => [a.page, b.page];
+  const sameBoards = async () => {
+    await expect
+      .poll(async () => (await owned(b.page)).join(), { timeout: 10_000 })
+      .toBe((await owned(a.page)).join());
+    await expect
+      .poll(async () => (await cash(b.page)).join(), { timeout: 10_000 })
+      .toBe((await cash(a.page)).join());
+  };
 
-  const deadline = Date.now() + 280_000;
+  const deadline = Date.now() + 460_000;
   while (Date.now() < deadline) {
     if (await a.page.getByRole('heading', { name: 'Results' }).isVisible()) break;
     for (const page of pages()) {
-      const roll = page.locator('.bz-roll:not([disabled])');
-      if ((await roll.count()) > 0) {
-        await roll.click({ timeout: 1000 }).catch(() => undefined);
+      const roll = page.getByRole('button', { name: /Roll the dice|Roll for/ });
+      if (await enabled(roll)) {
+        // A, once it owns something: a loan, then an auction that B wins.
+        if (page === a.page && (await a.page.locator('.bz-tile--mine').count()) > 0) {
+          if (!seen.loan) {
+            await click(a.page.getByRole('button', { name: 'Loan', exact: true }));
+            await click(a.page.getByRole('button', { name: 'Borrow ₹1,000' }));
+            await expect(b.page.locator('.bz-log')).toContainText('borrowed ₹1,000');
+            seen.loan = true;
+            continue;
+          }
+          if (!seen.auction) {
+            const space = (await owned(a.page))[0];
+            await click(a.page.getByRole('button', { name: 'Auction', exact: true }));
+            await click(a.page.getByRole('button', { name: /^Auction / }).first());
+            await expect(b.page.locator('.bz-auction')).toBeVisible();
+            await click(b.page.locator('.bz-auction .btn--primary').first());
+            await expect(a.page.locator(`.bz-tile[data-space="${space}"]`)).not.toHaveClass(
+              /bz-tile--mine/,
+              { timeout: 40_000 },
+            );
+            await sameBoards();
+            seen.auction = true;
+            continue;
+          }
+        }
+        await click(roll);
         continue;
       }
-      const yes = page
-        .locator('.bz-actions .btn--yellow:not([disabled]), .bz-option:not([disabled])')
-        .first();
-      if ((await yes.count()) > 0) await yes.click({ timeout: 1000 }).catch(() => undefined);
+      const buy = page.getByRole('button', { name: /^BUY/ });
+      if (await enabled(buy)) {
+        await click(buy);
+        continue;
+      }
+      const build = page.locator('.bz-tray .btn--primary', { hasText: /house|hotel/i }).first();
+      if (await enabled(build)) {
+        await click(build);
+        continue;
+      }
+      for (const name of [
+        /Don’t buy|Not now/,
+        /Lose your next roll/,
+        /Let the bank handle it/,
+        /^Decline$/,
+      ]) {
+        const btn = page.getByRole('button', { name }).first();
+        if (await enabled(btn)) await click(btn);
+      }
     }
-    const [la, lb] = [await logText(a.page), await logText(b.page)];
-    // Ownership, developments and card effects reach both devices.
-    if (!seen.bought && la.some((l) => l.includes(' bought '))) {
-      await expect
-        .poll(async () => (await owned(b.page)).join(), { timeout: 10_000 })
-        .toBe((await owned(a.page)).join());
+    const lines = [...(await logText(a.page)), ...(await logText(b.page))];
+    // Dice, ownership, rent, buildings and event effects reach both devices.
+    if (!seen.rolled && lines.some((l) => / rolled \d \+ \d/u.test(l))) seen.rolled = true;
+    if (!seen.bought && lines.some((l) => l.includes(' bought '))) {
+      await sameBoards();
       seen.bought = true;
     }
-    if (!seen.built && [...la, ...lb].some((l) => l.includes(' built a '))) {
-      await expect
-        .poll(async () => (await owned(b.page)).join(), { timeout: 10_000 })
-        .toBe((await owned(a.page)).join());
-      const levels = (page: Page) => page.locator('.bz-tile__level').count();
-      await expect.poll(() => levels(b.page), { timeout: 10_000 }).toBe(await levels(a.page));
+    if (!seen.rent && lines.some((l) => / paid ₹[\d,]+ to /u.test(l))) {
+      await sameBoards();
+      seen.rent = true;
+    }
+    if (!seen.built && lines.some((l) => / built a | got a free /u.test(l))) {
+      const buildings = (page: Page) => page.locator('.bz-tile__buildings > span').count();
+      await expect.poll(() => buildings(b.page), { timeout: 10_000 }).toBe(await buildings(a.page));
       seen.built = true;
     }
-    if (!seen.card && [...la, ...lb].some((l) => l.includes(' card — '))) {
-      await expect
-        .poll(async () => (await coins(b.page)).join(), { timeout: 10_000 })
-        .toBe((await coins(a.page)).join());
-      seen.card = true;
+    if (!seen.event && lines.some((l) => /: (Chance|Community Chest) \d+ — /u.test(l))) {
+      await sameBoards();
+      seen.event = true;
     }
     // After the first purchase, B reloads mid-match: same seat, same board.
     if (seen.bought && !seen.reconnected) {
-      const before = await owned(a.page);
       await b.page.reload();
-      await expect(b.page.locator('.bz-tile')).toHaveCount(28, { timeout: 15_000 });
-      await expect
-        .poll(async () => (await owned(b.page)).join(), { timeout: 10_000 })
-        .toBe((await owned(a.page)).join());
-      expect((await owned(b.page)).length).toBeGreaterThanOrEqual(before.length);
+      await expect(b.page.locator('.bz-tile')).toHaveCount(36, { timeout: 15_000 });
+      await sameBoards();
+      await expect(b.page.locator('.bz-player--me')).toHaveCount(1);
       await expect(b.page.getByText('A bot is playing for you.')).toHaveCount(0);
       seen.reconnected = true;
     }
     await a.page.waitForTimeout(200);
   }
-  expect(seen).toEqual({ bought: true, built: true, card: true, reconnected: true });
+  expect(seen).toEqual({
+    rolled: true,
+    bought: true,
+    rent: true,
+    built: true,
+    event: true,
+    loan: true,
+    auction: true,
+    reconnected: true,
+  });
   for (const d of [a, b]) {
-    await expect(d.page.getByRole('heading', { name: 'Results' })).toBeVisible({ timeout: 20_000 });
+    await expect(d.page.getByRole('heading', { name: 'Results' })).toBeVisible({ timeout: 30_000 });
     await expect(d.page.locator('.results__row')).toHaveCount(2);
-    await expect(d.page.getByRole('columnheader', { name: 'Wealth' })).toBeVisible();
+    await expect(
+      d.page.getByRole('columnheader', { name: 'Final wealth', exact: true }),
+    ).toBeVisible();
     for (const url of d.sockets) {
       expect(url).toContain('/api/socket/socket.io/');
       expect(url).toContain('transport=websocket');
