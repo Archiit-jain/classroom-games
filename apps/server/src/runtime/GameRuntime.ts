@@ -5,6 +5,7 @@ import {
   type Audience,
   type ChatDecision,
   type ChatInputLimit,
+  type MatchRoster,
   type RuntimeRequest,
   type SeatChange,
   type SeatIndex,
@@ -165,10 +166,10 @@ export class GameRuntime {
     return this.started;
   }
 
-  start(): void {
+  start(roster: MatchRoster = { bots: [] }): void {
     if (this.started) return;
     this.started = true;
-    this.run(() => this.game.setup(this.seats, this.settings, this.ctx()));
+    this.run(() => this.game.setup(this.seats, this.settings, this.ctx(), roster));
   }
 
   /**

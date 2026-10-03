@@ -44,6 +44,11 @@ export interface SimulateOptions<S> {
   botsAct?: boolean;
   invariant?: (state: S) => void;
   perturbHidden?: PerturbHidden<S>;
+  /**
+   * Also play bots' STREAM plans (chunk by chunk through `stream.accept`, on the
+   * virtual clock), as the server does. Off by default.
+   */
+  streams?: boolean;
 }
 
 export interface SimulationResult<S, E> {
@@ -79,6 +84,8 @@ export function simulateMatch<S, E>(
   const requests: RuntimeRequest[] = [];
   const delivered: E[][] = seatList.map(() => []);
   let memories: unknown[] = seatList.map((seat) => game.bot.createMemory(seat));
+  /** Remaining chunks of each seat's running stream plan (due time, chunk). */
+  const plans = new Map<SeatIndex, { at: number; chunk: unknown }[]>();
 
   const apply = (t: Transition<S, E>): void => {
     for (const scoped of t.events as Scoped<E>[]) {
@@ -110,12 +117,13 @@ export function simulateMatch<S, E>(
     if (steps > maxSteps) throw new Error(`Match did not finish within ${maxSteps} steps`);
   };
 
-  apply(game.setup(seatList, settings, { now, rng }));
+  apply(game.setup(seatList, settings, { now, rng }, { bots: seatList }));
 
   while (!game.isOver(state)) {
     let best: { seat: SeatIndex; action: unknown; thinkMs: number } | null = null;
     if (botsAct) {
       for (const seat of seatList) {
+        if (plans.has(seat)) continue;
         const decision = game.bot.decide(game.getPlayerView(state, seat), memories[seat], {
           seat,
           now,
@@ -123,6 +131,15 @@ export function simulateMatch<S, E>(
         });
         if (decision?.kind === 'ACTION' && (!best || decision.thinkMs < best.thinkMs)) {
           best = { seat, action: decision.action, thinkMs: decision.thinkMs };
+        } else if (decision?.kind === 'STREAM' && options.streams && decision.steps.length > 0) {
+          let at = now + decision.thinkMs;
+          plans.set(
+            seat,
+            decision.steps.map((step) => ({
+              at: (at += Math.max(0, step.delayMs)),
+              chunk: step.chunk,
+            })),
+          );
         }
       }
     }
@@ -130,6 +147,39 @@ export function simulateMatch<S, E>(
     let nextTimer: { id: TimerId; at: number } | null = null;
     for (const [id, at] of timers) {
       if (!nextTimer || at < nextTimer.at) nextTimer = { id, at };
+    }
+    let nextChunk: { seat: SeatIndex; at: number } | null = null;
+    for (const [seat, steps] of plans) {
+      const at = (steps[0] as { at: number }).at;
+      if (!nextChunk || at < nextChunk.at) nextChunk = { seat, at };
+    }
+
+    if (
+      nextChunk &&
+      (!nextTimer || nextChunk.at < nextTimer.at) &&
+      (!best || nextChunk.at <= now + best.thinkMs)
+    ) {
+      const steps = plans.get(nextChunk.seat) as { at: number; chunk: unknown }[];
+      const step = steps.shift() as { at: number; chunk: unknown };
+      now = Math.max(now, step.at);
+      if (steps.length === 0) plans.delete(nextChunk.seat);
+      const stream = game.stream;
+      const parsed = stream?.chunkSchema.safeParse(step.chunk);
+      const out =
+        stream && parsed?.success ? stream.accept(state, nextChunk.seat, parsed.data) : null;
+      if (out && 'state' in out) {
+        structuredClone(out.state);
+        state = deepFreeze(out.state as S);
+        options.invariant?.(state);
+        if (options.perturbHidden) {
+          for (const seat of seatList)
+            assertNoViewLeak(game, state, seat, options.perturbHidden, leakRng);
+        }
+      } else {
+        // As on the server: the first rejected chunk cancels the rest of the plan.
+        plans.delete(nextChunk.seat);
+      }
+      continue;
     }
 
     if (best && (!nextTimer || now + best.thinkMs < nextTimer.at)) {

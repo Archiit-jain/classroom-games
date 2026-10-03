@@ -541,7 +541,7 @@ export class RoomManager {
       seats: seats.length,
     });
     this.broadcast(room);
-    runtime.start();
+    runtime.start({ bots: seats.filter((s) => s.memberKind === 'BOT').map((s) => s.seat) });
 
     // Humans who were already away when the match began get a bot once their grace ends.
     for (const s of seats) {

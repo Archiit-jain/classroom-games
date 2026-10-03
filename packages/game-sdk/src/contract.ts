@@ -46,6 +46,12 @@ export interface GameManifest {
   layout: { orientation: 'any' | 'portrait-preferred' | 'landscape-preferred' };
 }
 
+/** Platform facts about who sits where when the match starts. */
+export interface MatchRoster {
+  /** Seats played by bots from the start (not humans whose seat a bot later takes over). */
+  bots: SeatIndex[];
+}
+
 export interface BotCtx {
   seat: SeatIndex;
   now: number;
@@ -135,7 +141,13 @@ export interface GameModule<S, A, V, E, Settings> {
   defaultSettings: Settings;
   actionSchema: ZodType<A>;
 
-  setup(seats: SeatIndex[], settings: Settings, ctx: StepCtx): Transition<S, E>;
+  /** `roster` tells games that need it (e.g. for voting) which seats are bots. */
+  setup(
+    seats: SeatIndex[],
+    settings: Settings,
+    ctx: StepCtx,
+    roster?: MatchRoster,
+  ): Transition<S, E>;
   validateAction(s: S, seat: SeatIndex, a: A): Verdict;
   applyAction(s: S, seat: SeatIndex, a: A, ctx: StepCtx): Transition<S, E>;
   onTimer(s: S, timer: TimerId, ctx: StepCtx): Transition<S, E>;

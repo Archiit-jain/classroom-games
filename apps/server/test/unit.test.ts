@@ -225,6 +225,27 @@ describe('GameRuntime', () => {
     return { runtime, updates, requests, over, crashes };
   }
 
+  it('passes the roster to setup (default: no bots) without changing other games', () => {
+    const fixture = createFixtureGame({ turnMs: 1000 });
+    const seen: unknown[] = [];
+    const spy: AnyGameModule = {
+      ...fixture,
+      setup: (...args: Parameters<AnyGameModule['setup']>) => {
+        seen.push(args[3]);
+        return fixture.setup(args[0], args[1], args[2]);
+      },
+    };
+    makeRuntime(spy).runtime.start();
+    makeRuntime(spy).runtime.start({ bots: [2] });
+    expect(seen).toEqual([{ bots: [] }, { bots: [2] }]);
+    // The fixture ignores the roster: identical first views with or without it.
+    const plain = makeRuntime();
+    plain.runtime.start();
+    const withRoster = makeRuntime();
+    withRoster.runtime.start({ bots: [1, 2] });
+    expect(withRoster.updates.map((u) => u[0]?.view)).toEqual(plain.updates.map((u) => u[0]?.view));
+  });
+
   it('delivers one filtered update per seat, with private events only to their owner', () => {
     const { runtime, updates } = makeRuntime();
     runtime.start();
