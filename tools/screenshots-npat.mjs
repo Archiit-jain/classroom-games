@@ -58,8 +58,6 @@ const words = {
   place: `${letter}onville`,
   animal: `${letter}ynx`,
   thing: `${letter}amp`,
-  food: `${letter}entil`,
-  profession: `${letter}awyer`,
 };
 for (const [category, word] of Object.entries(words)) {
   await host.locator(`input[data-category="${category}"]`).fill(word);

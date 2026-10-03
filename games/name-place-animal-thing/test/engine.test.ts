@@ -28,7 +28,7 @@ const types = (t: T) => t.events.map((e) => e.event.type);
 /** A new match, already in WRITING with letter `letter`. */
 function writing(seats = [0, 1, 2], bots: number[] = [], letter = 'D', rounds = 3): NpatState {
   clock = 1_000_000;
-  const t = game.setup(seats, { rounds: rounds as 3, answerSeconds: 90 }, ctx(), { bots });
+  const t = game.setup(seats, { rounds: rounds as 3 }, ctx(), { bots });
   const s = game.onTimer(t.state, 'phase', ctx()).state;
   expect(s.phase).toBe('WRITING');
   return deepFreeze({ ...s, letter, usedLetters: [letter] });
@@ -85,29 +85,20 @@ describe('rounds and letters', () => {
     expect(view(w.state, 1).letter).toBe(w.state.letter);
   });
 
-  it('defaults to 5 rounds of 90 s with the six default categories, and offers only the listed settings', () => {
-    expect(game.defaultSettings).toEqual({ rounds: 5, answerSeconds: 90 });
-    expect(game.settingsSchema.safeParse({ rounds: 8, answerSeconds: 60 }).success).toBe(true);
-    expect(game.settingsSchema.safeParse({ rounds: 4, answerSeconds: 90 }).success).toBe(false);
-    expect(game.settingsSchema.safeParse({ rounds: 5, answerSeconds: 30 }).success).toBe(false);
-    expect(game.settingsSchema.safeParse({ rounds: 5, answerSeconds: 90, x: 1 }).success).toBe(
-      false,
-    );
+  it('plays Name, Place, Animal and Thing for a fixed 90 s; the host picks only the rounds', () => {
+    expect(game.defaultSettings).toEqual({ rounds: 5 });
+    expect(game.settingsSchema.safeParse({ rounds: 8 }).success).toBe(true);
+    expect(game.settingsSchema.safeParse({ rounds: 4 }).success).toBe(false);
+    expect(game.settingsSchema.safeParse({ rounds: 5, answerSeconds: 60 }).success).toBe(false);
     const s = writing();
-    expect(view(s, 0).categories).toEqual([
-      'name',
-      'place',
-      'animal',
-      'thing',
-      'food',
-      'profession',
-    ]);
+    expect(view(s, 0).categories).toEqual(['name', 'place', 'animal', 'thing']);
     expect(s.timing.answerMs).toBe(90_000);
+    expect(s.timing.stopUnlockMs).toBe(15_000);
   });
 
   it('never repeats a letter in a match and never draws Q, X or Z', () => {
     for (let seed = 1; seed <= 20; seed++) {
-      let s = game.setup([0, 1], { rounds: 10, answerSeconds: 60 }, ctx(seed), {
+      let s = game.setup([0, 1], { rounds: 10 }, ctx(seed), {
         bots: [0, 1],
       }).state;
       const seen: string[] = [];
@@ -171,14 +162,14 @@ describe('private autosave and the round end', () => {
     expect(types(up)).toEqual(['TIME_UP']);
     expect(up.state.phase).toBe('LOCKING');
     // The last autosave of what was typed before "time up" still counts …
-    s = draft(up.state, 1, { food: 'Dosa' });
+    s = draft(up.state, 1, { thing: 'Drum' });
     const locked = timer(s);
     expect(locked.state.phase).toBe('REVIEW');
     expect(types(locked)).toEqual(['REVEALED']);
     const review = view(locked.state, 2).review;
     expect(review?.answers.name.find((a) => a.seat === 0)?.text).toBe('Divya');
     expect(review?.answers.place.find((a) => a.seat === 0)?.status).toBe('BLANK');
-    expect(review?.answers.food.find((a) => a.seat === 1)?.text).toBe('Dosa');
+    expect(review?.answers.thing.find((a) => a.seat === 1)?.text).toBe('Drum');
     // … but nothing after the lock.
     expect(
       'state' in stream.accept(locked.state, 1, { round: s.round, seq: 50, answers: {} }),
@@ -219,11 +210,11 @@ describe('STOP', () => {
     const s = open(writing());
     const stop = (answers: Answers) => verdict(s, 0, { type: 'STOP', round: s.round, answers });
     expect(stop(full('D'))).toBe('OK');
-    expect(stop({ ...full('D'), food: '' })).toBe('NOT_ELIGIBLE');
-    expect(stop({ ...full('D'), food: 'Apple' })).toBe('NOT_ELIGIBLE'); // wrong letter
-    expect(stop({ ...full('D'), food: 'D' })).toBe('NOT_ELIGIBLE'); // too short
-    expect(stop({ ...full('D'), food: 'Dosa 2' })).toBe('NOT_ELIGIBLE'); // digits
-    expect(stop({ ...full('D'), food: 'Dickhead' })).toBe('NOT_ELIGIBLE'); // moderated
+    expect(stop({ ...full('D'), thing: '' })).toBe('NOT_ELIGIBLE');
+    expect(stop({ ...full('D'), thing: 'Apple' })).toBe('NOT_ELIGIBLE'); // wrong letter
+    expect(stop({ ...full('D'), thing: 'D' })).toBe('NOT_ELIGIBLE'); // too short
+    expect(stop({ ...full('D'), thing: 'Drum 2' })).toBe('NOT_ELIGIBLE'); // digits
+    expect(stop({ ...full('D'), thing: 'Dickhead' })).toBe('NOT_ELIGIBLE'); // moderated
   });
 
   it('is refused before it opens, outside writing and for another round', () => {
@@ -273,30 +264,31 @@ describe('automatic check, duplicates and scoring', () => {
       place: 'Dholavira', // real, but not in our list
       animal: 'Apple', // wrong letter
       thing: 'D', // too short
-      food: 'Dickhead', // moderated
     });
+    s = draft(s, 1, { name: 'Dickhead' }); // moderated; the rest blank
     const r = view(toReview(s), 1).review;
-    const row = (c: (typeof CATEGORIES)[number]) => r?.answers[c].find((a) => a.seat === 0);
+    const row = (c: (typeof CATEGORIES)[number], seat = 0) =>
+      r?.answers[c].find((a) => a.seat === seat);
     expect(row('name')).toMatchObject({ status: 'RECOGNISED', reason: null });
     expect(row('place')).toMatchObject({ status: 'UNVERIFIED', reason: null });
     expect(row('animal')).toMatchObject({ status: 'INVALID', reason: 'LETTER', group: null });
     expect(row('thing')).toMatchObject({ status: 'INVALID', reason: 'SHORT' });
-    expect(row('food')).toMatchObject({ status: 'INVALID', reason: 'NOT_ALLOWED' });
-    expect(row('food')?.text).toBe('****head'); // only the censored form is revealed
-    expect(row('profession')).toMatchObject({ status: 'BLANK', text: '' });
+    expect(row('name', 1)).toMatchObject({ status: 'INVALID', reason: 'NOT_ALLOWED' });
+    expect(row('name', 1)?.text).toBe('****head'); // only the censored form is revealed
+    expect(row('place', 1)).toMatchObject({ status: 'BLANK', text: '' });
   });
 
   it('groups identical answers despite case, spacing, punctuation, accents, plurals and variants', () => {
     let s = writing([0, 1, 2, 3, 4], [], 'B');
-    s = draft(s, 0, { place: 'Bengaluru', food: 'Banana', thing: 'Ball' });
-    s = draft(s, 1, { place: ' bangalore.', food: 'bananas', thing: 'Balls' });
-    s = draft(s, 2, { place: 'BENGALURU', food: 'Bánana', thing: 'Bat' });
-    s = draft(s, 3, { place: 'Bhopal', food: 'Bread', thing: 'Bell' });
-    s = draft(s, 4, { place: 'Bengal', food: 'Bun', thing: 'Bottle' });
+    s = draft(s, 0, { place: 'Bengaluru', animal: 'Bear', thing: 'Ball' });
+    s = draft(s, 1, { place: ' bangalore.', animal: 'bears', thing: 'Balls' });
+    s = draft(s, 2, { place: 'BENGALURU', animal: 'Béar', thing: 'Bat' });
+    s = draft(s, 3, { place: 'Bhopal', animal: 'Bison', thing: 'Bell' });
+    s = draft(s, 4, { place: 'Bengal', animal: 'Bat', thing: 'Bottle' });
     const r = view(toReview(s), 0).review;
     const authors = (id: string) => r?.groups.find((g) => g.id === id)?.authors;
     expect(authors('place:bengaluru')).toEqual([0, 1, 2]);
-    expect(authors('food:banana')).toEqual([0, 1, 2]);
+    expect(authors('animal:bear')).toEqual([0, 1, 2]);
     expect(authors('thing:ball')).toEqual([0, 1]);
     expect(authors('place:bengal')).toEqual([4]);
   });
@@ -332,61 +324,119 @@ describe('automatic check, duplicates and scoring', () => {
   });
 });
 
-describe('voting', () => {
-  /** Players 0–3 humans (unless bots given); seat 0 wrote an unverified place. */
-  const reviewWith = (seats = [0, 1, 2, 3], bots: number[] = []) => {
-    let s = writing(seats, bots, 'D');
+describe('voting (frozen: a strict majority of the human players; none with 2)', () => {
+  /** `humans` human seats then `bots` bot seats; seat 0 wrote an unverified place. */
+  const reviewWith = (humans: number, bots = 0) => {
+    const seats = Array.from({ length: humans + bots }, (_, i) => i);
+    let s = writing(seats, seats.slice(humans), 'D');
     s = draft(s, 0, { place: 'Dholavira', name: 'Divya' });
     s = draft(s, 1, { name: 'divya' });
     return toReview(s);
   };
   const vote = (s: NpatState, seat: number, id: string, out = true) =>
     act(s, seat, { type: 'VOTE', round: s.round, group: id, out }).state;
+  const odd = (s: NpatState) => group(s, 'place', 'Dholavira');
 
-  it('rejects an answer when more than half of the other human players vote it out', () => {
-    let s = reviewWith();
-    const id = group(s, 'place', 'Dholavira');
-    s = vote(s, 1, id);
+  it.each([
+    [3, 2],
+    [4, 3],
+    [5, 3],
+    [6, 4],
+    [7, 4],
+    [8, 5],
+  ])('%i human players: %i votes reject an answer, one fewer lets it stand', (humans, needed) => {
+    let s = reviewWith(humans);
+    const id = odd(s);
     expect(view(s, 0).review?.groups.find((g) => g.id === id)).toMatchObject({
-      votes: 1,
-      eligible: 3,
+      needed,
+      eligible: humans - 1,
     });
-    s = vote(s, 2, id);
-    const result = timer(s).state.last;
-    expect(result?.rejected).toEqual([id]);
-    expect(result?.points[0]?.place).toBe(0);
+    for (let voter = 1; voter < needed; voter++) s = vote(s, voter, id);
+    const short = timer(s).state.last;
+    expect(short?.rejected).toEqual([]); // e.g. 4 players, 2 votes: half is not a majority
+    expect(short?.points[0]?.place).toBe(10);
+    s = vote(s, needed, id);
+    const out = timer(s).state.last;
+    expect(out?.rejected).toEqual([id]);
+    expect(out?.points[0]?.place).toBe(0);
   });
 
-  it('lets a tie stand (exactly half)', () => {
-    let s = reviewWith([0, 1, 2]);
-    const id = group(s, 'place', 'Dholavira');
-    s = vote(s, 1, id); // 1 of 2 eligible
-    const result = timer(s).state.last;
-    expect(result?.rejected).toEqual([]);
-    expect(result?.points[0]?.place).toBe(10);
+  it('with two human players there is no vote at all — even with bots in the match', () => {
+    for (const s of [reviewWith(2), reviewWith(2, 3)]) {
+      const id = odd(s);
+      expect(view(s, 0).canVote).toBe(false);
+      expect(view(s, 1).canVote).toBe(false);
+      expect(s.phaseMs).toBe(5000); // a short read-only reveal
+      expect(verdict(s, 1, { type: 'VOTE', round: s.round, group: id, out: true })).toBe(
+        'NOT_ELIGIBLE',
+      );
+      expect(verdict(s, 1, { type: 'DONE', round: s.round })).toBe('NOT_ELIGIBLE');
+      expect(timer(s).state.last?.points[0]?.place).toBe(10);
+    }
   });
 
-  it('with two humans, the other player alone decides', () => {
-    let s = reviewWith([0, 1]);
-    const id = group(s, 'place', 'Dholavira');
-    s = vote(s, 1, id);
+  it('bots never vote and never count toward the threshold', () => {
+    const s = reviewWith(3, 4); // 3 humans + 4 bots: still 2 votes needed
+    const id = odd(s);
+    expect(view(s, 0).review?.groups.find((g) => g.id === id)).toMatchObject({
+      needed: 2,
+      eligible: 2,
+    });
+    expect(verdict(s, 5, { type: 'VOTE', round: s.round, group: id, out: true })).toBe(
+      'NOT_ELIGIBLE',
+    );
+    expect(timer(vote(vote(s, 1, id), 2, id)).state.last?.rejected).toEqual([id]);
+  });
+
+  it('an automatically accepted answer can be voted out — recognised ones too', () => {
+    let s = writing([0, 1, 2], [], 'D');
+    s = draft(s, 0, { place: 'Delhi' }); // in our list
+    s = toReview(s);
+    const id = group(s, 'place', 'Delhi');
+    expect(view(s, 1).review?.answers.place.find((a) => a.seat === 0)?.status).toBe('RECOGNISED');
+    expect(timer(vote(vote(s, 1, id), 2, id)).state.last?.points[0]?.place).toBe(0);
+  });
+
+  it('an automatically rejected answer cannot be voted back in (there is nothing to vote on)', () => {
+    let s = writing([0, 1, 2], [], 'D');
+    s = draft(s, 0, { place: 'Paris' }); // wrong letter
+    s = toReview(s);
+    const row = view(s, 1).review?.answers.place.find((a) => a.seat === 0);
+    expect(row).toMatchObject({ status: 'INVALID', group: null });
+    expect(view(s, 1).review?.groups.some((g) => g.id === 'place:paris')).toBe(false);
+    expect(verdict(s, 1, { type: 'VOTE', round: s.round, group: 'place:paris', out: false })).toBe(
+      'ILLEGAL_ACTION',
+    );
     expect(timer(s).state.last?.points[0]?.place).toBe(0);
   });
 
-  it('a rejected shared answer is rejected for all its authors', () => {
-    let s = reviewWith();
-    const id = group(s, 'name', 'Divya'); // seats 0 and 1
-    expect(view(s, 2).review?.groups.find((g) => g.id === id)?.eligible).toBe(2);
-    s = vote(s, 2, id);
-    s = vote(s, 3, id);
+  it('a shared answer is judged once for all its authors; only the others may vote', () => {
+    let s = reviewWith(5); // "Divya" by seats 0 and 1; 3 votes needed
+    const id = group(s, 'name', 'Divya');
+    expect(view(s, 2).review?.groups.find((g) => g.id === id)).toMatchObject({
+      eligible: 3,
+      needed: 3,
+    });
+    expect(verdict(s, 1, { type: 'VOTE', round: s.round, group: id, out: true })).toBe(
+      'NOT_ELIGIBLE',
+    );
+    s = vote(vote(vote(s, 2, id), 3, id), 4, id);
     const result = timer(s).state.last;
     expect(result?.points[0]?.name).toBe(0);
     expect(result?.points[1]?.name).toBe(0);
   });
 
-  it('forbids voting on your own answer, voting twice, and voting outside the review', () => {
-    const s = reviewWith();
-    const id = group(s, 'place', 'Dholavira');
+  it('an answer whose non-authors are fewer than the votes needed always stands', () => {
+    const s = reviewWith(3); // "Divya" by seats 0 and 1: one possible voter, 2 needed
+    const id = group(s, 'name', 'Divya');
+    const after = timer(vote(s, 2, id)).state.last;
+    expect(after?.rejected).toEqual([]);
+    expect(after?.points[0]?.name).toBe(5);
+  });
+
+  it('forbids self-votes, duplicate votes and votes outside the review', () => {
+    const s = reviewWith(4);
+    const id = odd(s);
     expect(verdict(s, 0, { type: 'VOTE', round: s.round, group: id, out: true })).toBe(
       'NOT_ELIGIBLE',
     );
@@ -404,36 +454,27 @@ describe('voting', () => {
     expect(verdict(s, 1, { type: 'VOTE', round: s.round, group: 'Place:X!', out: true })).toBe(
       'INVALID_PAYLOAD',
     );
-    const w = writing();
+    const w = writing([0, 1, 2, 3]);
     expect(verdict(w, 1, { type: 'VOTE', round: w.round, group: id, out: true })).toBe(
+      'INVALID_PHASE',
+    );
+    const scored = timer(voted).state;
+    expect(scored.phase).toBe('ROUND_RESULT');
+    expect(verdict(scored, 2, { type: 'VOTE', round: s.round, group: id, out: true })).toBe(
       'INVALID_PHASE',
     );
   });
 
   it('can withdraw a vote', () => {
-    let s = reviewWith([0, 1]);
-    const id = group(s, 'place', 'Dholavira');
-    s = vote(vote(s, 1, id), 1, id, false);
+    let s = reviewWith(3);
+    const id = odd(s);
+    s = vote(vote(vote(s, 1, id), 2, id), 1, id, false);
     expect(timer(s).state.last?.points[0]?.place).toBe(10);
   });
 
-  it('bots never vote and never count; answers with no eligible voter stand on the automatic check', () => {
-    let s = reviewWith([0, 1, 2], [1, 2]);
-    expect(view(s, 0).canVote).toBe(false);
-    expect(s.phaseMs).toBe(5000); // read-only reveal
-    expect(verdict(s, 1, { type: 'DONE', round: s.round })).toBe('NOT_ELIGIBLE');
-    // Bots' answers: one human voter decides.
-    s = writing([0, 1], [1], 'D');
-    s = draft(s, 1, { place: 'Dholavira' });
-    s = toReview(s);
-    expect(view(s, 0).canVote).toBe(true);
-    s = vote(s, 0, group(s, 'place', 'Dholavira'));
-    expect(timer(s).state.last?.points[1]?.place).toBe(0);
-  });
-
   it('keeps votes anonymous: only counts and your own vote are visible', () => {
-    let s = reviewWith();
-    const id = group(s, 'place', 'Dholavira');
+    let s = reviewWith(4);
+    const id = odd(s);
     s = vote(s, 1, id);
     const g = view(s, 2).review?.groups.find((x) => x.id === id);
     expect(g).toMatchObject({ votes: 1, mine: false });
@@ -441,22 +482,30 @@ describe('voting', () => {
     expect(JSON.stringify(view(s, 2))).not.toMatch(/"votes":\{/u);
   });
 
-  it('drops the votes of a player a bot takes over; a disconnected player’s votes still count', () => {
-    let s = reviewWith([0, 1, 2]);
-    const id = group(s, 'place', 'Dholavira');
-    s = vote(vote(s, 1, id), 2, id); // 2 of 2 → out
+  it('counts a disconnected voter; a takeover leaves fewer human players (and maybe no vote)', () => {
+    let s = reviewWith(3);
+    const id = odd(s);
+    s = vote(vote(s, 1, id), 2, id); // 2 of 2 needed
     const away = game.onSeatChange(s, 2, 'DISCONNECTED', ctx()).state;
     expect(timer(away).state.last?.rejected).toEqual([id]);
+    // A bot takes seat 2: two human players remain, so there is no vote any more.
     const taken = game.onSeatChange(away, 2, 'BOT_TOOK_OVER', ctx()).state;
-    expect(view(taken, 0).review?.groups.find((g) => g.id === id)).toMatchObject({
-      votes: 1,
-      eligible: 1,
-    });
-    expect(timer(taken).state.last?.rejected).toEqual([id]); // 1 of 1 → still out
+    expect(view(taken, 0).canVote).toBe(false);
+    expect(timer(taken).state.last?.rejected).toEqual([]);
+    // With 4 humans a takeover lowers the threshold with them: 3 humans → 2 needed.
+    let four = reviewWith(4);
+    four = vote(vote(four, 1, id), 2, id); // 2 of 3 needed
+    expect(timer(four).state.last?.rejected).toEqual([]);
+    four = game.onSeatChange(four, 3, 'BOT_TOOK_OVER', ctx()).state;
+    expect(view(four, 0).review?.groups.find((g) => g.id === id)?.needed).toBe(2);
+    expect(timer(four).state.last?.rejected).toEqual([id]);
+    // Reclaiming restores it.
+    four = game.onSeatChange(four, 3, 'RECLAIMED', ctx()).state;
+    expect(view(four, 0).review?.groups.find((g) => g.id === id)?.needed).toBe(3);
   });
 
   it('ends early once every connected human player taps Done', () => {
-    let s = reviewWith([0, 1, 2]);
+    let s = reviewWith(3);
     s = act(s, 0, { type: 'DONE', round: s.round }).state;
     expect(view(s, 0).waitingFor).toEqual([1, 2]);
     expect(verdict(s, 0, { type: 'DONE', round: s.round })).toBe('ILLEGAL_ACTION');
@@ -494,7 +543,7 @@ describe('seats, idle and bots', () => {
     const last = decision.steps.at(-1)?.chunk as DraftChunk;
     expect(last.answers.name).toBe('Divya');
     expect(last.answers.place).toBe('Delhi');
-    expect(decision.steps).toHaveLength(4);
+    expect(decision.steps).toHaveLength(2);
     for (const c of CATEGORIES) expect(last.answers[c]?.[0]).toBe('D');
   });
 
@@ -507,7 +556,7 @@ describe('seats, idle and bots', () => {
       const total = d.thinkMs + d.steps.reduce((sum, step) => sum + step.delayMs, 0);
       expect(d.thinkMs).toBeGreaterThanOrEqual(6000);
       expect(total).toBeLessThanOrEqual(0.8 * 90_000);
-      expect(d.steps).toHaveLength(6);
+      expect(d.steps).toHaveLength(CATEGORIES.length);
       // Each step adds one answer; the sheet only ever grows.
       d.steps.forEach((step, i) => {
         expect(Object.keys((step.chunk as DraftChunk).answers)).toHaveLength(i + 1);
@@ -519,7 +568,7 @@ describe('seats, idle and bots', () => {
 
   it('bots squeeze their answers into a short answer time', () => {
     const quick = createNpatGame();
-    const t = quick.setup([0, 1], { rounds: 3, answerSeconds: 60 }, ctx(), { bots: [1] });
+    const t = quick.setup([0, 1], { rounds: 3 }, ctx(), { bots: [1] });
     const s = quick.onTimer(t.state, 'phase', ctx()).state;
     const d = quick.bot.decide(quick.getPlayerView(s, 1), null, {
       seat: 1,
@@ -554,7 +603,7 @@ describe('seats, idle and bots', () => {
         seats,
         seed,
         streams: true,
-        settings: { rounds: 3, answerSeconds: 60 },
+        settings: { rounds: 3 },
         perturbHidden: perturbNpatHidden,
         invariant: (s) => {
           for (const seat of s.seats) {
@@ -588,8 +637,8 @@ describe('draft ordering (latest accepted draft wins)', () => {
     expect(view(s, 0).mine).toEqual({ name: 'Divya', place: 'Delhi' });
     expect(view(s, 0).mineSeq).toBe(7);
     // Gaps are fine (lost autosaves): a higher sequence always wins.
-    const later = send(s, 0, 12, { name: 'Divya', place: 'Delhi', food: 'Dosa' });
-    expect('state' in later && view(later.state, 0).mine.food).toBe('Dosa');
+    const later = send(s, 0, 12, { name: 'Divya', place: 'Delhi', thing: 'Drum' });
+    expect('state' in later && view(later.state, 0).mine.thing).toBe('Drum');
   });
 
   it('keeps sequences per seat, and starts each round afresh', () => {
@@ -613,7 +662,7 @@ describe('draft ordering (latest accepted draft wins)', () => {
     s = game.onSeatChange(s, 0, 'BOT_TOOK_OVER', ctx()).state;
     const d = game.bot.decide(view(s, 0), null, { seat: 0, now: clock, rng: createRng(2) });
     if (d?.kind !== 'STREAM') throw new Error('expected a plan');
-    expect(d.steps.map((x) => (x.chunk as DraftChunk).seq)).toEqual([3, 4, 5, 6, 7]);
+    expect(d.steps.map((x) => (x.chunk as DraftChunk).seq)).toEqual([3, 4, 5]);
     for (const step of d.steps) {
       const out = stream.accept(s, 0, step.chunk);
       if (!('state' in out)) throw new Error('bot chunk rejected');
@@ -640,7 +689,7 @@ describe('letters the answer bank can cover', () => {
     expect(playableLetters(small)).toEqual(['A', 'B']);
     const g = createNpatGame({ bank: small });
     for (let seed = 1; seed <= 30; seed++) {
-      let s = g.setup([0, 1], { rounds: 3, answerSeconds: 60 }, ctx(seed), { bots: [] }).state;
+      let s = g.setup([0, 1], { rounds: 3 }, ctx(seed), { bots: [] }).state;
       s = g.onTimer(s, 'phase', ctx(seed)).state;
       expect(['A', 'B']).toContain(s.letter);
     }

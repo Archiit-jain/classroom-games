@@ -449,7 +449,9 @@ function Review({ view, me, send, effects, nameOf }: Props & { nameOf(seat: numb
 
   return (
     <div className="np-review">
-      <p className="np-review__hint">{view.canVote ? f('reviewHint') : f('reviewReadOnly')}</p>
+      <p className="np-review__hint">
+        {view.canVote ? f('reviewHint') : f('reviewReadOnly')} {!view.canVote && f('noVoting')}
+      </p>
       <nav className="np-tabs" aria-label={f('review')}>
         {view.categories.map((c) => (
           <button
@@ -550,7 +552,7 @@ function AnswerRow({
   onVote(g: GroupView): void;
 }) {
   const mine = group?.authors.includes(me) ?? answer.seat === me;
-  const losing = group ? group.eligible > 0 && group.votes * 2 > group.eligible : false;
+  const losing = group ? group.votes >= group.needed && group.eligible > 0 : false;
   const others = group ? group.authors.length - 1 : 0;
   const status =
     answer.status === 'INVALID'
@@ -578,7 +580,7 @@ function AnswerRow({
         {others > 0 && <span className="np-row__shared">{f('shared', { n: others })}</span>}
         {group && group.eligible > 0 && (
           <span className="np-row__votes">
-            {f('votes', { votes: group.votes, eligible: group.eligible })}
+            {f('votes', { votes: group.votes, needed: group.needed })}
           </span>
         )}
       </span>

@@ -11,21 +11,24 @@ import {
 import { z } from 'zod';
 import { ALIASES, BANK } from '../../content/en';
 import {
-  ANSWER_SECONDS,
+  ANSWER_MS,
   CATEGORIES,
   LETTERS,
   MIN_BANK_ANSWERS,
   MAX_ANSWER_LENGTH,
   MAX_PLAYERS,
+  MIN_VOTING_HUMANS,
   MIN_PLAYERS,
   POINTS,
   ROUND_OPTIONS,
+  STOP_UNLOCK_MS,
   answerKey,
   cleanAnswer,
   formatProblem,
   groupId,
   isBlank,
   pluralFolding,
+  votesNeeded,
   type AnswerGroup,
   type Answers,
   type Category,
@@ -48,10 +51,14 @@ export const NPAT_GAME_ID = 'name-place-animal-thing';
 const PHASE_TIMER = 'phase';
 const STOP_TIMER = 'stop';
 
-/** Play-test values (design §2). `answerMs` comes from the host's setting. */
-export const DEFAULT_TIMING: Omit<NpatTiming, 'answerMs'> = {
+/**
+ * Answer time and STOP unlock are frozen product decisions; the others are
+ * play-test values (design §2).
+ */
+export const DEFAULT_TIMING: NpatTiming = {
   letterMs: 2500,
-  stopUnlockMs: 15_000,
+  answerMs: ANSWER_MS,
+  stopUnlockMs: STOP_UNLOCK_MS,
   flushMs: 1000,
   reviewMs: 30_000,
   readOnlyReviewMs: 5000,
@@ -64,7 +71,7 @@ export type ModerateFn = (text: string) => { display: string; flags: readonly un
 export interface NpatOptions {
   /** Multiplies every duration (dev/e2e speed-ups; production uses 1). */
   timeScale?: number;
-  timing?: Partial<Omit<NpatTiming, 'answerMs'>>;
+  timing?: Partial<NpatTiming>;
   /** The platform moderator (the server always passes it; tests may omit it). */
   moderate?: ModerateFn;
   bank?: Record<Category, Record<string, readonly string[]>>;
@@ -138,14 +145,19 @@ const votesFor = (s: NpatState, g: AnswerGroup) => {
   return (s.votes[g.id] ?? []).filter((v) => eligible.includes(v));
 };
 
-/** Rejected when more than half of its eligible voters voted it out; a tie stands. */
+/**
+ * Frozen voting rule (Phase 7): with H human players (H ≥ 3) an answer is rejected
+ * when at least ⌊H/2⌋ + 1 of the humans who did not write it vote it out. With 2 or
+ * fewer human players there is no voting at all — one player can never reject the
+ * other's answer alone. Bots never vote and never count.
+ */
 export function isRejected(s: NpatState, g: AnswerGroup): boolean {
-  const eligible = eligibleFor(s, g).length;
-  return eligible > 0 && votesFor(s, g).length * 2 > eligible;
+  const humans = humansOf(s).length;
+  return humans >= MIN_VOTING_HUMANS && votesFor(s, g).length >= votesNeeded(humans);
 }
 
-const votable = (s: NpatState) =>
-  s.review !== null && s.review.groups.some((g) => eligibleFor(s, g).length > 0);
+/** Is there a vote this review? Only with at least 3 human players. */
+const votable = (s: NpatState) => s.review !== null && humansOf(s).length >= MIN_VOTING_HUMANS;
 
 /** Connected human players whose Done is still needed to end the review early. */
 const waitingFor = (s: NpatState) =>
@@ -420,6 +432,7 @@ export function createNpatGame(
     ...g,
     votes: votesFor(s, g).length,
     eligible: eligibleFor(s, g).length,
+    needed: votesNeeded(humansOf(s).length),
     mine: (s.votes[g.id] ?? []).includes(viewer),
   });
 
@@ -498,9 +511,8 @@ export function createNpatGame(
 
     settingsSchema: z.strictObject({
       rounds: z.literal(ROUND_OPTIONS),
-      answerSeconds: z.literal(ANSWER_SECONDS),
     }),
-    defaultSettings: { rounds: 5, answerSeconds: 90 },
+    defaultSettings: { rounds: 5 },
     actionSchema,
 
     setup(seats, settings, ctx, roster) {
@@ -510,7 +522,7 @@ export function createNpatGame(
       const zero = Object.fromEntries(seats.map((seat) => [seat, 0])) as SeatMap<number>;
       const timing: NpatTiming = {
         letterMs: scaled(base.letterMs),
-        answerMs: scaled(settings.answerSeconds * 1000),
+        answerMs: scaled(base.answerMs),
         stopUnlockMs: scaled(base.stopUnlockMs),
         flushMs: scaled(base.flushMs),
         reviewMs: scaled(base.reviewMs),
@@ -568,7 +580,10 @@ export function createNpatGame(
           if (s.phase !== 'REVIEW' || !s.review) return { ok: false, code: 'INVALID_PHASE' };
           const group = s.review.groups.find((g) => g.id === a.group);
           if (!group) return { ok: false, code: 'ILLEGAL_ACTION' };
-          if (!eligibleFor(s, group).includes(seat)) return { ok: false, code: 'NOT_ELIGIBLE' };
+          // No vote with fewer than 3 human players; never on your own answer; never a bot.
+          if (!votable(s) || !eligibleFor(s, group).includes(seat)) {
+            return { ok: false, code: 'NOT_ELIGIBLE' };
+          }
           const voted = (s.votes[group.id] ?? []).includes(seat);
           return voted === a.out ? { ok: false, code: 'ILLEGAL_ACTION' } : { ok: true };
         }
@@ -734,6 +749,7 @@ export function perturbNpatHidden(s: NpatState, viewer: SeatIndex, rng: SeededRn
       drafts[seat] = sheet;
     }
   }
+  // Who voted is hidden (only counts are shown): shuffle the voters among the eligible.
   const votes: Record<string, number[]> = {};
   for (const g of s.review?.groups ?? []) {
     const eligible = eligibleFor(s, g);

@@ -7,8 +7,8 @@
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
 
-/** The default six categories, in sheet order. */
-export const CATEGORIES = ['name', 'place', 'animal', 'thing', 'food', 'profession'] as const;
+/** The four categories, in sheet order (product decision, Phase 7). */
+export const CATEGORIES = ['name', 'place', 'animal', 'thing'] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 /**
@@ -21,8 +21,14 @@ export const MIN_BANK_ANSWERS = 5;
 
 export const ROUND_OPTIONS = [3, 5, 8, 10] as const;
 export type RoundCount = (typeof ROUND_OPTIONS)[number];
-export const ANSWER_SECONDS = [60, 90, 120] as const;
-export type AnswerSeconds = (typeof ANSWER_SECONDS)[number];
+/** Frozen (product decision, Phase 7): 90 s to write, STOP allowed after 15 s. */
+export const ANSWER_MS = 90_000;
+export const STOP_UNLOCK_MS = 15_000;
+/** Voting needs at least this many human players; with fewer it is skipped. */
+export const MIN_VOTING_HUMANS = 3;
+
+/** Votes needed to reject an answer: a strict majority of the human players (3→2 … 8→5). */
+export const votesNeeded = (humans: number) => Math.floor(humans / 2) + 1;
 
 export const MIN_ANSWER_LETTERS = 2;
 export const MAX_ANSWER_LENGTH = 30;
@@ -37,7 +43,6 @@ export type Answers = Partial<Record<Category, string>>;
 
 export interface NpatSettings {
   rounds: RoundCount;
-  answerSeconds: AnswerSeconds;
 }
 
 /** Durations in ms (all play-test values; scaled in development and e2e). */
@@ -164,8 +169,10 @@ export type NpatEvent =
 export interface GroupView extends AnswerGroup {
   /** Votes to reject from players who may vote on it (anonymous). */
   votes: number;
-  /** How many players may vote on it. */
+  /** How many players may vote on it (the human players who did not write it). */
   eligible: number;
+  /** Votes needed to reject it (strict majority of all human players). */
+  needed: number;
   /** I voted it out. */
   mine: boolean;
 }

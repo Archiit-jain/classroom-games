@@ -363,7 +363,14 @@ describe('host hand-over and failover', () => {
     const SECRET = 'Qzorbadraft';
     const npat = () =>
       createNpatGame({
-        timing: { letterMs: 60, stopUnlockMs: 200, flushMs: 150, reviewMs: 8000, resultMs: 200 },
+        timing: {
+          answerMs: 120_000,
+          letterMs: 60,
+          stopUnlockMs: 200,
+          flushMs: 150,
+          reviewMs: 8000,
+          resultMs: 200,
+        },
         botFirstMs: [100, 200],
         botNextMs: [30, 60],
       });
@@ -381,15 +388,16 @@ describe('host hand-over and failover', () => {
       const gw = 1 - host;
       const a = await c.player(gw, 'Archit');
       const b = await c.player(gw, 'Priya');
-      await setupGameRoom('name-place-animal-thing', a, b);
-      await a.emit('room:updateSettings', { settings: { rounds: 3, answerSeconds: 120 } });
+      const k = await c.player(gw, 'Kabir'); // three humans: voting is on (2 votes needed)
+      await setupGameRoom('name-place-animal-thing', a, b, k);
+      await a.emit('room:updateSettings', { settings: { rounds: 3 } });
       expect((await a.emit('room:start', {})).ok).toBe(true);
       const w = (await a.waitFor(
         'match:update',
         (u) => (u as NpatUpdate).view.phase === 'WRITING',
         5000,
       )) as NpatUpdate;
-      return { a, b, host, gw, matchId: w.matchId, letter: w.view.letter as string };
+      return { a, b, k, host, gw, matchId: w.matchId, letter: w.view.letter as string };
     }
     const crashHost = async (host: number) => {
       const crashed = (c as TestCluster).nodes[host]?.server as GameServer;
@@ -437,7 +445,7 @@ describe('host hand-over and failover', () => {
     }, 30_000);
 
     it('keeps votes through a host crash during the review', async () => {
-      const { a, b, host, matchId, letter } = await onGateway();
+      const { a, b, k, host, matchId, letter } = await onGateway();
       const odd = `${letter}zorbaville`;
       await a.emit('match:stream', {
         matchId,
@@ -460,13 +468,13 @@ describe('host hand-over and failover', () => {
       const g =
         after.ok && (after.update.view as NpatView).review?.groups.find((x) => x.id === group);
       expect(g && g.votes).toBe(1);
-      // Voting twice is still refused after the restore; then both finish the review.
+      // Voting twice is still refused after the restore; the second vote (2 of 2) counts.
       expect(await b.act(last(b), { type: 'VOTE', round: 1, group, out: true })).toMatchObject({
         ok: false,
       });
-      await a.emit('match:resync', { matchId });
-      expect((await a.act(last(a), { type: 'DONE', round: 1 })).ok).toBe(true);
-      expect((await b.act(last(b), { type: 'DONE', round: 1 })).ok).toBe(true);
+      expect((await k.act(last(k), { type: 'VOTE', round: 1, group, out: true })).ok).toBe(true);
+      for (const p of [a, b, k])
+        expect((await p.act(last(p), { type: 'DONE', round: 1 })).ok).toBe(true);
       const scored = (await a.waitFor(
         'match:update',
         (u) => Boolean((u as NpatUpdate).view.last),

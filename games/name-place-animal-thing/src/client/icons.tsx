@@ -47,10 +47,6 @@ const PATHS: Record<Category, string> = {
     'M8 9.5a1.8 2.3 0 1 0 0-.1M16 9.5a1.8 2.3 0 1 0 0-.1M5 13.5a1.6 2 0 1 0 0-.1M19 13.5a1.6 2 0 1 0 0-.1M12 13c-3 0-5 3.6-5 5.4 0 1.6 1.6 2.1 5 2.1s5-.5 5-2.1C17 16.6 15 13 12 13Z',
   // A box
   thing: 'M4 8l8-4 8 4v8l-8 4-8-4V8Zm0 0 8 4 8-4M12 12v8',
-  // A bowl
-  food: 'M3.5 11h17a8.5 8.5 0 0 1-17 0ZM9 7c0-1.5 1-1.5 1-3M13 7c0-1.5 1-1.5 1-3',
-  // A briefcase
-  profession: 'M3.5 8h17v11h-17V8Zm5 0V5.5h7V8M3.5 13h17',
 };
 
 export function CategoryIcon({ category, size = 22 }: { category: Category; size?: number }) {

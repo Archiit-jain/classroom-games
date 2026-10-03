@@ -213,12 +213,6 @@
 .np-field--thing .np-field__label {
   color: var(--cb-violet-deep);
 }
-.np-field--food .np-field__label {
-  color: var(--cb-pink-deep);
-}
-.np-field--profession .np-field__label {
-  color: var(--cb-yellow-deep);
-}
 .np-field__input {
   width: 100%;
   min-height: var(--touch-target);
@@ -548,7 +542,7 @@ html[data-effects='full'] .np-stop--ready {
   font-size: var(--text-lg);
 }
 
-/* ───────── Wider screens: a 2 × 3 worksheet, every review card at once ───────── */
+/* ───────── Wider screens: a 2 × 2 worksheet, every review card at once ───────── */
 @container (min-width: 640px) {
   .np-sheet {
     grid-template-columns: 1fr 1fr;
@@ -563,13 +557,5 @@ html[data-effects='full'] .np-stop--ready {
   }
   .np-tabs {
     display: none;
-  }
-}
-@container (min-width: 1000px) {
-  .np-sheet {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .np-cards {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

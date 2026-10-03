@@ -4,15 +4,13 @@ import { NPAT, createRoom, joinRoom, newPlayer } from './helpers';
 
 installDiagnostics(test);
 
-const CATEGORIES = ['name', 'place', 'animal', 'thing', 'food', 'profession'] as const;
+const CATEGORIES = ['name', 'place', 'animal', 'thing'] as const;
 /** Format-valid answers for a letter; `tag` makes a player's sheet distinctive. */
 const sheet = (letter: string, tag: string) => ({
   name: `${letter}ara`, // the same for everyone: a shared (5-point) answer
   place: `${letter}umble${tag}ton`,
   animal: `${letter}ynx${tag}`,
   thing: `${letter}amp${tag}`,
-  food: `${letter}entil${tag}`,
-  profession: `${letter}awyer${tag}`,
 });
 
 const visible = (page: Page, selector: string) =>
@@ -69,7 +67,7 @@ async function playUntilResults(players: Player[], onReview?: (round: number) =>
         )[0] ?? '';
       const letter = await letterOf(page);
       const inputs = await fields(page);
-      if (letter && inputs.length === 6 && !inputs[0]?.disabled) {
+      if (letter && inputs.length === CATEGORIES.length && !inputs[0]?.disabled) {
         const answers = sheet(letter, tag);
         for (const f of inputs) {
           if (f.value === '') {
@@ -106,7 +104,7 @@ async function playUntilResults(players: Player[], onReview?: (round: number) =>
   throw new Error('Name Place Animal Thing did not finish in time');
 }
 
-test('Name Place Animal Thing: two humans and a bot write, STOP, vote and reach the podium @mobile', async ({
+test('Name Place Animal Thing: three humans and a bot write, STOP, vote and reach the podium @mobile', async ({
   browser,
 }, testInfo) => {
   test.setTimeout(220_000);
@@ -123,15 +121,19 @@ test('Name Place Animal Thing: two humans and a bot write, STOP, vote and reach 
   // The socket opened before the listener existed: reconnect so every frame is captured.
   await guest.reload();
   await guest.getByLabel('Your nickname').fill('Priya');
+  const third = await newPlayer(browser, 'Kabir');
   const code = await createRoom(host, NPAT);
   await host.getByLabel('Rounds').selectOption('3');
   await joinRoom(guest, code);
+  await joinRoom(third, code);
   await expect(guest.getByLabel('Rounds')).toHaveValue('3');
   await host.getByRole('button', { name: 'Add bot' }).click();
   await host.getByRole('button', { name: 'Start game' }).click();
 
   // Round 1 by hand: the letter appears, Enter moves to the next field, answers stay private.
-  for (const page of [host, guest]) await expect(page.locator('.np-letter')).toHaveText(/^[A-Z]$/);
+  for (const page of [host, guest, third]) {
+    await expect(page.locator('.np-letter')).toHaveText(/^[A-Z]$/);
+  }
   const letter = await letterOf(host);
   expect(await letterOf(guest)).toBe(letter);
   const name = host.locator('input[data-category="name"]');
@@ -148,14 +150,19 @@ test('Name Place Animal Thing: two humans and a bot write, STOP, vote and reach 
     [
       { page: host, tag: 'h', stops: true },
       { page: guest, tag: 'g', stops: false },
+      { page: third, tag: 'k', stops: false },
     ],
     async (round) => {
       if (round !== 1) return;
-      // The review shows the host's answer to the guest now, and the guest votes on it.
+      // The review shows the host's answer to the others now. Three human players:
+      // two votes are needed — one is not enough, both are.
       await expect(guest.locator('.np-row__text', { hasText: secret })).toBeVisible();
       const row = guest.locator('.np-row', { hasText: secret });
+      await expect(row.locator('.np-row__votes')).toHaveText('0 of 2 ✗');
       await row.locator('.np-vote').click();
       await expect(row.locator('.np-vote')).toHaveAttribute('aria-pressed', 'true');
+      await expect(host.locator('.np-row', { hasText: secret })).not.toHaveClass(/np-row--out/);
+      await third.locator('.np-row', { hasText: secret }).locator('.np-vote').click();
       await expect(host.locator('.np-row', { hasText: secret })).toHaveClass(/np-row--out/);
       // No vote button on your own answers.
       await expect(host.locator('.np-row', { hasText: secret }).locator('.np-vote')).toHaveCount(0);
@@ -170,8 +177,8 @@ test('Name Place Animal Thing: two humans and a bot write, STOP, vote and reach 
   expect(guestFrames[reveal]?.data).toContain(secret);
   expect(guestFrames.some((f) => f.data.includes(secret))).toBe(true);
 
-  for (const page of [host, guest]) {
-    await expect(page.locator('.results__row')).toHaveCount(3);
+  for (const page of [host, guest, third]) {
+    await expect(page.locator('.results__row')).toHaveCount(4);
     await expect(page.getByRole('columnheader', { name: 'Unique answers' })).toBeVisible();
   }
   if (mobile) {
@@ -212,6 +219,9 @@ test('Name Place Animal Thing fits a 360 px phone while writing and reviewing @m
   expect(box && box.y + box.height).toBeLessThanOrEqual(740);
   await stop.click({ force: true });
   await expect(page.locator('.np-review')).toBeVisible();
+  // One human player (the other is a bot): no vote, the automatic check decides.
+  await expect(page.getByText('Voting needs 3 or more players', { exact: false })).toBeVisible();
+  expect(await page.locator('.np-vote').count()).toBe(0);
   expect(await overflow()).toBeLessThanOrEqual(0);
 });
 

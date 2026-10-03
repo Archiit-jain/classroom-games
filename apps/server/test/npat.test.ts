@@ -17,6 +17,7 @@ const moderator = createModerator();
 const TIMING: NpatOptions = {
   moderate: (t) => moderator.moderate(t),
   timing: {
+    answerMs: 120_000,
     letterMs: 60,
     stopUnlockMs: 250,
     flushMs: 150,
@@ -43,17 +44,18 @@ const waitPhase = (c: TestClient, phase: NpatView['phase'], ms = 6000) =>
 const fullSheet = (letter: string): Answers =>
   Object.fromEntries(CATEGORIES.map((c) => [c, BANK[c][letter]?.[0]])) as Answers;
 
-async function match(bots = 1, options: NpatOptions = TIMING) {
+async function match(bots = 1, options: NpatOptions = TIMING, third = false) {
   t = await startServer({}, { games: [createNpatGame(options)] });
   const a = await t.player('Archit');
   const b = await t.player('Priya');
-  await setupGameRoom('name-place-animal-thing', a, b);
-  await a.emit('room:updateSettings', { settings: { rounds: 3, answerSeconds: 120 } });
+  const others = third ? [b, await t.player('Kabir')] : [b];
+  await setupGameRoom('name-place-animal-thing', a, ...others);
+  await a.emit('room:updateSettings', { settings: { rounds: 3 } });
   for (let i = 0; i < bots; i++) await a.emit('room:addBot', {});
   expect((await a.emit('room:start', {})).ok).toBe(true);
   const w = await waitPhase(a, 'WRITING');
-  await waitPhase(b, 'WRITING');
-  return { a, b, matchId: w.matchId, letter: w.view.letter as string };
+  for (const c of others) await waitPhase(c, 'WRITING');
+  return { a, b, c: others[1], matchId: w.matchId, letter: w.view.letter as string };
 }
 
 const save = (c: TestClient, matchId: string, round: number, seq: number, answers: Answers) =>
@@ -135,7 +137,7 @@ describe('Name Place Animal Thing over real sockets', () => {
     const partial = await a.act(latest(a) as Update, {
       type: 'STOP',
       round: 1,
-      answers: { ...fullSheet(letter), food: '' },
+      answers: { ...fullSheet(letter), thing: '' },
     });
     expect(partial).toEqual({ ok: false, code: 'NOT_ELIGIBLE' });
     const forged = await a.act(latest(a) as Update, {
@@ -158,24 +160,28 @@ describe('Name Place Animal Thing over real sockets', () => {
     expect((await save(b, matchId, 1, 1, { name: 'Dev' })).ok).toBe(false);
   });
 
-  it('votes: humans only, not on their own answers, once each, only during the review', async () => {
-    const { a, b, matchId, letter } = await match(1);
+  it('votes with 3 human players: 2 needed, humans only, never your own, once each, only in the review', async () => {
+    const m = await match(1, TIMING, true);
+    const { a, b, matchId, letter } = m;
+    const c = m.c as TestClient;
     const aSeat = (latest(a) as Update).you;
-    const bSeat = (latest(b) as Update).you;
     const own = `${letter}zorbaville`;
     expect((await save(a, matchId, 1, 1, { place: own })).ok).toBe(true);
     await a.waitFor('match:update', (u) => (u as Update).view.stopOpen, 3000);
     await b.act(latest(b) as Update, { type: 'STOP', round: 1, answers: fullSheet(letter) });
     const review = await waitPhase(a, 'REVIEW');
-    const group = review.view.review?.answers.place.find((x) => x.seat === aSeat)?.group as string;
-    expect(review.view.review?.answers.place.find((x) => x.seat === aSeat)?.status).toBe(
-      'UNVERIFIED',
-    );
-    // The bot seat is not a voter: only the two humans are waited for.
-    expect([...review.view.waitingFor].sort()).toEqual([aSeat, bSeat].sort());
+    const row = review.view.review?.answers.place.find((x) => x.seat === aSeat);
+    expect(row?.status).toBe('UNVERIFIED');
+    const group = row?.group as string;
+    expect(review.view.review?.groups.find((g) => g.id === group)).toMatchObject({
+      needed: 2,
+      eligible: 2,
+    });
+    // The bot seat is not a voter: only the three humans are waited for.
+    expect(review.view.waitingFor).toHaveLength(3);
 
-    const vote = (c: TestClient, out = true) =>
-      c.act(latest(c) as Update, { type: 'VOTE', round: 1, group, out });
+    const vote = (cl: TestClient, out = true) =>
+      cl.act(latest(cl) as Update, { type: 'VOTE', round: 1, group, out });
     expect(await vote(a)).toEqual({ ok: false, code: 'NOT_ELIGIBLE' }); // own answer
     expect((await vote(b)).ok).toBe(true);
     expect(await vote(b)).toEqual({ ok: false, code: 'ILLEGAL_ACTION' }); // twice
@@ -184,19 +190,37 @@ describe('Name Place Animal Thing over real sockets', () => {
     );
     // Anonymous: the author sees the count, not who voted.
     expect(JSON.stringify((counted as Update).view.review)).not.toContain(b.playerId);
+    expect((await vote(c)).ok).toBe(true); // 2 of 2 needed
 
-    expect((await a.act(latest(a) as Update, { type: 'DONE', round: 1 })).ok).toBe(true);
-    expect((await b.act(latest(b) as Update, { type: 'DONE', round: 1 })).ok).toBe(true);
+    for (const cl of [a, b, c]) {
+      expect((await cl.act(latest(cl) as Update, { type: 'DONE', round: 1 })).ok).toBe(true);
+    }
     const scored = (await a.waitFor('match:update', (u) =>
       (u as Update).events.some((e) => e.type === 'ROUND_SCORED'),
     )) as Update;
-    // Two humans: the other player's vote alone rejects it (more than half of 1).
     expect(scored.view.last?.rejected).toEqual([group]);
     expect(scored.view.last?.points[aSeat]?.place).toBe(0);
-    // B's STOP sheet came from the bank: recognised, scored, never voted on by the bot.
-    expect(scored.view.last?.deltas[bSeat]).toBeGreaterThan(0);
     // Too late now.
     expect(await vote(b, false)).toEqual({ ok: false, code: 'INVALID_PHASE' });
+  }, 20_000);
+
+  it('skips voting with 2 human players (bots do not count): the automatic check decides', async () => {
+    const { a, b, matchId, letter } = await match(2);
+    const aSeat = (latest(a) as Update).you;
+    expect((await save(a, matchId, 1, 1, { place: `${letter}zorbaville` })).ok).toBe(true);
+    await a.waitFor('match:update', (u) => (u as Update).view.stopOpen, 3000);
+    await b.act(latest(b) as Update, { type: 'STOP', round: 1, answers: fullSheet(letter) });
+    const review = await waitPhase(b, 'REVIEW');
+    expect(review.view.canVote).toBe(false);
+    const group = review.view.review?.answers.place.find((x) => x.seat === aSeat)?.group as string;
+    expect(await b.act(review, { type: 'VOTE', round: 1, group, out: true })).toEqual({
+      ok: false,
+      code: 'NOT_ELIGIBLE',
+    });
+    const scored = (await a.waitFor('match:update', (u) =>
+      (u as Update).events.some((e) => e.type === 'ROUND_SCORED'),
+    )) as Update;
+    expect(scored.view.last?.points[aSeat]?.place).toBe(10);
   }, 20_000);
 
   it('bots fill their whole sheet through the same autosave path within the answer time', async () => {
