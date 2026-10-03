@@ -47,6 +47,9 @@ importers:
       '@cg/game-draw-and-guess':
         specifier: workspace:*
         version: link:../../games/draw-and-guess
+      '@cg/game-name-place-animal-thing':
+        specifier: workspace:*
+        version: link:../../games/name-place-animal-thing
       '@cg/game-pen-fight':
         specifier: workspace:*
         version: link:../../games/pen-fight

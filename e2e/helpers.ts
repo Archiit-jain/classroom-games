@@ -54,3 +54,4 @@ export const PARCHI = '16 Parchi';
 export const DRAW = 'Draw & Guess';
 export const PEN_FIGHT = 'Pen Fight';
 export const DOTS = 'Dots & Boxes';
+export const NPAT = 'Name Place Animal Thing';

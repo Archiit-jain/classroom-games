@@ -25,20 +25,20 @@ did not decide, so it is **dropped**: a round ends only on the timer or STOP.
 
 ## 1. Player journey
 
-| #   | Step            | What happens                                                                                                                                                                                                                            |
-| --- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Room            | Host creates a private room, picks Name Place Animal Thing, sets **rounds** and **answer time**; friends join by code; host may add bots (2–8 seats).                                                                                   |
-| 2   | Seating         | Seats in join order, as in every game. Start is enabled at ≥ 2 seats.                                                                                                                                                                   |
-| 3   | Game start      | The usual 3-2-1 start countdown; the worksheet appears with six empty category cards.                                                                                                                                                   |
-| 4   | Letter reveal   | `LETTER` phase (2.5 s _(proposed)_): the letter spins and stamps onto the sheet. Inputs unlock when the stamp lands — the same moment for everyone (server deadline, clock-synced).                                                     |
-| 5   | Answering       | `WRITING` phase: everyone types at once. Each sheet autosaves privately (§6). The timer counts down. Other players are shown only as present/away/bot — no progress.                                                                    |
-| 6   | STOP / timer    | A player whose six answers all pass the format check (§3.2) may press **STOP** once STOP unlocks (§2). STOP or the timer ends writing: inputs freeze for everyone, the last edits are flushed (§2.4), the server **locks** every sheet. |
-| 7   | Automatic check | The server checks every answer (§3) and groups identical answers (§4). Results: **invalid** (with a reason), **recognised** (in our word list) or **unverified** (looks fine, not in our list).                                         |
-| 8   | Answer reveal   | `REVIEW` phase: all sheets are revealed at once, one card per category, identical answers grouped, invalid ones struck through with the reason.                                                                                         |
-| 9   | Voting          | Human players vote ✗ on answers they believe are wrong (§5). Live counts, anonymous. Ends on the review timer or when every eligible voter taps **Done**.                                                                               |
-| 10  | Round scoring   | `ROUND_RESULT` (6 s _(proposed)_): 10 / 5 / 0 stamps on every answer, round points roll into totals, round leader highlighted.                                                                                                          |
-| 11  | Next round      | Back to 4 with a new letter (never repeated in a match).                                                                                                                                                                                |
-| 12  | Results         | After the last round: the platform results/podium. Highest total wins; equal totals share a place (1, 1, 3). Results column: **Points**; extra stat: **Unique answers** _(proposed)_.                                                   |
+| #   | Step            | What happens                                                                                                                                                                                                                                        |
+| --- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Room            | Host creates a private room, picks Name Place Animal Thing, sets **rounds** and **answer time**; friends join by code; host may add bots (2–8 seats).                                                                                               |
+| 2   | Seating         | Seats in join order, as in every game. Start is enabled at ≥ 2 seats.                                                                                                                                                                               |
+| 3   | Game start      | The usual 3-2-1 start countdown; the worksheet appears with six empty category cards.                                                                                                                                                               |
+| 4   | Letter reveal   | `LETTER` phase (2.5 s _(proposed)_): "Get ready" with spinning decoy letters. The real letter is drawn and sent only when writing opens, so nobody (not even a modified client) knows it early; it stamps onto the sheet and inputs unlock at once. |
+| 5   | Answering       | `WRITING` phase: everyone types at once. Each sheet autosaves privately (§6). The timer counts down. Other players are shown only as present/away/bot — no progress.                                                                                |
+| 6   | STOP / timer    | A player whose six answers all pass the format check (§3.2) may press **STOP** once STOP unlocks (§2). STOP or the timer ends writing: inputs freeze for everyone, the last edits are flushed (§2.4), the server **locks** every sheet.             |
+| 7   | Automatic check | The server checks every answer (§3) and groups identical answers (§4). Results: **invalid** (with a reason), **recognised** (in our word list) or **unverified** (looks fine, not in our list).                                                     |
+| 8   | Answer reveal   | `REVIEW` phase: all sheets are revealed at once, one card per category, identical answers grouped, invalid ones struck through with the reason.                                                                                                     |
+| 9   | Voting          | Human players vote ✗ on answers they believe are wrong (§5). Live counts, anonymous. Ends on the review timer or when every eligible voter taps **Done**.                                                                                           |
+| 10  | Round scoring   | `ROUND_RESULT` (6 s _(proposed)_): 10 / 5 / 0 stamps on every answer, round points roll into totals, round leader highlighted.                                                                                                                      |
+| 11  | Next round      | Back to 4 with a new letter (never repeated in a match).                                                                                                                                                                                            |
+| 12  | Results         | After the last round: the platform results/podium. Highest total wins; equal totals share a place (1, 1, 3). Results column: **Points**; extra stat: **Unique answers** _(proposed)_.                                                               |
 
 ```text
 LETTER ─2.5 s─▶ WRITING ─(timer | STOP)─▶ LOCKING ─flush─▶ REVIEW ─(timer | all Done)─▶ ROUND_RESULT ─6 s─▶ LETTER … | OVER
@@ -161,6 +161,13 @@ sheet locked → normalise → format rules → moderation → INVALID (0, final
                                                          → duplicate count among accepted → 10 | 5
 ```
 
+### 3.6 Letters the bank can cover
+
+A letter is drawn only if the answer bank has at least 5 different answers for it in **every**
+category (`playableLetters`); the English bank covers all 23 candidate letters (A–Z without
+Q, X, Z), which a test checks. A smaller or custom bank simply narrows the letter set; a bank
+covering none refuses to load. So bots can always answer every category.
+
 ## 4. Duplicates
 
 - Computed by the server per category over the comparison key (§3.1) with the plural and
@@ -211,6 +218,13 @@ answer-related signal before the reveal.
   inside the forwarded request; host → gateway messages for other players never contain it.
 - Each player's **own** saved sheet is part of **their own** view only (`getPlayerView` for that
   seat), so a reconnect restores it; `stream.replay` returns nothing (no shared picture).
+
+- **Ordering:** every autosave carries a per-seat, per-round sequence number. The server keeps
+  the highest one it has accepted and refuses older or repeated ones, so a delayed, reordered
+  or replayed autosave can never overwrite a newer sheet. The sequence is part of the
+  snapshot (survives hand-over and failover); a reconnecting client continues after the
+  sequence in its own view, and a bot taking over continues after the human's last one. The
+  player who pressed STOP cannot autosave during the flush (their STOP carried the sheet).
 
 ### 6.3 Tests that prove it (§13)
 

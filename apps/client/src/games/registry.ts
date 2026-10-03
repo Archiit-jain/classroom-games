@@ -1,5 +1,6 @@
 import { dotsAndBoxesClient } from '@cg/game-dots-and-boxes/client';
 import { drawAndGuessClient } from '@cg/game-draw-and-guess/client';
+import { npatClient } from '@cg/game-name-place-animal-thing/client';
 import { penFightClient } from '@cg/game-pen-fight/client';
 import { rmcsClient } from '@cg/game-rmcs/client';
 import type { AnyGameClientModule } from '@cg/game-sdk/client';
@@ -20,6 +21,7 @@ export const gameClients: ReadonlyMap<string, AnyGameClientModule> = new Map<
   [drawAndGuessClient.id, drawAndGuessClient],
   [penFightClient.id, penFightClient],
   [dotsAndBoxesClient.id, dotsAndBoxesClient],
+  [npatClient.id, npatClient],
   ...(import.meta.env.DEV ? [[fixtureClient.id, fixtureClient] as const] : []),
 ]);
 
