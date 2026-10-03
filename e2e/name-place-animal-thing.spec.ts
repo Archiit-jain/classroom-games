@@ -41,6 +41,20 @@ const fields = (page: Page) =>
     )
     .catch(() => []);
 
+/** Horizontal page overflow, and the elements sticking out (for the failure message). */
+const overflowReport = (page: Page) =>
+  page.evaluate(() => {
+    const w = window.innerWidth;
+    const out = [...document.querySelectorAll('body *')]
+      .filter((el) => el.getBoundingClientRect().right > w + 0.5)
+      .slice(0, 10)
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 50)} [${Math.round(r.left)}–${Math.round(r.right)}] "${(el.textContent ?? '').trim().slice(0, 30)}"`;
+      });
+    return { overflow: document.documentElement.scrollWidth - w, out };
+  });
+
 interface Player {
   page: Page;
   tag: string;
@@ -183,10 +197,11 @@ test('Name Place Animal Thing: three humans and a bot write, STOP, vote and reac
     await expect(page.getByRole('columnheader', { name: 'Unique' })).toBeVisible();
   }
   if (mobile) {
-    const overflow = await guest.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(0);
+    for (const page of [host, guest, third]) {
+      const report = await overflowReport(page);
+      expect(report.overflow, report.out.join('
+')).toBeLessThanOrEqual(0);
+    }
   }
 });
 
