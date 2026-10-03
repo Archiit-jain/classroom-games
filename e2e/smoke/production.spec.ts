@@ -203,3 +203,99 @@ test('production: three devices play a Name Place Animal Thing round with the fr
     }
   }
 });
+
+test('production: two devices play a full Business match, staying in sync through a reconnect', async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const a = await recordedDevice(browser, 'Smoke A');
+  const b = await recordedDevice(browser, 'Smoke B');
+  await a.page.getByRole('button', { name: 'Create room: Business' }).click();
+  const code = (await a.page.getByTestId('room-code').textContent()) ?? '';
+  await b.page.getByLabel('Room code', { exact: true }).fill(code);
+  await b.page.getByRole('button', { name: 'Join', exact: true }).click();
+  await expect(b.page.getByTestId('room-code')).toHaveText(code);
+  await a.page.getByLabel('Rounds').selectOption('12');
+  await a.page.getByRole('button', { name: 'Start game' }).click();
+  for (const d of [a, b])
+    await expect(d.page.locator('.bz-tile')).toHaveCount(28, { timeout: 15_000 });
+
+  const owned = (page: Page) =>
+    page
+      .locator('.bz-tile--owned')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('data-space')).sort())
+      .catch(() => [] as (string | null)[]);
+  const coins = (page: Page) =>
+    page
+      .locator('.bz-player__coins')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))
+      .catch(() => [] as (string | null)[]);
+  const logText = (page: Page) =>
+    page
+      .locator('.bz-log__item')
+      .allInnerTexts()
+      .catch(() => [] as string[]);
+  const seen = { bought: false, built: false, card: false, reconnected: false };
+  const pages = () => [a.page, b.page];
+
+  const deadline = Date.now() + 280_000;
+  while (Date.now() < deadline) {
+    if (await a.page.getByRole('heading', { name: 'Results' }).isVisible()) break;
+    for (const page of pages()) {
+      const roll = page.locator('.bz-roll:not([disabled])');
+      if ((await roll.count()) > 0) {
+        await roll.click({ timeout: 1000 }).catch(() => undefined);
+        continue;
+      }
+      const yes = page
+        .locator('.bz-actions .btn--yellow:not([disabled]), .bz-option:not([disabled])')
+        .first();
+      if ((await yes.count()) > 0) await yes.click({ timeout: 1000 }).catch(() => undefined);
+    }
+    const [la, lb] = [await logText(a.page), await logText(b.page)];
+    // Ownership, developments and card effects reach both devices.
+    if (!seen.bought && la.some((l) => l.includes(' bought '))) {
+      await expect
+        .poll(async () => (await owned(b.page)).join(), { timeout: 10_000 })
+        .toBe((await owned(a.page)).join());
+      seen.bought = true;
+    }
+    if (!seen.built && [...la, ...lb].some((l) => l.includes(' built a '))) {
+      await expect
+        .poll(async () => (await owned(b.page)).join(), { timeout: 10_000 })
+        .toBe((await owned(a.page)).join());
+      const levels = (page: Page) => page.locator('.bz-tile__level').count();
+      await expect.poll(() => levels(b.page), { timeout: 10_000 }).toBe(await levels(a.page));
+      seen.built = true;
+    }
+    if (!seen.card && [...la, ...lb].some((l) => l.includes(' card — '))) {
+      await expect
+        .poll(async () => (await coins(b.page)).join(), { timeout: 10_000 })
+        .toBe((await coins(a.page)).join());
+      seen.card = true;
+    }
+    // After the first purchase, B reloads mid-match: same seat, same board.
+    if (seen.bought && !seen.reconnected) {
+      const before = await owned(a.page);
+      await b.page.reload();
+      await expect(b.page.locator('.bz-tile')).toHaveCount(28, { timeout: 15_000 });
+      await expect
+        .poll(async () => (await owned(b.page)).join(), { timeout: 10_000 })
+        .toBe((await owned(a.page)).join());
+      expect((await owned(b.page)).length).toBeGreaterThanOrEqual(before.length);
+      await expect(b.page.getByText('A bot is playing for you.')).toHaveCount(0);
+      seen.reconnected = true;
+    }
+    await a.page.waitForTimeout(200);
+  }
+  expect(seen).toEqual({ bought: true, built: true, card: true, reconnected: true });
+  for (const d of [a, b]) {
+    await expect(d.page.getByRole('heading', { name: 'Results' })).toBeVisible({ timeout: 20_000 });
+    await expect(d.page.locator('.results__row')).toHaveCount(2);
+    await expect(d.page.getByRole('columnheader', { name: 'Wealth' })).toBeVisible();
+    for (const url of d.sockets) {
+      expect(url).toContain('/api/socket/socket.io/');
+      expect(url).toContain('transport=websocket');
+    }
+  }
+});
