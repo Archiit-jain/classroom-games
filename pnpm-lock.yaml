@@ -41,6 +41,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@cg/game-business':
+        specifier: workspace:*
+        version: link:../../games/business
       '@cg/game-dots-and-boxes':
         specifier: workspace:*
         version: link:../../games/dots-and-boxes
@@ -96,6 +99,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@cg/game-business':
+        specifier: workspace:*
+        version: link:../../games/business
       '@cg/game-dots-and-boxes':
         specifier: workspace:*
         version: link:../../games/dots-and-boxes

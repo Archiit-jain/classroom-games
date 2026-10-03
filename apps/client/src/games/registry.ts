@@ -1,3 +1,4 @@
+import { businessClient } from '@cg/game-business/client';
 import { dotsAndBoxesClient } from '@cg/game-dots-and-boxes/client';
 import { drawAndGuessClient } from '@cg/game-draw-and-guess/client';
 import { npatClient } from '@cg/game-name-place-animal-thing/client';
@@ -22,6 +23,7 @@ export const gameClients: ReadonlyMap<string, AnyGameClientModule> = new Map<
   [penFightClient.id, penFightClient],
   [dotsAndBoxesClient.id, dotsAndBoxesClient],
   [npatClient.id, npatClient],
+  [businessClient.id, businessClient],
   ...(import.meta.env.DEV ? [[fixtureClient.id, fixtureClient] as const] : []),
 ]);
 

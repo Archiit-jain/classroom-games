@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AnyGameModule } from '@cg/game-sdk';
 import { fixtureGame } from '@cg/game-sdk/fixture';
+import { createBusinessGame } from '@cg/game-business/server';
 import { createDotsAndBoxesGame } from '@cg/game-dots-and-boxes/server';
 import { createDrawAndGuessGame } from '@cg/game-draw-and-guess/server';
 import { createNpatGame } from '@cg/game-name-place-animal-thing/server';
@@ -85,6 +86,7 @@ export function defaultGames(config: ServerConfig, moderator?: Moderator): AnyGa
       // Answers go through the same moderator as chat (censored = invalid).
       ...(moderator ? { moderate: (text: string) => moderator.moderate(text) } : {}),
     }),
+    createBusinessGame({ timeScale: config.gameTimeScale }),
     ...(config.enableFixtureGame ? [fixtureGame] : []),
   ];
 }
