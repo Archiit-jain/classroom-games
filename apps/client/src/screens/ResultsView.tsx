@@ -98,7 +98,7 @@ export function ResultsView({ room }: { room: RoomView }) {
         })}
       </div>
 
-      <div className="panel">
+      <div className="panel results__panel">
         <table className="results__table">
           <thead>
             <tr>

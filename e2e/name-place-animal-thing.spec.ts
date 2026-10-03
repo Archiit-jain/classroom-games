@@ -179,7 +179,8 @@ test('Name Place Animal Thing: three humans and a bot write, STOP, vote and reac
 
   for (const page of [host, guest, third]) {
     await expect(page.locator('.results__row')).toHaveCount(4);
-    await expect(page.getByRole('columnheader', { name: 'Unique answers' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Points' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Unique' })).toBeVisible();
   }
   if (mobile) {
     const overflow = await guest.evaluate(
@@ -189,10 +190,10 @@ test('Name Place Animal Thing: three humans and a bot write, STOP, vote and reac
   }
 });
 
-test('Name Place Animal Thing fits a 360 px phone while writing and reviewing @mobile', async ({
+test('Name Place Animal Thing fits a 360 px phone while writing, reviewing and on the results @mobile', async ({
   browser,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(200_000);
   const page = await newPlayer(browser, 'Meera', {
     viewport: { width: 360, height: 740 },
     hasTouch: true,
@@ -222,6 +223,10 @@ test('Name Place Animal Thing fits a 360 px phone while writing and reviewing @m
   // One human player (the other is a bot): no vote, the automatic check decides.
   await expect(page.getByText('Voting needs 3 or more players', { exact: false })).toBeVisible();
   expect(await page.locator('.np-vote').count()).toBe(0);
+  // …and the rest of the match, down to the results, still fits.
+  await playUntilResults([{ page, tag: 'm', stops: true }]);
+  await expect(page.locator('.results__row')).toHaveCount(2);
+  expect(await overflow()).toBeLessThanOrEqual(0);
   expect(await overflow()).toBeLessThanOrEqual(0);
 });
 

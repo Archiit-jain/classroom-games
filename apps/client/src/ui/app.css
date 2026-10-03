@@ -542,6 +542,8 @@
 }
 .results__table {
   width: 100%;
+  /* Long names and several stat columns wrap on narrow phones instead of widening the page. */
+  overflow-wrap: anywhere;
   border-collapse: separate;
   border-spacing: 0 6px;
 }
@@ -554,6 +556,10 @@
   text-align: left;
   text-transform: uppercase;
   color: var(--color-text-muted);
+}
+.results__panel {
+  /* Last resort on very narrow screens: the table scrolls inside its panel. */
+  overflow-x: auto;
 }
 .results__row td {
   padding: 10px;

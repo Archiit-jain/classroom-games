@@ -28,7 +28,11 @@ export const npatClient: GameClientModule<NpatView, NpatAction, NpatEvent, NpatS
   Board: lazy(() => import('./Board')),
   Settings: lazy(() => import('./Settings')),
   eventDuration,
-  resultStats: [{ key: 'unique', labelKey: 'uniqueAnswers' }],
+  // Points decide the podium; unique answers are the extra stat.
+  resultStats: [
+    { key: 'score', labelKey: 'points' },
+    { key: 'unique', labelKey: 'uniqueAnswers' },
+  ],
   reactions: true,
   // The last round's score table stays on screen before the podium.
   revealMs: (effects) => (effects === 'reduced' ? 2500 : durationFor(effects, 4000, 3000)),

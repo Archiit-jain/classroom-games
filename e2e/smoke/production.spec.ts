@@ -10,14 +10,6 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 const URL = process.env.SMOKE_URL ?? 'http://localhost:4300';
 const PAD = 0.45;
 
-async function device(browser: Browser, nickname: string): Promise<Page> {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto(URL);
-  await page.getByLabel('Your nickname').fill(nickname);
-  return page;
-}
-
 const drawnLines = async (page: Page) =>
   new Set(
     await page
@@ -46,15 +38,16 @@ const myTurn = async (page: Page) => (await page.locator('.db-paper--active').co
 
 test('production: two devices create, join, play and reconnect', async ({ browser }) => {
   test.setTimeout(120_000);
-  const a = await device(browser, 'Smoke A');
-  const b = await device(browser, 'Smoke B');
+  // Record each device's sockets from its first connection (not only after a reload).
+  const ra = await recordedDevice(browser, 'Smoke A');
+  const rb = await recordedDevice(browser, 'Smoke B');
+  const a = ra.page;
+  const b = rb.page;
 
   // HTTPS/WSS on a real deployment; the socket must use the WebSocket transport.
   if (URL.startsWith('https://')) {
     expect(new globalThis.URL(a.url()).protocol).toBe('https:');
   }
-  const sockets: string[] = [];
-  a.on('websocket', (ws) => sockets.push(ws.url()));
 
   await a.getByRole('button', { name: 'Create room: Dots & Boxes' }).click();
   const code = (await a.getByTestId('room-code').textContent()) ?? '';
@@ -89,7 +82,9 @@ test('production: two devices create, join, play and reconnect', async ({ browse
   const next = await drawOne((await myTurn(a)) ? a : b);
   for (const page of [a, b]) await expect(page.locator(`line[data-edge="${next}"]`)).toHaveCount(1);
 
-  expect(sockets.length).toBeGreaterThan(0);
+  const sockets = [...ra.sockets, ...rb.sockets];
+  expect(ra.sockets.length).toBeGreaterThan(0);
+  expect(rb.sockets.length).toBeGreaterThan(0);
   for (const url of sockets) {
     expect(url).toContain('/api/socket/socket.io/');
     expect(url).toContain('transport=websocket');

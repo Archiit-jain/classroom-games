@@ -8,7 +8,7 @@ export const npatMessages = {
   players: '2–8 players',
 
   points: 'Points',
-  uniqueAnswers: 'Unique answers',
+  uniqueAnswers: 'Unique',
   rounds: 'Rounds',
   roundsN: '{n} rounds',
   settingsHint: 'Name, Place, Animal and Thing — 90 seconds a round.',
