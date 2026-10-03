@@ -125,7 +125,7 @@ describe('Business over real sockets', () => {
     expect((await a.emit('room:start', {})).ok).toBe(true);
     const first = (await a.waitFor('match:update')) as Update;
     const mover = first.view.current === first.you ? a : b;
-    const v = latest(mover) as Update;
+    const v = (await mover.waitFor('match:update')) as Update;
     expect((await mover.act(v, { type: 'ROLL', turn: v.view.turn })).ok).toBe(true);
     const deciding = (await mover.waitFor(
       'match:update',
