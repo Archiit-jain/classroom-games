@@ -108,7 +108,8 @@ for (const [label, viewport] of [
       .locator('.bz-tile')
       .evaluateAll((els) => Math.min(...els.map((e) => Math.min(e.clientWidth, e.clientHeight))));
     expect(smallest).toBeGreaterThanOrEqual(28);
-    // Tapping a tile shows its postcard.
+    // Tapping a tile shows its postcard (it stays up for the rest of this turn).
+    await expect(page.locator('.bz-roll')).toBeVisible({ timeout: 20_000 });
     await page.locator('.bz-tile[data-space="27"]').click();
     await expect(page.locator('.bz-postcard__name')).toHaveText('Mumbai');
     await playUntilResults([page]);

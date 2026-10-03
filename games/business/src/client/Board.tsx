@@ -120,7 +120,14 @@ export default function BusinessBoard(props: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const wide = useWide(wrap);
   const { shown, moving } = useShownPositions(view, events, version, effects);
+  /**
+   * A tapped tile's postcard stays up while others play (bots move fast) and goes back to
+   * the current space when the player taps Back or their own next turn begins.
+   */
   const [focus, setFocus] = useState<{ turn: number; space: number } | null>(null);
+  const myTurnStarted = view.current === me && focus !== null && view.turn !== focus.turn;
+  if (myTurnStarted) setFocus(null);
+  const looking = focus !== null && !myTurnStarted;
   const [busy, setBusy] = useState(false);
 
   const nameOf = (seat: number) =>
@@ -156,7 +163,7 @@ export default function BusinessBoard(props: Props) {
   const optionSpaces = new Set(decision?.options.map((o) => o.space) ?? []);
   const here = view.positions[view.current] ?? 0;
   const postcardSpace =
-    focus && focus.turn === view.turn
+    looking && focus
       ? focus.space
       : decision && decision.kind !== 'EXPAND'
         ? (decision.options[0]?.space ?? here)
@@ -321,7 +328,7 @@ export default function BusinessBoard(props: Props) {
               />
             )}
           </AnimatePresence>
-          {focus && focus.turn === view.turn && (
+          {looking && (
             <button type="button" className="bz-link" onClick={() => setFocus(null)}>
               {f('back')}
             </button>
