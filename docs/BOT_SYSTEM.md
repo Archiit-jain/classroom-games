@@ -83,8 +83,9 @@ sequenceDiagram
   it keeps their saved answers and fills only the blanks
   ([ADR-024](decisions/ADR-024-private-drafts-and-voting.md)).
 - **Business bot** (one level): rolls after 0.6–1.4 s, thinks 0.8–2 s; keeps a **reserve** of
-  ₹1,500 + ₹250 per opponent; buys when it keeps the reserve (and to complete a group while
-  keeping ₹500), builds as many levels as the reserve allows, pays Jail with cash ≥ 3× the
+  14 % of the start cash + 2.4 % per opponent; buys when it keeps the reserve (and to complete a
+  group while keeping a third of it), builds one level per action while the reserve allows,
+  puts a free building on its dearest eligible city, pays Jail with cash ≥ 3× the
   fee, bids up to 0.8–1.1× an asset's value keeping half the reserve, accepts trades worth
   ≥ 1.1× what it gives (10 % whim), sometimes offers a group-completing trade, lets the bank
   handle debts; 10 % of close calls go the other way. Same actions as people

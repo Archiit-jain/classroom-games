@@ -542,3 +542,65 @@ viewport height, phone camera padding, token positions nudged off tile names, tr
 on player cards, a landscape-phone camera, a stacked final table on phones, and — the
 important one — the desktop tilt's 3D context made controls in the centre unclickable
 (fixed with a flat transform; covered by the e2e auction and tile-tap tests).
+
+## 24. Correction pass (owner review of the implemented board)
+
+**Owner decisions in this pass** (all implemented): START bottom-right with **anti-clockwise**
+numbering (0 START, 9 CLUB top-right, 18 RESORT top-left, 27 JAIL bottom-left); the pawn walks
+every space; city groups **mixed round the board** (fixed v1 order); **₹65,000** start;
+cheapest city **₹1,500**; **Airways ₹10,500**; each transport has **its own price and fixed
+rent** and is never developed; **one building level per BUILD click** (replaces §23's
+multi-level shortcut); **FREE BUILDING** is the player's choice of city (cash fallback when no
+city can take a level); corners unchanged (₹1,500 / ₹200 / ₹200 / ₹500); event amounts scaled
+(×5) and loans rescaled with the simulation; a MY PROPERTIES panel with group progress. The
+final board map, prices and rules are in [GAME_RULES/BUSINESS.md](../GAME_RULES/BUSINESS.md).
+
+### Economy (tuned values)
+
+Rent 50 % of the price (× 1 / 3 / 6 / 10 / 15 by level, × 2 with 3+ of a group) · house 30 %,
+hotel 60 % of the price · transport fixed rent ≈ 35 % of its price (₹1,000 … ₹3,700) · events
+× 5 · loans ₹5,000 steps, 10 % fee, limit ₹20,000 + 50 % of list value · bot reserve 14 % of
+the start cash + 2.4 % per opponent. Swept candidates (600-game runs, half casual): rent 25 %
+was too comfortable (insolvency 0.9 %, loans 0.25 / game, spread 0.19); 35–55 % raised the
+pressure monotonically; 50 % with cheaper buildings was chosen.
+
+### Simulation (`pnpm --filter @cg/game-business sim`, seed 42, 25,000 matches)
+
+| Scenario (bots unless noted)     | Games | Early leader wins | Runaway | Insolvent (player-games) | Loans / game | Trades / game |    Auctions / game | Houses / hotels per game | Minutes |
+| -------------------------------- | ----: | ----------------: | ------: | -----------------------: | -----------: | ------------: | -----------------: | -----------------------: | ------: |
+| **15 rounds, 2–6 players**       | 5,000 |              42 % |   8.8 % |                     11 % |         2.26 |          3.13 |                  0 |                0.8 / 2.6 |      12 |
+| 15 rounds, half "casual" players | 5,000 |              42 % |   5.7 % |                    6.4 % |         1.22 |          2.73 | 0.66 (99.9 % sold) |                1.3 / 1.5 |      12 |
+| 10 rounds                        | 1,250 |              47 % |   1.8 % |                    2.2 % |         0.24 |          1.56 |                  0 |                0.3 / 1.3 |     7.9 |
+| 20 rounds                        | 1,250 |              43 % |  15.4 % |                     24 % |         6.48 |          4.12 |                  0 |                1.2 / 3.5 |    15.8 |
+| 25 rounds                        | 1,250 |              46 % |  23.3 % |                     35 % |         12.6 |          4.92 |                  0 |                1.4 / 4.2 |    19.8 |
+| 30 rounds                        | 1,250 |              48 % |  29.8 % |                     44 % |         19.7 |          5.53 |                  0 |                1.5 / 4.9 |    23.8 |
+| 2 players                        | 1,667 |              59 % |   8.3 % |                    4.2 % |         0.53 |          1.47 |                  0 |                0.7 / 1.5 |       6 |
+| 4 players                        | 1,667 |              38 % |   8.4 % |                     11 % |         2.44 |          3.36 |                  0 |                0.8 / 2.7 |      12 |
+| 6 players                        | 1,667 |              32 % |   9.2 % |                     13 % |         3.92 |          4.35 |                  0 |                0.9 / 3.4 |      18 |
+| casual, no 3-round lock          | 2,500 |              42 % |   5.4 % |                    6.1 % |         1.15 |          2.77 |               0.67 |                1.3 / 1.5 |      12 |
+| events off                       | 2,500 |              43 % |   7.6 % |                     12 % |         2.37 |           3.2 |                  0 |                0.5 / 2.6 |      12 |
+
+**Tiers and groups (15 rounds, bots):** cities bought at least once — cheap 78 %, low-mid
+81 %, mid 79 %, high 77 %, premium 74 % (first bought around rounds 5.5 / 4.9 / 5.6 / 6.4 /
+7.1); owned at the end — 68–73 % in every tier. Groups bought: North 70 %, South 71 %,
+East 72 %, West 71 % (North is no longer neglected). Transports owned at the end: Railways
+74 %, Waterways 70 %, Petroleum 70 %, Satellite 69 %, Roadways 67 %, **Airways 63 %**. Mean
+final wealth ₹76,082; events move ₹12,820 per game.
+
+**Reading:** at 15 rounds the game stays luck-heavy (the early leader wins 42 %, runaways
+< 10 %). Bot-only insolvency is 11 % (6.4 % with casual players), slightly above the design's
+10 % target — left as is to avoid overfitting bots; a human play-test should judge it. Premium
+cities and Airways are bought in most games with ₹65,000. Long games (25–30 rounds) remain
+decisive and harsh. Events still change outcomes little (flavour and swings), and the 3-round
+lock still shows no measurable effect.
+
+### Visual review (correction pass)
+
+Captured on desktop (1440 × 900), Pixel 7, a 360 px phone and a landscape phone, plus the
+scripted scenario (walk, pass START, Raise money, insolvency, hotel). Fixed during the review:
+the phone turn banner was crushed by the My properties button (moved to a floating board
+button; the player strip became one swipeable row), the desktop board overflowed the viewport
+(single-row player strip, board capped to the viewport height), the desktop My properties
+panel was anchored to the wrong grid row (invisible), money chips could widen a phone page
+briefly, the pass-START flash was clipped at the board's right edge, and "YOU pays" / "YOU is"
+wording.

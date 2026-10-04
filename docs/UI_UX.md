@@ -105,27 +105,26 @@ Players can switch **Effects: Auto / Full / Lite** from the header.
   round deltas and totals, held on screen before the podium (`revealMs`). Layout follows the
   board's own width (container queries) so it fits beside the chat.
 - Business (working title): a **square 2.5D tabletop** — a teak-framed board with a gold
-  inlay on a night table, cream tiles with regional colour bands (North saffron, South
-  peacock teal, East rani pink, West indigo), steel transport tiles, sunburst Chance /
-  Community Chest tiles, tricolour START, barred JAIL, CLUB and RESORT corners, and a
-  peacock-felt centre with an original rotating rangoli medallion and two card stacks. Wide
-  screens tilt the board (CSS perspective on a flat layer, so every control stays clickable);
-  phones (narrow, or short in landscape) get a zoomed **camera that follows the play** with a
-  "See whole board" toggle, and a stage overlay for dice, event cards and auctions. Identity:
-  a turn banner (YOUR TURN / NAME'S TURN in the player's colour), YOU pills on your card and
-  token, a halo under the current token, the current player's card lifted and glowing, and an
-  action tray outlined in your colour (sticky on phones). Animations: 3D dice, tokens walking
-  the server's path tile by tile, a SOLD stamp, houses/hotels dropping in, rupee chips flying
-  between players and the bank (rent, purchases, loans, auctions), a flipping event card
-  (GOOD / BAD), a ₹0 insolvency badge, and the final wealth count-up per part — Full / Lite
-  (shorter) / Reduced (instant, everything also in the log). The **stage** inside the ring holds the round chip
-  and countdown, the dice, a **postcard** of the current space (tap any tile to see its
-  postcard: owner, level, fees for every level, development cost), News/Mela card and wheel
-  reveals, and the actions — a big **Roll**, **Buy / Build / Skip** (48 px), or the **Start
-  expansion** list (the options also glow on the board and can be tapped). Short landscape
-  stages hide the dice and fee table. A players strip shows tokens, names and rolling coins
-  (Broke badge); a "What happened" log keeps every change readable in Reduced motion. SOLD
-  stamp on purchases; the final board stays a moment before the podium (Wealth, Cities).
+  inlay on a night table, cream tiles with group colour bands (North saffron, South peacock
+  teal, East rani pink, West indigo — mixed round every side), steel transport tiles, sunburst
+  Chance / Community Chest tiles, tricolour START at the **bottom-right** (play runs
+  anti-clockwise), barred JAIL, CLUB and RESORT corners, and a peacock-felt centre with an
+  original rotating rangoli medallion and two card stacks. Wide screens tilt the board (CSS
+  perspective on a flat layer, so every control stays clickable); phones (narrow, or short in
+  landscape) get a zoomed **camera that follows the play** with "See whole board", a one-row
+  swipeable player strip and a stage overlay for dice, event cards and auctions. Identity: a
+  turn banner (YOUR TURN / NAME'S TURN in the player's colour), YOU pills on your card and
+  token, a halo under the current token, the current player's card lifted and glowing, an
+  action tray outlined in your colour (sticky on phones), and your squares ringed in your
+  colour with a YOU flag. **Movement:** the dice tumble and settle, then the pawn hops through
+  every space of the server's path (all effects modes; Reduced drops only the bounce), passing
+  START flashes the salary, the pawn lands with a bounce, the landing square glows, and only
+  then the landing card (property, group progress, rent) and actions appear; rent and salary
+  chips fly after the landing. **MY PROPERTIES** (side panel when wide, banner button on
+  desktop, floating button + bottom sheet on phones) shows your cards by group with
+  `n / total` and `RENT ×2`. Other animations: SOLD stamp, houses/hotels dropping in one level
+  per BUILD click, money chips (rent, purchases, loans, auctions), flipping event cards
+  (GOOD / BAD), a rent notice, a ₹0 insolvency badge, and the final wealth count-up per part.
 
 ## Accessibility
 

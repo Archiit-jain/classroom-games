@@ -47,7 +47,7 @@ server, not the browser, decides every outcome.
   (3+ cities of a group double it), roll for Chance / Community Chest by dice sum, trade,
   auction and take loans; nobody is knocked out (insolvent players keep playing). Richest by
   cash + everything spent on properties, buildings and transport after the host's number of
-  rounds wins. Pretend ₹ only. Rules:
+  rounds wins. ₹65,000 to start; pretend ₹ only. Rules:
   [docs/GAME_RULES/BUSINESS.md](docs/GAME_RULES/BUSINESS.md).
 - **Quick reactions** — eight emotes that pop over your seat for everyone (one per 1.5 s,
   only ever sent by a person).

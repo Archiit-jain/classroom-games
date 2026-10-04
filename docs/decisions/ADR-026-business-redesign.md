@@ -34,9 +34,9 @@ no immediate elimination, deterministic events by dice sum and an exact final-we
 - **Guardrails (provisional, measured):** bank sell-back only while raising money; one auction
   per turn; a 3-round lock after an asset changes hands. The cumulative-spending formula makes
   player-to-player sales raise both players' totals; the guardrails limit churn.
-- **Multi-level building (simulation-driven deviation):** landing on your own city may build
-  one **or more** levels at once. One level per landing produced almost no hotels in 5,000
-  simulated matches; the rule order (House 1 → 2 → 3 → Hotel, only when landing) is unchanged.
+- **Building:** landing on your own city offers one level per BUILD action, again and again
+  in the same landing (House 1 → 2 → 3 → Hotel) until the player stops, can't pay or has the
+  hotel — never an automatic jump (correction pass).
 - **Economy tuned by simulation:** `simulate.ts` drives the real engine and bot (plus a
   "casual" profile) through ≥ 5,000 matches per candidate; a 300-game guard test keeps the
   tuned values inside the targets (early leader ≤ 55 %, runaways < 15 %, insolvency < 10 %,
@@ -57,3 +57,23 @@ no immediate elimination, deterministic events by dice sum and an exact final-we
 - Two-player games stay less interactive than 4–6 players.
 - Naming review (Business, Chance, Community Chest, corner and transport names) remains a
   launch task.
+
+## Correction pass (owner review of the implemented board)
+
+- **Orientation:** START is the bottom-right corner and numbering runs **anti-clockwise** (up
+  the right side to CLUB 9, left to RESORT 18, down to JAIL 27, right back to START). One
+  mapping (`cellOf`) serves the engine's path and the drawing; a geometry test proves every
+  next space is a physical neighbour and the loop is anti-clockwise.
+- **Mixed groups:** the 22 cities keep their groups (North 6, South 6, East 5, West 5) but
+  are spread so every side mixes three or four groups; prices rise round the board. The
+  arrangement is fixed data, never reshuffled.
+- **Economy:** ₹65,000 start (frozen), cities ₹1,500–₹9,900, transports with their own prices
+  up to **Airways ₹10,500** (frozen) and **their own fixed rent** (no count table); corners
+  unchanged (₹1,500 / ₹200 / ₹200 / ₹500, owner decision); event amounts ×5 and loans rescaled
+  (₹5,000 steps, ₹20,000 base) by owner decision, values chosen with the simulation.
+- **Free building** is the player's choice of city (a FREE_BUILD decision); no eligible city
+  pays a cash fallback (owner decision).
+- **Movement:** the board walks the server's path space by space in every effects mode, after
+  the dice settle; the server holds the decision for dice + hops + landing so the action tray
+  never appears before the pawn lands.
+- **My properties:** the local player's holdings by group with progress towards ×2 rent.
