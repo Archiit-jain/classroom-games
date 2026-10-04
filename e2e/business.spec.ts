@@ -19,6 +19,33 @@ const tryClick = (page: Page, locator: ReturnType<Page['locator']>) =>
     .catch(() => false);
 const enabled = (locator: ReturnType<Page['locator']>) =>
   locator.isEnabled({ timeout: 30 }).catch(() => false);
+/** Where this page's own pawn stands right now (CSS left/top of the token). */
+const myToken = (page: Page) =>
+  page
+    .locator('.bz-token--me')
+    .evaluate((el) => `${(el as HTMLElement).style.left}|${(el as HTMLElement).style.top}`)
+    .catch(() => '');
+
+/**
+ * Rolls and watches the pawn: it must pass through intermediate spaces (no teleport),
+ * and no landing decision may show while it is still moving.
+ */
+async function rollAndWatch(page: Page) {
+  const positions: string[] = [];
+  let decisionWhileMoving = false;
+  await page.getByRole('button', { name: 'Roll the dice' }).click();
+  const until = Date.now() + 5000;
+  while (Date.now() < until) {
+    const at = await myToken(page);
+    if (at && positions.at(-1) !== at) positions.push(at);
+    const moving = (await page.locator('.bz-token--me.bz-token--moving').count()) > 0;
+    if (moving && (await page.getByRole('button', { name: /^BUY|^BUILD/ }).count()) > 0)
+      decisionWhileMoving = true;
+    if (!moving && positions.length > 1) break;
+    await page.waitForTimeout(40);
+  }
+  return { positions, decisionWhileMoving };
+}
 
 async function setRounds(page: Page, rounds: number) {
   const input = page.getByLabel('Rounds', { exact: true });
@@ -66,7 +93,7 @@ async function playUntilResults(
         continue;
       }
       for (const name of [
-        /Don’t buy|Not now/,
+        /Don’t buy|Not now|^Done$/,
         /Lose your next roll/,
         /Let the bank handle it/,
         /^Decline$/,
@@ -128,8 +155,21 @@ test('Business: two humans and a bot play to the podium; boards stay in sync @mo
   await expect(host.locator('.bz-card__name')).toHaveText('Delhi');
   await host.getByRole('button', { name: 'Close' }).click();
   await expect(host.locator('.bz-card')).toHaveCount(0);
+  // The pawn walks space by space (a roll is at least 2): never a jump to the destination.
+  const walk = await rollAndWatch(host);
+  expect(walk.positions.length, walk.positions.join(' → ')).toBeGreaterThanOrEqual(3);
+  expect(walk.decisionWhileMoving).toBe(false);
 
   const seen = await playUntilResults([host, guest], async (buyer) => {
+    // MY PROPERTIES lists it, by group, with the group progress.
+    await buyer.getByRole('button', { name: /My properties · \d/ }).click();
+    const panel = buyer.locator('.bz-holdings--open');
+    await expect(panel).toContainText('MY PROPERTIES');
+    await expect(panel.locator('.bz-hcard')).toHaveCount(1);
+    await expect(panel).toContainText(/NORTH\s*\d \/ 6/);
+    await expect(panel).toContainText(/TRANSPORT\s*\d \/ 6/);
+    await buyer.locator('.bz-holdings__close').click();
+    await expect(panel).toHaveCount(0);
     // A purchase on one screen shows as owned on the other.
     const other = buyer === host ? guest : host;
     await expect
@@ -177,11 +217,11 @@ test('Business: loan, auction and trade between two players', async ({ browser }
   }
   await expect(hostRoll).toBeEnabled();
 
-  // A loan: cash up by 1,000, debt shown on the player card.
+  // A loan: cash up by ₹5,000, debt ₹5,500 shown on the player card.
   await host.getByRole('button', { name: 'Loan', exact: true }).click();
-  await host.getByRole('button', { name: 'Borrow ₹1,000' }).click();
-  await expect(host.locator('.bz-player--me .bz-debt')).toContainText('₹1,100');
-  await expect(guest.locator('.bz-log')).toContainText('borrowed ₹1,000');
+  await host.getByRole('button', { name: 'Borrow ₹5,000' }).click();
+  await expect(host.locator('.bz-player--me .bz-debt')).toContainText('₹5,500');
+  await expect(guest.locator('.bz-log')).toContainText('borrowed ₹5,000');
 
   // An auction: the guest wins the host's first property.
   const space = (await owned(host))[0] as string;
@@ -253,7 +293,7 @@ for (const [label, viewport] of [
     await expect(page.getByRole('button', { name: 'Roll the dice' })).toBeEnabled({
       timeout: 30_000,
     });
-    await page.locator('.bz-tile[data-space="26"]').click();
+    await page.locator('.bz-tile[data-space="33"]').click();
     await expect(page.locator('.bz-card__name')).toHaveText('Mumbai');
     await page.getByRole('button', { name: 'Close' }).click({ timeout: 10_000 });
     await expect(page.locator('.bz-card')).toHaveCount(0);
@@ -262,6 +302,11 @@ for (const [label, viewport] of [
     await expect(page.locator('.bz-viewport--zoom')).toHaveCount(0);
     await page.getByRole('button', { name: 'Follow the play' }).click();
     await expect(page.locator('.bz-viewport--zoom')).toHaveCount(1);
+    // MY PROPERTIES opens as a bottom sheet without leaving the game.
+    await page.getByRole('button', { name: /My properties · \d/ }).click();
+    await expect(page.locator('.bz-holdings--open')).toContainText('NORTH');
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await page.locator('.bz-holdings__close').click();
     await playUntilResults([page]);
     await expectResults(page, 2);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
@@ -280,17 +325,21 @@ test('Business is playable with reduced motion: every change is in the log', asy
   await expect(host.locator('html')).toHaveAttribute('data-effects', 'reduced');
   const roll = host.getByRole('button', { name: 'Roll the dice' });
   await expect(roll).toBeEnabled({ timeout: 30_000 });
-  await roll.click();
+  // Reduced motion still walks the pawn space by space (movement is gameplay).
+  const walk = await rollAndWatch(host);
+  expect(walk.positions.length, walk.positions.join(' → ')).toBeGreaterThanOrEqual(3);
+  expect(walk.decisionWhileMoving).toBe(false);
   await expect(host.locator('.bz-log')).toContainText(/rolled \d \+ \d/u);
   await playUntilResults([host]);
   await expectResults(host, 2);
   expect(await host.locator('.cb-confetti__piece').count()).toBe(0);
 });
 
-test('Business insolvency: the bank settles, the player is marked INSOLVENT and keeps playing', async ({
+test('Business scripted: insolvency without elimination, then a hotel built level by level', async ({
   browser,
 }) => {
-  // The scenario server (playwright.config.ts): dice always 2 + 2, start cash ₹1,000, rent at 10× the price.
+  // The scripted server (playwright.config.ts): every roll is 6 + 6 (spaces 12, 24, START, 12…),
+  // start cash ₹10,000, rent 3× the price, no loan base.
   test.setTimeout(300_000);
   const scenario = { baseURL: 'http://localhost:5175' };
   const host = await newPlayer(browser, 'Kabir', scenario);
@@ -300,7 +349,7 @@ test('Business insolvency: the bank settles, the player is marked INSOLVENT and 
   await joinRoom(guest, code);
   await host.getByRole('button', { name: 'Start game' }).click();
   const pages = [host, guest];
-  // The first player buys Bhubaneswar; the second lands there and can't pay the rent.
+  // The first player buys Thiruvananthapuram (12); the second lands there and can't pay.
   let debtor: Page | null = null;
   const deadline = Date.now() + 60_000;
   while (!debtor && Date.now() < deadline) {
@@ -314,16 +363,37 @@ test('Business insolvency: the bank settles, the player is marked INSOLVENT and 
     await host.waitForTimeout(150);
   }
   if (!debtor) throw new Error('no Raise money panel');
-  const other = debtor === host ? guest : host;
+  const owner = debtor === host ? guest : host;
   await expect(debtor.locator('.bz-raise')).toContainText('You owe');
   await debtor.getByRole('button', { name: 'Let the bank handle it' }).click();
   await expect(debtor.locator('.bz-player--me .bz-insolvent')).toBeVisible();
   await expect(debtor.locator('.bz-token--me.bz-token--insolvent')).toHaveCount(1);
-  await expect(other.locator('.bz-log')).toContainText('is INSOLVENT');
-  // Still in the match: the insolvent player rolls again on its next turn.
-  await expect(debtor.getByRole('button', { name: 'Roll the dice' })).toBeEnabled({
-    timeout: 30_000,
-  });
+  await expect(owner.locator('.bz-log')).toContainText('is INSOLVENT');
+  // The owner comes back to 12 three turns later and builds House 1, 2, 3, then the Hotel —
+  // one BUILD click per level. The insolvent player keeps rolling meanwhile.
+  const hotel = (page: Page) => page.locator('.bz-tile[data-space="12"] .bz-hotel');
+  const offered = new Set<string>();
+  const until = Date.now() + 120_000;
+  while ((await hotel(owner).count()) === 0 && Date.now() < until) {
+    for (const page of pages) {
+      const roll = page.getByRole('button', { name: 'Roll the dice' });
+      if (await enabled(roll)) await tryClick(page, roll);
+      const build = page.getByRole('button', { name: /^BUILD/ });
+      if (page === owner && (await enabled(build))) {
+        // Each BUILD button offers exactly the next level.
+        const level = /House \d|Hotel/.exec((await build.textContent().catch(() => '')) ?? '');
+        if (level) offered.add(level[0]);
+        await tryClick(page, build);
+      }
+      for (const name of [/Don’t buy/, /Let the bank handle it/]) {
+        const b = page.getByRole('button', { name }).first();
+        if (await enabled(b)) await tryClick(page, b);
+      }
+    }
+    await host.waitForTimeout(150);
+  }
+  expect([...offered].sort()).toEqual(['Hotel', 'House 1', 'House 2', 'House 3']);
+  await expect(hotel(debtor)).toHaveCount(1); // the other screen shows the hotel too
   await playUntilResults(pages);
   for (const page of pages) await expectResults(page, 2);
 });

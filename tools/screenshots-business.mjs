@@ -170,6 +170,19 @@ while (Date.now() < deadline) {
       await buy.click({ timeout: 800 }).catch(() => undefined);
       await page.waitForTimeout(300);
       await once(`sold-${who}`, page, `06-sold-${who}`);
+      if (!seen.has(`props-${who}`)) {
+        await page.waitForTimeout(1500);
+        const toggle = page.getByRole('button', { name: /My properties/ });
+        if (await toggle.isVisible().catch(() => false)) {
+          await toggle.click().catch(() => undefined);
+          await page.waitForTimeout(400);
+          await once(`props-${who}`, page, `17-my-properties-${who}`);
+          await page
+            .locator('.bz-holdings__close')
+            .click()
+            .catch(() => undefined);
+        }
+      }
       continue;
     }
     const build = page.locator('.bz-tray .btn--primary:not([disabled])').last();
@@ -191,7 +204,7 @@ while (Date.now() < deadline) {
   if (seen.size > 6 && !seen.has('postcard')) {
     seen.add('postcard');
     await phone
-      .locator('.bz-tile[data-space="26"]')
+      .locator('.bz-tile[data-space="33"]')
       .click()
       .catch(() => undefined);
     await phone.waitForTimeout(400);

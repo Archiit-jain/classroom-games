@@ -11,7 +11,7 @@ const channel = process.env.PW_CHANNEL;
 const isCI = !!process.env.CI;
 const SERVER_PORT = 3101;
 const CLIENT_PORT = 5174;
-/** A second server + client with the test-only Business insolvency scenario. */
+/** A second server + client with the test-only scripted Business scenario. */
 export const SCENARIO_SERVER_PORT = 3102;
 export const SCENARIO_CLIENT_PORT = 5175;
 const browser = channel ? { channel } : {};
@@ -76,7 +76,7 @@ export default defineConfig({
         ALLOWED_ORIGINS: `http://localhost:${SCENARIO_CLIENT_PORT}`,
         GAME_TIME_SCALE: '0.25',
         LOG_LEVEL: 'warn',
-        BUSINESS_TEST_SCENARIO: 'insolvency',
+        BUSINESS_TEST_SCENARIO: 'scripted',
       },
     },
     {

@@ -269,8 +269,8 @@ test('production: two devices play a full Business match, staying in sync throug
         if (page === a.page && (await a.page.locator('.bz-tile--mine').count()) > 0) {
           if (!seen.loan) {
             await click(a.page.getByRole('button', { name: 'Loan', exact: true }));
-            await click(a.page.getByRole('button', { name: 'Borrow ₹1,000' }));
-            await expect(b.page.locator('.bz-log')).toContainText('borrowed ₹1,000');
+            await click(a.page.getByRole('button', { name: 'Borrow ₹5,000' }));
+            await expect(b.page.locator('.bz-log')).toContainText('borrowed ₹5,000');
             seen.loan = true;
             continue;
           }
@@ -303,7 +303,7 @@ test('production: two devices play a full Business match, staying in sync throug
         continue;
       }
       for (const name of [
-        /Don’t buy|Not now/,
+        /Don’t buy|Not now|^Done$/,
         /Lose your next roll/,
         /Let the bank handle it/,
         /^Decline$/,

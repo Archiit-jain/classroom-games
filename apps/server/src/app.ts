@@ -88,9 +88,12 @@ export function defaultGames(config: ServerConfig, moderator?: Moderator): AnyGa
     }),
     createBusinessGame({
       timeScale: config.gameTimeScale,
-      // e2e only (never in production): everyone walks 4 spaces and rent can't be paid.
-      ...(config.businessTestScenario === 'insolvency'
-        ? { dice: () => [2, 2] as [number, number], economy: { startCash: 1000, rentShare: 10 } }
+      // e2e only (never in production): every roll is 6 + 6, cash is short, rent is steep.
+      ...(config.businessTestScenario === 'scripted'
+        ? {
+            dice: () => [6, 6] as [number, number],
+            economy: { startCash: 10_000, rentShare: 3, loanBase: 0 },
+          }
         : {}),
     }),
     ...(config.enableFixtureGame ? [fixtureGame] : []),

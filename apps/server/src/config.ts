@@ -29,10 +29,11 @@ export interface ServerConfig {
   trustProxy: boolean;
   enableFixtureGame: boolean;
   /**
-   * Test-only Business scenario (e2e): `insolvency` scripts the dice and makes rent
-   * unpayable so a player goes insolvent on turn 2. Never set in production.
+   * Test-only Business scenario (e2e): `scripted` makes every roll 6 + 6 (spaces 12, 24,
+   * START, 12, …) with small start cash and steep rent, so one player goes insolvent and
+   * the other comes back to build a hotel. Never set in production.
    */
-  businessTestScenario: 'insolvency' | null;
+  businessTestScenario: 'scripted' | null;
   /** Multiplies game phase timers (dev/e2e speed-ups). Always 1 in production. */
   gameTimeScale: number;
   logLevel: LogLevel;
@@ -173,7 +174,7 @@ const EnvSchema = z.object({
   ALLOWED_ORIGINS: z.string().optional(),
   TRUST_PROXY: bool.optional(),
   ENABLE_FIXTURE_GAME: bool.optional(),
-  BUSINESS_TEST_SCENARIO: z.enum(['insolvency']).optional(),
+  BUSINESS_TEST_SCENARIO: z.enum(['scripted']).optional(),
   GAME_TIME_SCALE: z.coerce.number().min(0.05).max(10).optional(),
   LOG_LEVEL: z.enum(['silent', 'error', 'warn', 'info', 'debug']).optional(),
 });

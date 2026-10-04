@@ -62,11 +62,11 @@ describe('loadConfig', () => {
   });
 
   it('never runs the Business test scenario in production', () => {
-    expect(loadConfig({ ...PROD, BUSINESS_TEST_SCENARIO: 'insolvency' }).businessTestScenario).toBe(
+    expect(loadConfig({ ...PROD, BUSINESS_TEST_SCENARIO: 'scripted' }).businessTestScenario).toBe(
       null,
     );
-    expect(loadConfig({ BUSINESS_TEST_SCENARIO: 'insolvency' }).businessTestScenario).toBe(
-      'insolvency',
+    expect(loadConfig({ BUSINESS_TEST_SCENARIO: 'scripted' }).businessTestScenario).toBe(
+      'scripted',
     );
     expect(loadConfig({}).businessTestScenario).toBe(null);
   });
