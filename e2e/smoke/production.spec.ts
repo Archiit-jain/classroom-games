@@ -216,6 +216,10 @@ test('production: two devices play a full Business match, staying in sync throug
   await b.page.getByRole('button', { name: 'Join', exact: true }).click();
   await expect(b.page.getByTestId('room-code')).toHaveText(code);
   await expect(a.page.getByLabel('Rounds', { exact: true })).toHaveValue('15');
+  // 20 rounds (40 turns): an event landing is all but certain (≈ 99 %).
+  await a.page.getByLabel('Rounds', { exact: true }).fill('20');
+  await a.page.getByLabel('Rounds', { exact: true }).blur();
+  await expect(b.page.getByLabel('Rounds', { exact: true })).toHaveValue('20');
   await a.page.getByRole('button', { name: 'Start game' }).click();
   for (const d of [a, b])
     await expect(d.page.locator('.bz-tile')).toHaveCount(36, { timeout: 15_000 });
@@ -230,11 +234,6 @@ test('production: two devices play a full Business match, staying in sync throug
       .locator('.bz-player__cash')
       .evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))
       .catch(() => [] as (string | null)[]);
-  const logText = (page: Page) =>
-    page
-      .locator('.bz-log__item')
-      .allInnerTexts()
-      .catch(() => [] as string[]);
   const enabled = (l: ReturnType<Page['locator']>) =>
     l.isEnabled({ timeout: 30 }).catch(() => false);
   const click = (l: ReturnType<Page['locator']>) =>
@@ -312,23 +311,25 @@ test('production: two devices play a full Business match, staying in sync throug
         if (await enabled(btn)) await click(btn);
       }
     }
-    const lines = [...(await logText(a.page)), ...(await logText(b.page))];
+    // What the server announced (every WebSocket frame either device received) — the
+    // on-screen log keeps only the last few lines, which can scroll past between polls.
+    const heard = (pattern: string) => [...a.frames, ...b.frames].some((f) => f.includes(pattern));
     // Dice, ownership, rent, buildings and event effects reach both devices.
-    if (!seen.rolled && lines.some((l) => / rolled \d \+ \d/u.test(l))) seen.rolled = true;
-    if (!seen.bought && lines.some((l) => l.includes(' bought '))) {
+    if (!seen.rolled && heard('"type":"ROLLED"')) seen.rolled = true;
+    if (!seen.bought && heard('"type":"BOUGHT"')) {
       await sameBoards();
       seen.bought = true;
     }
-    if (!seen.rent && lines.some((l) => / paid ₹[\d,]+ to /u.test(l))) {
+    if (!seen.rent && (heard('"reason":"rent"') || heard('"reason":"transport"'))) {
       await sameBoards();
       seen.rent = true;
     }
-    if (!seen.built && lines.some((l) => / built a | got a free /u.test(l))) {
+    if (!seen.built && heard('"type":"BUILT"')) {
       const buildings = (page: Page) => page.locator('.bz-tile__buildings > span').count();
       await expect.poll(() => buildings(b.page), { timeout: 10_000 }).toBe(await buildings(a.page));
       seen.built = true;
     }
-    if (!seen.event && lines.some((l) => /: (Chance|Community Chest) \d+ — /u.test(l))) {
+    if (!seen.event && heard('"type":"EVENT","seat"')) {
       await sameBoards();
       seen.event = true;
     }
