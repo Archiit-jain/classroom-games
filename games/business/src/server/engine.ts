@@ -21,7 +21,6 @@ import {
   MAX_ROUNDS,
   MIN_PLAYERS,
   MIN_ROUNDS,
-  TRANSPORT_SPACES,
   buildCost,
   buildingsValue,
   cityRent,
@@ -59,8 +58,9 @@ const BID_STEP = 100;
 /** Play-test values; the 30 s decision time is frozen. */
 export const DEFAULT_TIMING: BusinessTiming = {
   turnMs: 30_000,
-  hopMs: 140,
-  landingMs: 900,
+  diceMs: 900,
+  hopMs: 190,
+  landingMs: 700,
   eventMs: 1800,
   auctionMs: 15_000,
   auctionExtendMs: 5000,
@@ -106,12 +106,8 @@ const actionSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('ROLL'), turn }),
   z.strictObject({ type: z.literal('EVENT_ROLL'), turn }),
   z.strictObject({ type: z.literal('BUY'), turn, space }),
-  z.strictObject({
-    type: z.literal('BUILD'),
-    turn,
-    space,
-    levels: z.number().int().min(1).max(HOTEL),
-  }),
+  z.strictObject({ type: z.literal('BUILD'), turn, space }),
+  z.strictObject({ type: z.literal('FREE_BUILD'), turn, space }),
   z.strictObject({ type: z.literal('SKIP'), turn }),
   z.strictObject({ type: z.literal('JAIL_PAY'), turn }),
   z.strictObject({ type: z.literal('JAIL_WAIT'), turn }),
@@ -154,9 +150,8 @@ export function hasGroupBonus(s: Owned, space: number, seat: number): boolean {
 export function rentAt(s: Owned, space: number): number {
   const owner = s.owner[space];
   if (owner === null || owner === undefined) return 0;
-  if (isTransport(BOARD[space])) {
-    return transportRent(TRANSPORT_SPACES.filter((i) => s.owner[i] === owner).length, s.economy);
-  }
+  // A transport's own fixed rent: never more for owning several, never built on.
+  if (isTransport(BOARD[space])) return transportRent(space, s.economy);
   return cityRent(space, s.level[space] ?? 0, hasGroupBonus(s, space, owner), s.economy);
 }
 
@@ -461,24 +456,30 @@ export function createBusinessGame(
     return path;
   }
 
-  /** Free building on the least-developed city (cheapest first), or the fallback money. */
+  /** The player's cities that can take one more level (never transports). */
+  const freeBuildOptions = (s: BusinessState, seat: number) =>
+    ownedBy(s, seat).filter((i) => isCity(BOARD[i]) && (s.level[i] ?? 0) < HOTEL);
+
+  /**
+   * FREE BUILDING: the player chooses one of their cities and gets its next level for Rs 0
+   * (no spending recorded). No eligible city: the cash fallback instead.
+   */
   function freeBuilding(w: Work, seat: number, fallback: number) {
     const s = w.s;
-    const pick = ownedBy(s, seat)
-      .filter((i) => isCity(BOARD[i]) && (s.level[i] ?? 0) < HOTEL)
-      .sort(
-        (a, b) =>
-          (s.level[a] ?? 0) - (s.level[b] ?? 0) ||
-          priceOf(a, s.economy) - priceOf(b, s.economy) ||
-          a - b,
-      )[0];
-    if (pick === undefined) {
+    const options = freeBuildOptions(s, seat);
+    if (options.length === 0) {
       fromBank(w, seat, fallback);
       log(w, { type: 'GAINED', seat, amount: fallback, reason: 'event' });
-      return;
+      return endResolution(w);
     }
-    s.level[pick] = (s.level[pick] ?? 0) + 1;
-    log(w, { type: 'BUILT', seat, space: pick, level: s.level[pick] as number, cost: 0 });
+    s.decision = { kind: 'FREE_BUILD', space: P(w, seat).position, cost: 0, options };
+    return enter(w, 'DECIDE', w.hold + s.timing.landingMs + s.timing.turnMs);
+  }
+
+  function grantFreeLevel(w: Work, seat: number, at: number) {
+    const s = w.s;
+    s.level[at] = (s.level[at] ?? 0) + 1;
+    log(w, { type: 'BUILT', seat, space: at, level: s.level[at] as number, cost: 0 });
   }
 
   /** Resolves the space the current player stands on. */
@@ -561,7 +562,7 @@ export function createBusinessGame(
   function applyEvent(w: Work, seat: number, deck: 'chance' | 'chest', sum: number) {
     const s = w.s;
     const p = P(w, seat);
-    const outcome = eventOutcome(deck, sum);
+    const outcome = eventOutcome(deck, sum, s.economy);
     s.lastEvent = { seat, deck, sum, good: outcome.good, turn: s.turn };
     log(w, { type: 'EVENT', seat, deck, sum, good: outcome.good });
     w.hold += s.timing.eventMs;
@@ -603,8 +604,7 @@ export function createBusinessGame(
         return afterPayment(w, settle(w, seat, [{ to: null, amount, reason: 'event' }], true));
       }
       case 'freeBuilding':
-        freeBuilding(w, seat, e.fallback);
-        return endResolution(w);
+        return freeBuilding(w, seat, e.fallback);
       case 'skipNextRoll':
         p.skipNext = true;
         return endResolution(w);
@@ -651,6 +651,8 @@ export function createBusinessGame(
     const from = P(w, seat).position;
     const steps = dice[0] + dice[1];
     s.lastRoll = { seat, dice, kind: 'move', turn: s.turn };
+    // The dice tumble first; then the pawn walks every space (the board animates this path).
+    w.hold += s.timing.diceMs;
     w.events.push(
       toAll({
         type: 'ROLLED',
@@ -682,17 +684,34 @@ export function createBusinessGame(
 
   function decide(
     w: Work,
-    kind: 'BUY' | 'BUILD' | 'SKIP' | 'JAIL_PAY' | 'JAIL_WAIT',
+    kind: 'BUY' | 'BUILD' | 'SKIP' | 'JAIL_PAY' | 'JAIL_WAIT' | 'FREE_BUILD',
     auto: boolean,
-    levels = 1,
+    target?: number,
   ) {
     const s = w.s;
     const seat = s.current;
     const d = s.decision;
     noteAuto(w, seat, auto);
-    s.decision = null;
     if (!d) return endResolution(w);
     const p = P(w, seat);
+    if (kind === 'BUILD') {
+      // One level per BUILD action; the offer stays open for the next level until the
+      // player stops, can't afford it, or the city has its hotel.
+      const lv = s.level[d.space] ?? 0;
+      const cost = buildCost(d.space, lv, s.economy);
+      toBank(w, seat, cost);
+      s.level[d.space] = lv + 1;
+      p.spend.development += cost;
+      log(w, { type: 'BUILT', seat, space: d.space, level: lv + 1, cost });
+      const next = lv + 1 < HOTEL ? buildCost(d.space, lv + 1, s.economy) : null;
+      if (next !== null && p.cash >= next) {
+        s.decision = { ...d, cost: next, built: (d.built ?? 0) + 1 };
+        return enter(w, 'DECIDE', s.phaseEndsAt - w.ctx.now);
+      }
+      s.decision = null;
+      return endResolution(w);
+    }
+    s.decision = null;
     if (kind === 'BUY') {
       toBank(w, seat, d.cost);
       s.owner[d.space] = seat;
@@ -700,16 +719,18 @@ export function createBusinessGame(
       if (isTransport(BOARD[d.space])) p.spend.transport += d.cost;
       else p.spend.property += d.cost;
       log(w, { type: 'BOUGHT', seat, space: d.space, price: d.cost });
-    } else if (kind === 'BUILD') {
-      // One or more levels in one go (houses, then the hotel), each paid for.
-      for (let k = 0; k < levels; k++) {
-        const lv = s.level[d.space] ?? 0;
-        const cost = buildCost(d.space, lv, s.economy);
-        toBank(w, seat, cost);
-        s.level[d.space] = lv + 1;
-        p.spend.development += cost;
-        log(w, { type: 'BUILT', seat, space: d.space, level: lv + 1, cost });
-      }
+    } else if (kind === 'FREE_BUILD') {
+      const options = d.options ?? [];
+      // Timeout: the least-developed eligible city (cheapest first) gets it.
+      const pick =
+        target ??
+        [...options].sort(
+          (a, b) =>
+            (s.level[a] ?? 0) - (s.level[b] ?? 0) ||
+            priceOf(a, s.economy) - priceOf(b, s.economy) ||
+            a - b,
+        )[0];
+      if (pick !== undefined) grantFreeLevel(w, seat, pick);
     } else if (kind === 'JAIL_PAY') {
       toBank(w, seat, d.cost);
       log(w, { type: 'PAID', from: seat, to: null, amount: d.cost, reason: 'jail', writtenOff: 0 });
@@ -717,7 +738,7 @@ export function createBusinessGame(
     } else if (kind === 'JAIL_WAIT') {
       p.skipNext = true;
       log(w, { type: 'JAIL', seat, paid: false });
-    } else {
+    } else if (!(d.kind === 'BUILD' && (d.built ?? 0) > 0)) {
       log(w, { type: 'DECLINED', seat, space: d.space });
     }
     w.hold = 0;
@@ -804,7 +825,7 @@ export function createBusinessGame(
   return {
     manifest: {
       id: BUSINESS_GAME_ID,
-      version: 2,
+      version: 3,
       players: { min: MIN_PLAYERS, max: MAX_PLAYERS },
       sync: 'TURN_PHASE',
       bots: { supported: true, canTakeOverSeat: true },
@@ -901,12 +922,26 @@ export function createBusinessGame(
             return s.owner[a.space] === null && p.cash >= d.cost ? ok : no('ILLEGAL_ACTION');
           }
           const lv = s.level[a.space] ?? 0;
-          if (s.owner[a.space] !== seat || lv + a.levels > HOTEL) return no('ILLEGAL_ACTION');
-          return p.cash >= buildPrice(s, a.space, a.levels) ? ok : no('ILLEGAL_ACTION');
+          // Cities only (transports are never developed), one level at a time, up to the hotel.
+          if (s.owner[a.space] !== seat || !isCity(BOARD[a.space]) || lv >= HOTEL)
+            return no('ILLEGAL_ACTION');
+          return p.cash >= buildCost(a.space, lv, s.economy) ? ok : no('ILLEGAL_ACTION');
+        }
+        case 'FREE_BUILD': {
+          const d = s.decision;
+          if (s.phase !== 'DECIDE' || d?.kind !== 'FREE_BUILD') return no('INVALID_PHASE');
+          return (d.options ?? []).includes(a.space) &&
+            s.owner[a.space] === seat &&
+            isCity(BOARD[a.space]) &&
+            (s.level[a.space] ?? 0) < HOTEL
+            ? ok
+            : no('ILLEGAL_ACTION');
         }
         case 'SKIP':
           if (s.phase !== 'DECIDE' || !s.decision) return no('INVALID_PHASE');
-          return s.decision.kind === 'JAIL' ? no('ILLEGAL_ACTION') : ok;
+          return s.decision.kind === 'JAIL' || s.decision.kind === 'FREE_BUILD'
+            ? no('ILLEGAL_ACTION')
+            : ok;
         case 'JAIL_PAY':
         case 'JAIL_WAIT':
           if (s.phase !== 'DECIDE' || s.decision?.kind !== 'JAIL') return no('INVALID_PHASE');
@@ -960,7 +995,10 @@ export function createBusinessGame(
           eventRoll(w, false);
           break;
         case 'BUILD':
-          decide(w, 'BUILD', false, a.levels);
+          decide(w, 'BUILD', false);
+          break;
+        case 'FREE_BUILD':
+          decide(w, 'FREE_BUILD', false, a.space);
           break;
         case 'BUY':
         case 'SKIP':
@@ -1080,9 +1118,11 @@ export function createBusinessGame(
         case 'EVENT':
           eventRoll(w, true);
           break;
-        case 'DECIDE':
-          decide(w, s.decision?.kind === 'JAIL' ? 'JAIL_WAIT' : 'SKIP', true);
+        case 'DECIDE': {
+          const k = s.decision?.kind;
+          decide(w, k === 'JAIL' ? 'JAIL_WAIT' : k === 'FREE_BUILD' ? 'FREE_BUILD' : 'SKIP', true);
           break;
+        }
         case 'RAISE': {
           noteAuto(w, s.current, true);
           const r = s.raise;
@@ -1162,9 +1202,14 @@ export function createBusinessGame(
   };
 }
 
-/** The bot's reserve: cash it tries to keep after spending. */
-export const botReserve = (view: Pick<BusinessView, 'seats'>) =>
-  1500 + 250 * (view.seats.length - 1);
+/** The bot's reserve: cash it tries to keep after spending (scales with the economy). */
+export const botReserve = (view: Pick<BusinessView, 'seats' | 'economy'>) =>
+  round10(
+    view.economy.startCash *
+      (BOT_RESERVE_BASE + BOT_RESERVE_PER_OPPONENT * (view.seats.length - 1)),
+  );
+export const BOT_RESERVE_BASE = 0.14;
+export const BOT_RESERVE_PER_OPPONENT = 0.024;
 
 /** A stable pseudo-random factor in [lo, hi] for a bot and a situation (no memory needed). */
 const factor = (key: number, lo: number, hi: number) =>
@@ -1251,23 +1296,24 @@ export function botAction(
       if (d.kind === 'JAIL') {
         return me.cash >= 3 * d.cost ? { type: 'JAIL_PAY', turn } : { type: 'JAIL_WAIT', turn };
       }
+      if (d.kind === 'FREE_BUILD') {
+        // The free level goes where it adds most rent: the dearest eligible city.
+        const pick = [...(d.options ?? [])].sort(
+          (a, b) => priceOf(b, view.economy) - priceOf(a, view.economy) || a - b,
+        )[0];
+        return pick === undefined ? null : { type: 'FREE_BUILD', turn, space: pick };
+      }
       if (d.kind === 'BUILD') {
-        // As many levels as keep the reserve (houses first, then the hotel).
-        let levels = 0;
-        while (
-          (view.level[d.space] ?? 0) + levels < HOTEL &&
-          me.cash - buildPrice(view, d.space, levels + 1) >= reserve
-        ) {
-          levels++;
-        }
-        if (close(me.cash - buildPrice(view, d.space, Math.max(1, levels))))
-          levels = levels > 0 ? levels - 1 : 1;
-        if (levels === 0 || me.cash < buildPrice(view, d.space, levels))
-          return { type: 'SKIP', turn };
-        return { type: 'BUILD', turn, space: d.space, levels };
+        // One level per action, again and again while the reserve allows.
+        const after = me.cash - d.cost;
+        let wants = after >= reserve;
+        if (close(after)) wants = !wants;
+        return wants && after >= 0
+          ? { type: 'BUILD', turn, space: d.space }
+          : { type: 'SKIP', turn };
       }
       const after = me.cash - d.cost;
-      let wants = after >= reserve || (completes(d.space) && after >= 500);
+      let wants = after >= reserve || (completes(d.space) && after >= reserve / 3);
       if (close(after)) wants = !wants;
       if (!wants || after < 0) return { type: 'SKIP', turn };
       return { type: 'BUY', turn, space: d.space };

@@ -28,6 +28,7 @@
     'final'
     'card'
     'tray'
+    'holdings'
     'log';
   gap: 10px;
   container-type: inline-size;
@@ -42,9 +43,10 @@
       'board players'
       'board card'
       'board tray'
+      'board holdings'
       'board log'
       'final final';
-    grid-template-rows: auto auto auto auto 1fr auto;
+    grid-template-rows: auto auto auto auto auto 1fr auto;
     align-items: start;
   }
 }
@@ -444,22 +446,22 @@
   border: 0 solid var(--bz-ink);
 }
 /* Band on the inner edge, facing the centre. */
-.bz-tile--s0 .bz-tile__band {
+.bz-tile--left .bz-tile__band {
   inset: 0 0 0 auto;
   width: 18%;
   border-left-width: 1px;
 }
-.bz-tile--s1 .bz-tile__band {
+.bz-tile--top .bz-tile__band {
   inset: auto 0 0 0;
   height: 18%;
   border-top-width: 1px;
 }
-.bz-tile--s2 .bz-tile__band {
+.bz-tile--right .bz-tile__band {
   inset: 0 auto 0 0;
   width: 18%;
   border-right-width: 1px;
 }
-.bz-tile--s3 .bz-tile__band {
+.bz-tile--bottom .bz-tile__band {
   inset: 0 0 auto 0;
   height: 18%;
   border-bottom-width: 1px;
@@ -476,16 +478,16 @@
   padding: 2px;
   min-width: 0;
 }
-.bz-tile--s0 .bz-tile__face {
+.bz-tile--left .bz-tile__face {
   padding-right: 20%;
 }
-.bz-tile--s2 .bz-tile__face {
+.bz-tile--right .bz-tile__face {
   padding-left: 20%;
 }
-.bz-tile--s1 .bz-tile__face {
+.bz-tile--top .bz-tile__face {
   padding-bottom: 20%;
 }
-.bz-tile--s3 .bz-tile__face {
+.bz-tile--bottom .bz-tile__face {
   padding-top: 20%;
 }
 .bz-tile__face svg {
@@ -611,21 +613,40 @@
   z-index: 2;
   top: 2px;
   left: 2px;
-  width: 0;
-  height: 0;
-  border-top: 12px solid var(--owner);
-  border-right: 12px solid transparent;
-  filter: drop-shadow(0 1px 0 var(--bz-ink));
-}
-.bz-tile--mine .bz-tile__flag::after {
-  content: '';
-  position: absolute;
-  top: -11px;
-  left: 1px;
-  width: 4px;
-  height: 4px;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--bz-ink);
   border-radius: 50%;
-  background: #fff;
+  background: var(--owner);
+}
+.bz-tile--mine {
+  box-shadow:
+    inset 0 0 0 3.5px var(--owner),
+    0 0 0 1px var(--bz-ink),
+    0 0 12px color-mix(in srgb, var(--owner) 70%, transparent);
+  z-index: 1;
+}
+.bz-tile--mine .bz-tile__flag {
+  width: auto;
+  height: auto;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-size: clamp(6px, 0.9cqi, 9px);
+  font-weight: 900;
+  line-height: 1.4;
+  color: var(--bz-ink);
+}
+.bz-tile--landing {
+  z-index: 3;
+  animation: bz-landing 1.2s ease-in-out infinite;
+}
+@keyframes bz-landing {
+  50% {
+    box-shadow:
+      0 0 0 3px #fff,
+      0 0 22px 4px var(--cb-yellow);
+    transform: translateY(-2px);
+  }
 }
 .bz-tile--focus {
   z-index: 3;
@@ -656,21 +677,21 @@
   pointer-events: none;
   filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
 }
-.bz-tile--s0 .bz-tile__buildings {
+.bz-tile--left .bz-tile__buildings {
   inset: 0 0 0 auto;
   width: 18%;
   flex-direction: column;
 }
-.bz-tile--s2 .bz-tile__buildings {
+.bz-tile--right .bz-tile__buildings {
   inset: 0 auto 0 0;
   width: 18%;
   flex-direction: column;
 }
-.bz-tile--s1 .bz-tile__buildings {
+.bz-tile--top .bz-tile__buildings {
   inset: auto 0 0 0;
   height: 22%;
 }
-.bz-tile--s3 .bz-tile__buildings {
+.bz-tile--bottom .bz-tile__buildings {
   inset: 0 0 auto 0;
   height: 22%;
 }
@@ -1114,8 +1135,26 @@
     top var(--hop) cubic-bezier(0.3, 0.7, 0.4, 1);
   filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.5));
 }
-.bz-token--still {
-  transition: none;
+/* Reduced effects: the pawn still glides space by space, without the hop bounce. */
+.bz-token--plain .bz-token-svg {
+  animation: none !important;
+}
+.bz-token--landed .bz-token-svg {
+  animation: bz-land 420ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.bz-token--plain.bz-token--landed .bz-token-svg {
+  animation: none;
+}
+@keyframes bz-land {
+  0% {
+    transform: translateY(-8px) scale(1.08, 0.94);
+  }
+  45% {
+    transform: translateY(0) scale(1.12, 0.86);
+  }
+  100% {
+    transform: none;
+  }
 }
 .bz-token--current::before {
   content: '';
@@ -1448,9 +1487,6 @@
   .bz-token--moving .bz-token-svg {
     animation: none;
   }
-  .bz-token {
-    transition: none;
-  }
 }
 .bz-stage > .bz-final {
   grid-area: 1 / 1;
@@ -1526,4 +1562,363 @@
   color: #fff;
   font-size: 9px;
   font-weight: 900;
+}
+
+/* ───────── Pass START, rent notice ───────── */
+.bz-pass {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  transform: translate(-50%, -100%);
+  border: 2px solid var(--bz-ink);
+  border-radius: var(--radius-pill);
+  background: var(--cb-lime);
+  color: var(--bz-ink);
+  font-weight: 900;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.bz-rent {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: start;
+  margin-top: 6%;
+  padding: 6px 12px;
+  border: 2.5px solid var(--bz-ink);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 800;
+  font-size: var(--text-sm);
+  box-shadow:
+    0 4px 0 var(--bz-ink),
+    0 0 0 3px var(--seat);
+}
+.bz-stage-over .bz-rent {
+  margin-top: 64px;
+  pointer-events: none;
+}
+.bz-tray__moving {
+  font-weight: 800;
+  animation: bz-pulse 0.9s ease-in-out infinite;
+}
+@keyframes bz-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ───────── Owner chip, landing card ───────── */
+.bz-owner {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--bz-ink);
+  background: var(--seat);
+  color: var(--bz-ink);
+  font-size: 11px;
+  font-weight: 900;
+}
+.bz-landing {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px 8px 16px;
+  overflow: hidden;
+  border: 2.5px solid var(--bz-ink);
+  border-radius: var(--radius-md);
+  background: var(--bz-paper);
+  color: var(--bz-ink);
+  box-shadow: 0 4px 0 var(--bz-ink);
+  animation: bz-card-in 260ms var(--ease-pop) both;
+}
+.bz-landing__stripe {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 8px;
+  background: var(--band, #6c7a96);
+}
+.bz-landing--transport {
+  background: linear-gradient(180deg, #eef2f7, #dfe6ee);
+}
+.bz-landing__icon {
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--band, #2b3f63) 70%, var(--bz-ink));
+}
+.bz-landing__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.bz-landing__name {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--text-md);
+}
+.bz-landing__meta {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: #4b3d22;
+}
+
+/* ───────── My properties ───────── */
+.bz-holdings-toggle {
+  flex: none;
+  padding: 4px 10px;
+  border: 2px solid var(--bz-ink);
+  border-radius: var(--radius-pill);
+  background: var(--seat);
+  color: var(--bz-ink);
+  font-weight: 900;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.bz-holdings {
+  grid-area: holdings;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 2.5px solid var(--seat);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  min-width: 0;
+}
+.bz-holdings--open {
+  display: flex;
+  position: absolute;
+  z-index: 35;
+  top: 58px;
+  right: 0;
+  width: min(380px, 100%);
+  max-height: min(72vh, 640px);
+  overflow-y: auto;
+  box-shadow:
+    0 6px 0 var(--bz-ink),
+    0 20px 50px rgba(0, 0, 0, 0.55);
+  animation: bz-card-in 220ms var(--ease-out) both;
+}
+.bz--narrow .bz-holdings--open {
+  position: fixed;
+  top: auto;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  width: auto;
+  max-height: 70vh;
+}
+@container (min-width: 960px) {
+  .bz-holdings,
+  .bz-holdings--open {
+    display: flex;
+    position: static;
+    width: auto;
+    max-height: none;
+    box-shadow: none;
+    animation: none;
+  }
+  .bz-holdings-toggle,
+  .bz-holdings__close {
+    display: none;
+  }
+}
+.bz-holdings__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bz-holdings__title {
+  flex: 1 1 auto;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--text-md);
+  letter-spacing: 0.06em;
+}
+.bz-holdings .bz-you {
+  background: var(--seat);
+}
+.bz-holdings__close {
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--bz-ink);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--bz-ink);
+  font-weight: 900;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.bz-hgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.bz-hgroup__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+.bz-hgroup__swatch {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--bz-ink);
+  border-radius: 3px;
+  background: var(--band, #9fb0c8);
+}
+.bz-hgroup__count {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+.bz-hgroup__bonus {
+  padding: 0 6px;
+  border: 1.5px solid var(--bz-ink);
+  border-radius: var(--radius-pill);
+  background: var(--cb-yellow);
+  color: var(--bz-ink);
+}
+.bz-hgroup__hint {
+  font-weight: 700;
+  color: var(--color-text-muted);
+  letter-spacing: 0;
+}
+.bz-hgroup__none {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.bz-hcards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 6px;
+}
+.bz-hcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 6px 6px;
+  overflow: hidden;
+  border: 2px solid var(--bz-ink);
+  border-radius: 8px;
+  background: var(--bz-paper);
+  color: var(--bz-ink);
+  box-shadow: 0 3px 0 var(--bz-ink);
+}
+.bz-hcard__stripe {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 7px;
+  background: var(--band, #6c7a96);
+}
+.bz-hcard--transport {
+  background: linear-gradient(180deg, #eef2f7, #dfe6ee);
+}
+.bz-hcard__top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.bz-hcard__name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 900;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.bz-hcard__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.bz-hcard__build {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  min-height: 18px;
+}
+.bz-hcard__fixed {
+  font-size: 10px;
+  color: #5b4a2a;
+}
+
+/* ───────── Review fixes ───────── */
+.bz-money {
+  overflow: clip;
+}
+/* Desktop: one row of player cards, and a board that fits under it. */
+.bz:not(.bz--narrow) .bz-players {
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+}
+.bz:not(.bz--narrow) .bz-board {
+  max-width: min(100%, max(440px, calc(100svh - 300px)));
+}
+/* The floating panel is placed against the whole game, not the 'holdings' grid row. */
+.bz-holdings--open {
+  grid-area: auto;
+}
+/* Phones: the player strip is one swipeable row; My properties floats on the board. */
+.bz--narrow .bz-players {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  padding: 3px 2px 4px;
+}
+.bz--narrow .bz-players::-webkit-scrollbar {
+  display: none;
+}
+.bz--narrow .bz-player {
+  flex: 0 0 auto;
+  width: 138px;
+  scroll-snap-align: center;
+}
+.bz--narrow .bz-banner .bz-holdings-toggle {
+  display: none;
+}
+.bz-holdings-fab {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 6;
+  padding: 6px 12px;
+  border: 2px solid var(--bz-ink);
+  border-radius: var(--radius-pill);
+  background: var(--seat);
+  color: var(--bz-ink);
+  font-weight: 900;
+  font-size: var(--text-xs);
+  box-shadow: var(--pop-sm);
+  cursor: pointer;
+}
+.bz-viewport--zoom {
+  height: clamp(280px, calc(100svh - 320px), 560px);
+}
+@container (min-width: 960px) {
+  .bz:not(.bz--narrow) .bz-players {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* START is the bottom-right corner: the pass-START flash rises up and to the left of it. */
+.bz-pass {
+  transform: translate(-92%, -115%);
 }

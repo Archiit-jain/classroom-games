@@ -60,9 +60,32 @@ export interface EconomyReport {
   groupOwned: Record<Group, number>;
   /** Mean final level of owned cities per group. */
   groupLevel: Record<Group, number>;
+  /** Share of cities owned at the end, by price tier. */
+  tierOwned: Record<Tier, number>;
+  /** Share of cities bought from the bank at least once in a game, by price tier. */
+  tierBought: Record<Tier, number>;
+  /** Mean round in which a city of the tier was first bought (when bought). */
+  tierFirstRound: Record<Tier, number>;
+  /** Share of games each transport was owned at the end. */
+  transportOwned: Record<string, number>;
 }
 
-const HUMAN_SECONDS_PER_TURN = 11;
+/** City price tiers for the report. */
+export type Tier = 'cheap' | 'lowMid' | 'mid' | 'high' | 'premium';
+export const TIERS: readonly Tier[] = ['cheap', 'lowMid', 'mid', 'high', 'premium'];
+export const tierOf = (price: number): Tier =>
+  price <= 2500
+    ? 'cheap'
+    : price <= 3800
+      ? 'lowMid'
+      : price <= 5400
+        ? 'mid'
+        : price <= 7200
+          ? 'high'
+          : 'premium';
+
+/** Human pace including dice, the space-by-space walk and decisions. */
+const HUMAN_SECONDS_PER_TURN = 12;
 
 /** A relaxed "human" player: more random buying, fewer buildings, occasional auctions. */
 function casualAction(
@@ -79,14 +102,18 @@ function casualAction(
     );
     if (mine.length > 0) return { type: 'AUCTION_START', turn: s.turn, space: rng.pick(mine) };
   }
-  if (s.phase === 'DECIDE' && s.decision && s.decision.kind !== 'JAIL') {
+  if (
+    s.phase === 'DECIDE' &&
+    s.decision &&
+    (s.decision.kind === 'BUY' || s.decision.kind === 'BUILD')
+  ) {
     const d = s.decision;
-    const kind = d.kind === 'BUY' ? 'BUY' : 'BUILD';
+    // Builds one level per click; each further level is a fresh 45 % whim.
     const wants = d.kind === 'BUY' ? rng.int(1, 100) <= 70 : rng.int(1, 100) <= 45;
     if (wants && me.cash >= d.cost) {
-      return kind === 'BUY'
+      return d.kind === 'BUY'
         ? { type: 'BUY', turn: s.turn, space: d.space }
-        : { type: 'BUILD', turn: s.turn, space: d.space, levels: 1 };
+        : { type: 'BUILD', turn: s.turn, space: d.space };
     }
     return { type: 'SKIP', turn: s.turn };
   }
@@ -127,6 +154,11 @@ export function simulateEconomy(config: SimulationConfig): EconomyReport {
     turns: 0,
   };
   const groupOwned: Record<string, number> = {};
+  const tierOwned: Record<string, number> = {};
+  const tierBought: Record<string, number> = {};
+  const tierFirstSum: Record<string, number> = {};
+  const tierFirstN: Record<string, number> = {};
+  const transportOwned: Record<string, number> = {};
   const groupLevelSum: Record<string, number> = {};
   const groupLevelN: Record<string, number> = {};
 
@@ -154,12 +186,23 @@ export function simulateEconomy(config: SimulationConfig): EconomyReport {
     const third = Math.ceil(rounds / 3);
     let early = -1;
     let debtPeak = 0;
+    const boughtHere = new Set<number>();
     const observe = (events: readonly { event: BusinessEvent }[]) => {
       for (const { event } of events) {
         if (event.type === 'TURN') totals.turns++;
         if (event.type !== 'LOG') continue;
         const e: LogEntry = event.entry;
         if (e.type === 'LOAN') totals.loans++;
+        if (e.type === 'BOUGHT' && !boughtHere.has(e.space)) {
+          boughtHere.add(e.space);
+          const b = BOARD[e.space];
+          if (b?.kind === 'city') {
+            const tier = tierOf(b.price);
+            tierBought[tier] = (tierBought[tier] ?? 0) + 1;
+            tierFirstSum[tier] = (tierFirstSum[tier] ?? 0) + s.round;
+            tierFirstN[tier] = (tierFirstN[tier] ?? 0) + 1;
+          }
+        }
         if (e.type === 'TRADE_DONE') {
           totals.trades++;
           totals.transfers += e.give.cash + e.get.cash;
@@ -245,11 +288,19 @@ export function simulateEconomy(config: SimulationConfig): EconomyReport {
     totals.owned += ASSET_SPACES.filter((i) => s.owner[i] !== null).length / ASSET_SPACES.length;
     totals.transports +=
       TRANSPORT_SPACES.filter((i) => s.owner[i] !== null).length / TRANSPORT_SPACES.length;
+    for (const i of TRANSPORT_SPACES) {
+      const b = BOARD[i];
+      if (b?.kind === 'transport' && s.owner[i] !== null)
+        transportOwned[b.id] = (transportOwned[b.id] ?? 0) + 1;
+    }
     for (const i of CITY_SPACES) {
       const lv = s.level[i] ?? 0;
       if (lv === HOTEL) totals.hotels++;
       else totals.houses += lv;
       const group = groupOf(i) as Group;
+      const b = BOARD[i];
+      const tier = tierOf(b?.kind === 'city' ? b.price : 0);
+      if (s.owner[i] !== null) tierOwned[tier] = (tierOwned[tier] ?? 0) + 1;
       if (s.owner[i] !== null) {
         groupOwned[group] = (groupOwned[group] ?? 0) + 1;
         groupLevelSum[group] = (groupLevelSum[group] ?? 0) + lv;
@@ -260,6 +311,11 @@ export function simulateEconomy(config: SimulationConfig): EconomyReport {
 
   const n = config.games;
   const groupSize = (gr: Group) => CITY_SPACES.filter((i) => groupOf(i) === gr).length;
+  const tierSize = (t: Tier) =>
+    CITY_SPACES.filter((i) => {
+      const b = BOARD[i];
+      return b?.kind === 'city' && tierOf(b.price) === t;
+    }).length;
   const r3 = (x: number) => +x.toFixed(3);
   return {
     games: n,
@@ -285,6 +341,18 @@ export function simulateEconomy(config: SimulationConfig): EconomyReport {
     groupOwned: Object.fromEntries(
       GROUPS.map((gr) => [gr, r3((groupOwned[gr] ?? 0) / (n * groupSize(gr)))]),
     ) as Record<Group, number>,
+    tierOwned: Object.fromEntries(
+      TIERS.map((t) => [t, r3((tierOwned[t] ?? 0) / (n * tierSize(t)))]),
+    ) as Record<Tier, number>,
+    tierBought: Object.fromEntries(
+      TIERS.map((t) => [t, r3((tierBought[t] ?? 0) / (n * tierSize(t)))]),
+    ) as Record<Tier, number>,
+    tierFirstRound: Object.fromEntries(
+      TIERS.map((t) => [t, +((tierFirstSum[t] ?? 0) / Math.max(1, tierFirstN[t] ?? 0)).toFixed(1)]),
+    ) as Record<Tier, number>,
+    transportOwned: Object.fromEntries(
+      Object.entries(transportOwned).map(([k, v]) => [k, r3(v / n)]),
+    ),
     groupLevel: Object.fromEntries(
       GROUPS.map((gr) => [
         gr,

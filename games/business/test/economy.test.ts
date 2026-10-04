@@ -28,4 +28,11 @@ describe('economy (300 seeded matches, 15 rounds, 2–6 players, half casual)', 
     expect(r.auctionsPerGame).toBeGreaterThan(0);
     for (const g of ['A', 'B', 'C', 'D'] as const) expect(r.groupOwned[g]).toBeGreaterThan(0.4);
   });
+
+  it('every price tier is bought — premium cities and Airways are reachable with ₹65,000', () => {
+    for (const t of ['cheap', 'lowMid', 'mid', 'high', 'premium'] as const) {
+      expect(r.tierBought[t], t).toBeGreaterThan(0.5);
+    }
+    expect(r.transportOwned.airways).toBeGreaterThan(0.4);
+  });
 });

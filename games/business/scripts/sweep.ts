@@ -12,5 +12,6 @@ for (const economy of candidates) {
     `loans=${r.loansPerGame} debt=${r.meanDebtBeforeSettle} trades=${r.tradesPerGame} auctions=${r.auctionsPerGame} sold=${r.auctionSoldRate} transfer=${r.transferShare}`,
     `owned=${r.ownedAtEnd} transport=${r.transportOwnedAtEnd} houses=${r.housesPerGame} hotels=${r.hotelsPerGame} jailPay=${r.jailPayRate}`,
     `groups=${JSON.stringify(r.groupOwned)} lv=${JSON.stringify(r.groupLevel)} wealth=${r.meanWealth} turns=${r.meanTurns} min=${r.estimatedMinutes}`,
+    `tierOwned=${JSON.stringify(r.tierOwned)} tierBought=${JSON.stringify(r.tierBought)} firstRound=${JSON.stringify(r.tierFirstRound)} transports=${JSON.stringify(r.transportOwned)} eventMoney=${r.eventMoneyPerGame}`,
   );
 }

@@ -15,6 +15,8 @@ export interface BusinessSettings {
 export interface BusinessTiming {
   /** Every decision a player makes on their turn (frozen: 30 s). */
   turnMs: number;
+  /** The dice tumble before the pawn starts moving. */
+  diceMs: number;
   /** Token travel per space, held by the server so the board catches up. */
   hopMs: number;
   /** Reading time after landing (payments, building) before the next step. */
@@ -60,11 +62,15 @@ export interface PlayerState {
 }
 
 export interface Decision {
-  kind: 'BUY' | 'BUILD' | 'JAIL';
+  kind: 'BUY' | 'BUILD' | 'JAIL' | 'FREE_BUILD';
   /** The space the player stands on. */
   space: number;
-  /** BUY: the price; BUILD: the next level's cost (more levels may be built at once); JAIL: the fee. */
+  /** BUY: the price; BUILD: the next level's cost; JAIL: the fee; FREE_BUILD: 0. */
   cost: number;
+  /** BUILD: levels already built during this landing (each one a separate BUILD action). */
+  built?: number;
+  /** FREE_BUILD: the player's cities that can take one more level. */
+  options?: number[];
 }
 
 export type PayReason = 'rent' | 'transport' | 'event' | 'club' | 'resort' | 'jail' | 'debt';
@@ -196,7 +202,8 @@ export type BusinessAction =
   | { type: 'ROLL'; turn: number }
   | { type: 'EVENT_ROLL'; turn: number }
   | { type: 'BUY'; turn: number; space: number }
-  | { type: 'BUILD'; turn: number; space: number; levels: number }
+  | { type: 'BUILD'; turn: number; space: number }
+  | { type: 'FREE_BUILD'; turn: number; space: number }
   | { type: 'SKIP'; turn: number }
   | { type: 'JAIL_PAY'; turn: number }
   | { type: 'JAIL_WAIT'; turn: number }

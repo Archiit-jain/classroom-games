@@ -4,15 +4,18 @@ import { lazy } from 'react';
 import type { BusinessAction, BusinessEvent, BusinessSettings, BusinessView } from '../shared';
 import { BusinessIcon } from './icons';
 import { businessMessages } from './messages';
-import { HOP_MS } from './timing';
+import { walkMs } from './timing';
 
 /** Dice, token walks, card reveals, SOLD stamps, buildings and insolvency get their time. */
 function eventDuration(event: BusinessEvent, effects: EffectsMode): number {
   switch (event.type) {
     case 'ROLLED':
-      return effects === 'reduced'
-        ? 300
-        : durationFor(effects, 700, 300) + event.path.length * HOP_MS[effects];
+      // Dice, then every space of the path, then the landing; the next update waits.
+      return event.path.length > 0
+        ? walkMs(event.dice.length > 0, event.path.length, effects)
+        : effects === 'reduced'
+          ? 500
+          : durationFor(effects, 900, 600);
     case 'LOG':
       switch (event.entry.type) {
         case 'EVENT':

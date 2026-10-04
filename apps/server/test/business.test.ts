@@ -54,7 +54,8 @@ function autoPlay(client: TestClient): void {
       if (d.kind === 'JAIL') act({ type: 'JAIL_WAIT' });
       else if (d.cost > cash) act({ type: 'SKIP' });
       else if (d.kind === 'BUY') act({ type: 'BUY', space: d.space });
-      else act({ type: 'BUILD', space: d.space, levels: 1 });
+      else if (d.kind === 'BUILD') act({ type: 'BUILD', space: d.space });
+      else if (d.kind === 'FREE_BUILD') act({ type: 'FREE_BUILD', space: d.options?.[0] });
     }
   });
 }
@@ -159,7 +160,7 @@ describe('Business over real sockets', () => {
     let u = (await waitView(owner, (v, x) => v.phase === 'ROLL' && v.current === x.you)) as Update;
     expect((await owner.act(u, { type: 'ROLL', turn: u.view.turn })).ok).toBe(true);
     u = await waitView(owner, (v) => v.phase === 'DECIDE');
-    expect(u.view.decision).toEqual({ kind: 'BUY', space: 1, cost: 600 });
+    expect(u.view.decision).toEqual({ kind: 'BUY', space: 1, cost: 1500 });
     expect((await owner.act(u, { type: 'BUY', turn: u.view.turn, space: 1 })).ok).toBe(true);
     const me = u.you;
 
@@ -175,18 +176,18 @@ describe('Business over real sockets', () => {
       owner,
       (v, x) => v.phase === 'ROLL' && v.current === x.you && v.owner[1] === x.you,
     );
-    expect((await owner.act(u, { type: 'LOAN', turn: u.view.turn, amount: 1000 })).ok).toBe(true);
-    u = await waitView(owner, (v, x) => v.players[x.you]!.debt === 1100);
+    expect((await owner.act(u, { type: 'LOAN', turn: u.view.turn, amount: 5000 })).ok).toBe(true);
+    u = await waitView(owner, (v, x) => v.players[x.you]!.debt === 5500);
     expect((await owner.act(u, { type: 'AUCTION_START', turn: u.view.turn, space: 1 })).ok).toBe(
       true,
     );
     r = await waitView(renter, (v) => v.phase === 'AUCTION');
-    expect(r.view.auction?.open).toBe(300);
-    expect((await renter.act(r, { type: 'BID', turn: r.view.turn, amount: 300 })).ok).toBe(true);
+    expect(r.view.auction?.open).toBe(800); // 50 % of Patna's ₹1,500, rounded to ₹100
+    expect((await renter.act(r, { type: 'BID', turn: r.view.turn, amount: 800 })).ok).toBe(true);
     const won = await waitView(owner, (v) => v.owner[1] === r.you, 5000);
     expect(won.view.lockedUntil[1]).toBe(won.view.round + 3);
     const sold = await waitView(renter, (v) => v.owner[1] === r.you);
-    expect(sold.view.players[r.you]!.spend.property).toBe(300);
+    expect(sold.view.players[r.you]!.spend.property).toBe(800);
   }, 20_000);
 
   it('a player who reconnects mid-decision gets the exact board back and can finish the turn', async () => {
@@ -197,7 +198,7 @@ describe('Business over real sockets', () => {
     const v = await waitView(mover, (x, u) => x.phase === 'ROLL' && x.current === u.you);
     expect((await mover.act(v, { type: 'ROLL', turn: v.view.turn })).ok).toBe(true);
     const deciding = await waitView(mover, (x) => x.phase === 'DECIDE');
-    expect(deciding.view.decision).toEqual({ kind: 'BUY', space: 1, cost: 600 });
+    expect(deciding.view.decision).toEqual({ kind: 'BUY', space: 1, cost: 1500 });
     const token = mover.ready.token as string;
     mover.close();
     const back = await t.connect({ token });
@@ -227,7 +228,7 @@ describe('Business over real sockets', () => {
 
   it('insolvency: the bank settles what you can’t pay, writes off the rest, and you keep playing', async () => {
     const [a, b] = await twoPlayers(
-      { ...FAST, dice: () => [2, 2], economy: { startCash: 1000, rentShare: 10 } },
+      { ...FAST, dice: () => [2, 2], economy: { startCash: 3000, rentShare: 20, loanBase: 0 } },
       5,
     );
     expect((await a.emit('room:start', {})).ok).toBe(true);

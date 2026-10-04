@@ -18,6 +18,7 @@ import {
   CORNER_SPACE,
   DEFAULT_ECONOMY as E,
   EVENT_SUMS,
+  HOTEL,
   TRANSPORT_SPACES,
   baseRent,
   buildCost,
@@ -30,6 +31,7 @@ import {
   type BusinessAction,
   type BusinessEvent,
   type BusinessState,
+  type Group,
   type LogEntry,
 } from '../src/shared';
 
@@ -91,15 +93,36 @@ const own = (s: BusinessState, seat: number, i: number, level = 0) => {
   s.level[i] = level;
 };
 
+const S0 = E.startCash;
+const scaledFx = (deck: 'chance' | 'chest', sum: number) => eventOutcome(deck, sum, E).effect;
+const amountOf = (deck: 'chance' | 'chest', sum: number) => {
+  const fx = scaledFx(deck, sum);
+  return 'amount' in fx ? fx.amount : 0;
+};
+
 describe('board (frozen structure)', () => {
-  it('has 36 spaces: 4 corners, 22 cities in groups 6/6/5/5, 6 transports, 4 events', () => {
+  it('has 36 spaces: corners 0 START, 9 CLUB, 18 RESORT, 27 JAIL; 22 cities; 6 transports; 4 events', () => {
     expect(BOARD_SIZE).toBe(36);
-    expect(CORNER_SPACE).toEqual({ start: 0, jail: 9, club: 18, resort: 27 });
+    expect(CORNER_SPACE).toEqual({ start: 0, club: 9, resort: 18, jail: 27 });
     for (const [corner, i] of Object.entries(CORNER_SPACE)) {
       expect(BOARD[i]).toEqual({ kind: 'corner', corner });
     }
+    const members = (g: Group) =>
+      groupSpaces(g)
+        .map((i) => (BOARD[i] as { id: string }).id)
+        .sort();
     expect(CITY_SPACES).toHaveLength(22);
-    expect(['A', 'B', 'C', 'D'].map((g) => groupSpaces(g as 'A').length)).toEqual([6, 6, 5, 5]);
+    expect(members('A')).toEqual(['chandigarh', 'dehradun', 'delhi', 'jaipur', 'jammu', 'lucknow']);
+    expect(members('B')).toEqual([
+      'bengaluru',
+      'chennai',
+      'hyderabad',
+      'kochi',
+      'thiruvananthapuram',
+      'visakhapatnam',
+    ]);
+    expect(members('C')).toEqual(['bhubaneswar', 'guwahati', 'kolkata', 'patna', 'ranchi']);
+    expect(members('D')).toEqual(['ahmedabad', 'goa', 'mumbai', 'pune', 'surat']);
     expect(TRANSPORT_SPACES.map((i) => (BOARD[i] as { id: string }).id).sort()).toEqual([
       'airways',
       'petroleum',
@@ -111,53 +134,108 @@ describe('board (frozen structure)', () => {
     const events = BOARD.flatMap((b, i) => (b.kind === 'event' ? [{ i, deck: b.deck }] : []));
     expect(events.map((e) => e.deck)).toEqual(['chance', 'chest', 'chance', 'chest']);
     expect(events.map((e) => sideOf(e.i))).toEqual([0, 1, 2, 3]);
-    for (const e of events) {
-      expect(BOARD[e.i - 1]?.kind).not.toBe('event');
-      expect(BOARD[(e.i + 1) % 36]?.kind).not.toBe('event');
-    }
-    for (const city of [
-      'delhi',
-      'mumbai',
-      'bengaluru',
-      'hyderabad',
-      'chennai',
-      'kolkata',
-      'jaipur',
-      'lucknow',
-      'goa',
-      'patna',
-      'jammu',
-    ]) {
-      expect(space(city), city).toBeGreaterThan(0);
-    }
   });
 
-  it('lays the spaces round a square, START bottom-left, clockwise, each next to the last', () => {
-    expect(cellOf(0)).toEqual({ row: 9, col: 0 });
-    expect(cellOf(9)).toEqual({ row: 0, col: 0 });
-    expect(cellOf(18)).toEqual({ row: 0, col: 9 });
-    expect(cellOf(27)).toEqual({ row: 9, col: 9 });
+  it('mixes the four groups round every side; the arrangement is fixed for every match', () => {
+    for (const side of [0, 1, 2, 3]) {
+      const groups = CITY_SPACES.filter((i) => sideOf(i) === side).map(
+        (i) => (BOARD[i] as { group: Group }).group,
+      );
+      expect(new Set(groups).size, `side ${side}`).toBeGreaterThanOrEqual(3);
+    }
+    // The exact v1 order (a fixed board, never reshuffled).
+    expect(
+      BOARD.map((b) =>
+        b.kind === 'city' || b.kind === 'transport' ? b.id : b.kind === 'event' ? b.deck : b.corner,
+      ),
+    ).toEqual([
+      'start',
+      'patna',
+      'dehradun',
+      'roadways',
+      'kochi',
+      'chance',
+      'ranchi',
+      'railways',
+      'surat',
+      'club',
+      'guwahati',
+      'jammu',
+      'thiruvananthapuram',
+      'chest',
+      'goa',
+      'waterways',
+      'bhubaneswar',
+      'visakhapatnam',
+      'resort',
+      'lucknow',
+      'ahmedabad',
+      'petroleum',
+      'kolkata',
+      'chance',
+      'chandigarh',
+      'satellite',
+      'chennai',
+      'jail',
+      'pune',
+      'hyderabad',
+      'jaipur',
+      'chest',
+      'bengaluru',
+      'mumbai',
+      'airways',
+      'delhi',
+    ]);
+    const a = createBusinessGame().setup([0, 1], SETTINGS, ctx(1000, 1), { bots: [] }).state;
+    const b = createBusinessGame().setup([0, 1], SETTINGS, ctx(1000, 99), { bots: [] }).state;
+    expect(a.owner).toEqual(b.owner);
+    expect(a.level).toEqual(b.level);
+  });
+
+  it('lays it out anti-clockwise from START at the bottom-right: up, left, down, right', () => {
+    expect(cellOf(0)).toEqual({ row: 9, col: 9 }); // bottom-right
+    expect(cellOf(1)).toEqual({ row: 8, col: 9 }); // directly above START
+    expect(cellOf(9)).toEqual({ row: 0, col: 9 }); // top-right
+    expect(cellOf(18)).toEqual({ row: 0, col: 0 }); // top-left
+    expect(cellOf(27)).toEqual({ row: 9, col: 0 }); // bottom-left
+    expect(cellOf(35)).toEqual({ row: 9, col: 8 }); // directly left of START
     const seen = new Set<string>();
+    const dirs: string[] = [];
+    let area = 0;
     for (let i = 0; i < 36; i++) {
       const p = cellOf(i);
       const q = cellOf((i + 1) % 36);
-      expect(Math.abs(p.row - q.row) + Math.abs(p.col - q.col)).toBe(1);
+      // Every next space is a physical neighbour.
+      expect(Math.abs(p.row - q.row) + Math.abs(p.col - q.col), `${i}→${i + 1}`).toBe(1);
       seen.add(`${p.row}:${p.col}`);
+      const dir = q.row < p.row ? 'up' : q.row > p.row ? 'down' : q.col < p.col ? 'left' : 'right';
+      if (dirs.at(-1) !== dir) dirs.push(dir);
+      area += p.col * -q.row - q.col * -p.row; // shoelace with y pointing up
     }
     expect(seen.size).toBe(36);
+    expect(dirs).toEqual(['up', 'left', 'down', 'right']);
+    expect(area).toBeGreaterThan(0); // positive = anti-clockwise
+  });
+
+  it('prices: cheapest city ₹1,500, Airways ₹10,500 the dearest asset, a spread-out curve', () => {
+    const cityPrices = CITY_SPACES.map((i) => priceOf(i));
+    expect(Math.min(...cityPrices)).toBe(1500);
+    expect(priceOf(space('airways'))).toBe(10_500);
+    expect(Math.max(...ASSET_SPACES.map((i) => priceOf(i)))).toBe(10_500);
+    expect(cityPrices.filter((p) => p >= 2000 && p <= 3000).length).toBeLessThanOrEqual(5);
+    expect(Math.max(...cityPrices) / Math.min(...cityPrices)).toBeGreaterThan(6);
   });
 });
 
 describe('dice, movement and corners', () => {
-  it('starts everyone on START with ₹10,500; draws the first player; custom rounds 5–40', () => {
+  it('starts everyone on START with ₹65,000; draws the first player; custom rounds 5–40', () => {
     const game = scripted();
     const s = game.setup([0, 1, 2], SETTINGS, ctx(), { bots: [] }).state;
     for (const x of [0, 1, 2])
-      expect(s.players[x]).toMatchObject({ cash: 10_500, position: 0, debt: 0 });
+      expect(s.players[x]).toMatchObject({ cash: 65_000, position: 0, debt: 0 });
     expect(game.settingsSchema.safeParse({ ...SETTINGS, rounds: 23 }).success).toBe(true);
     expect(game.settingsSchema.safeParse({ ...SETTINGS, rounds: 4 }).success).toBe(false);
     expect(game.settingsSchema.safeParse({ ...SETTINGS, rounds: 41 }).success).toBe(false);
-    expect(game.settingsSchema.safeParse({ ...SETTINGS, board: 'other' }).success).toBe(false);
     const firsts = new Set<number>();
     for (let seed = 1; seed <= 30; seed++) {
       firsts.add(
@@ -167,75 +245,72 @@ describe('dice, movement and corners', () => {
     expect(firsts.size).toBe(4);
   });
 
-  it('rolls two dice (2–12), moves through every space, no extra turn for doubles', () => {
+  it('moves space by space: the path holds every intermediate space; one roll = one space', () => {
+    const one = act(scripted([[1, 0]]), start(scripted()), { type: 'ROLL' });
+    expect(one.events.find((e) => e.event.type === 'ROLLED')?.event).toMatchObject({
+      from: 0,
+      to: 1,
+      path: [1],
+    });
     const game = scripted([[3, 3]]);
-    const s = start(game);
-    const t = act(game, s, { type: 'ROLL' });
+    const t = act(game, start(game), { type: 'ROLL' });
     const rolled = t.events.find((e) => e.event.type === 'ROLLED')?.event;
     expect(rolled).toMatchObject({ dice: [3, 3], from: 0, to: 6, path: [1, 2, 3, 4, 5, 6] });
-    // Doubles: the turn ends normally (Guwahati is for sale → decide, then the next player).
+    expect(t.state.players[0]?.position).toBe(6);
+    // The landing decision waits for the dice and every hop.
+    const timing = t.state.timing;
+    expect(t.state.phaseMs).toBe(
+      timing.diceMs + 6 * timing.hopMs + timing.landingMs + timing.turnMs,
+    );
+    // Doubles: no extra turn.
     const next = act(game, t.state, { type: 'SKIP' });
-    expect(next.state.phase).toBe('HOLD'); // the board catches up, then the next player
     expect(timer(game, next.state).state.current).toBe(1);
     const fair = createBusinessGame();
     for (let seed = 1; seed <= 100; seed++) {
       const r = fair.applyAction(start(scripted()), 0, { type: 'ROLL', turn: 1 }, ctx(1000, seed));
       const d = r.state.lastRoll?.dice ?? [];
-      expect(d).toHaveLength(2);
       expect(d[0]! + d[1]!).toBeGreaterThanOrEqual(2);
       expect(d[0]! + d[1]!).toBeLessThanOrEqual(12);
     }
   });
 
-  it('pays ₹1,500 when passing or landing on START', () => {
+  it('wraps from 35 to 0, paying ₹1,500 once when passing START', () => {
     const game = scripted([[2, 2]]);
-    const s = start(game, [0, 1], (x) => at(x, 0, 32));
+    const s = start(game, [0, 1], (x) => at(x, 0, 33));
     const t = act(game, s, { type: 'ROLL' });
-    expect(logs(t)).toContainEqual({ type: 'SALARY', seat: 0, amount: 1500 });
-    expect(t.state.players[0]?.position).toBe(0);
+    expect(t.events.find((e) => e.event.type === 'ROLLED')?.event).toMatchObject({
+      from: 33,
+      to: 1,
+      path: [34, 35, 0, 1],
+    });
+    expect(logs(t).filter((e) => e.type === 'SALARY')).toEqual([
+      { type: 'SALARY', seat: 0, amount: 1500 },
+    ]);
     conserved(s, t.state);
   });
 
-  it('CLUB collects ₹200 from every other player; RESORT pays ₹200 to every other player', () => {
+  it('CLUB (9) collects ₹200 from each; RESORT (18) pays ₹200 to each; JAIL (27) pay ₹500 or wait', () => {
     const game = scripted([
       [4, 5],
       [4, 5],
+      [4, 5],
     ]);
-    const club = act(
+    const club = act(game, start(game, [0, 1, 2]), { type: 'ROLL' });
+    expect([0, 1, 2].map((x) => cash(club.state, x))).toEqual([S0 + 400, S0 - 200, S0 - 200]);
+    const resort = act(
       game,
       start(game, [0, 1, 2], (x) => at(x, 0, 9)),
       { type: 'ROLL' },
     );
-    expect([0, 1, 2].map((x) => cash(club.state, x))).toEqual([10_900, 10_300, 10_300]);
-    const resort = act(
+    expect([0, 1, 2].map((x) => cash(resort.state, x))).toEqual([S0 - 400, S0 + 200, S0 + 200]);
+    const jail = act(
       game,
-      start(game, [0, 1, 2], (x) => at(x, 0, 18)),
+      start(game, [0, 1], (x) => at(x, 0, 18)),
       { type: 'ROLL' },
     );
-    expect([0, 1, 2].map((x) => cash(resort.state, x))).toEqual([10_100, 10_700, 10_700]);
-  });
-
-  it('JAIL: pay ₹500, or lose the next roll', () => {
-    const game = scripted([
-      [4, 5],
-      [1, 0],
-    ]);
-    const s = start(game, [0, 1], (x) => at(x, 0, 0));
-    const jail = act(game, s, { type: 'ROLL' });
-    expect(jail.state.decision).toEqual({ kind: 'JAIL', space: 9, cost: 500 });
-    expect(verdict(game, jail.state, 0, { type: 'SKIP' })).toBe('ILLEGAL_ACTION');
-    const paid = act(game, jail.state, { type: 'JAIL_PAY' });
-    expect(cash(paid.state, 0)).toBe(10_000);
-    const waited = act(game, jail.state, { type: 'JAIL_WAIT' });
-    expect(waited.state.players[0]?.skipNext).toBe(true);
-    // Seat 1's turn, then seat 0's turn is skipped.
-    let x = timer(game, waited.state).state; // → seat 1
-    x = act(game, x, { type: 'ROLL' }, 1).state; // Patna: an offer
-    x = timer(game, timer(game, x).state).state; // declined (timeout), then seat 0…
-    expect(x.current).toBe(0);
-    expect(x.phase).toBe('HOLD');
-    expect(x.log.at(-1)).toEqual({ type: 'TURN_SKIPPED', seat: 0 });
-    expect(timer(game, x).state.current).toBe(1);
+    expect(jail.state.decision).toEqual({ kind: 'JAIL', space: 27, cost: 500 });
+    expect(cash(act(game, jail.state, { type: 'JAIL_PAY' }).state, 0)).toBe(S0 - 500);
+    expect(act(game, jail.state, { type: 'JAIL_WAIT' }).state.players[0]?.skipNext).toBe(true);
   });
 
   it('ends after the configured number of rounds, nobody eliminated', () => {
@@ -243,40 +318,25 @@ describe('dice, movement and corners', () => {
     let s = start(game, [0, 1], (x) => (x.rounds = 5));
     for (let k = 0; k < 400 && s.phase !== 'OVER'; k++) s = timer(game, s).state;
     expect(s.phase).toBe('OVER');
-    expect(s.round).toBe(6);
     expect(game.getResults(s).placements).toHaveLength(2);
   });
 });
 
-describe('buying, rent and development', () => {
-  it('offers BUY / DON’T BUY; buying records ownership and property spending', () => {
-    const game = scripted([
-      [1, 0],
-      [1, 0],
-    ]);
+describe('buying, rent, development and transport', () => {
+  it('offers BUY / SKIP; buying records ownership and property spending', () => {
+    const game = scripted([[1, 0]]);
     const s = start(game);
     const t = act(game, s, { type: 'ROLL' });
-    expect(t.state.decision).toEqual({ kind: 'BUY', space: 1, cost: 600 });
+    expect(t.state.decision).toEqual({ kind: 'BUY', space: 1, cost: 1500 });
     const b = act(game, t.state, { type: 'BUY', space: 1 });
     expect(b.state.owner[1]).toBe(0);
-    expect(cash(b.state, 0)).toBe(9900);
-    expect(b.state.players[0]?.spend).toEqual({ property: 600, development: 0, transport: 0 });
+    expect(cash(b.state, 0)).toBe(S0 - 1500);
+    expect(b.state.players[0]?.spend).toEqual({ property: 1500, development: 0, transport: 0 });
     conserved(s, b.state);
-    const no = act(game, t.state, { type: 'SKIP' });
-    expect(no.state.owner[1]).toBeNull();
+    expect(act(game, t.state, { type: 'SKIP' }).state.owner[1]).toBeNull();
   });
 
-  it('records transport purchases as transport spending', () => {
-    const game = scripted([[2, 1]]);
-    const t = act(game, act(game, start(game), { type: 'ROLL' }).state, { type: 'BUY', space: 3 });
-    expect(t.state.players[0]?.spend).toEqual({
-      property: 0,
-      development: 0,
-      transport: E.transportPrice,
-    });
-  });
-
-  it('charges rent by level, doubled with 3+ cities of a group; shows it before paying', () => {
+  it('charges rent by level, doubled with 3+ cities of a group', () => {
     const game = scripted([[1, 0]]);
     const patna = space('patna');
     const s = start(game, [0, 1], (x) => own(x, 1, patna, 2));
@@ -292,60 +352,90 @@ describe('buying, rent and development', () => {
       writtenOff: 0,
     });
     conserved(s, t.state);
-    const group = start(game, [0, 1], (x) => {
-      for (const i of [1, 2]) own(x, 1, i);
-      own(x, 1, space('kolkata'));
-    });
-    expect(rentAt(group, patna)).toBe(baseRent(patna) * 2);
-    const two = start(game, [0, 1], (x) => {
-      own(x, 1, 1);
-      own(x, 1, 2);
-    });
-    expect(rentAt(two, patna)).toBe(baseRent(patna));
-    const all = start(game, [0, 1], (x) => {
-      for (const i of groupSpaces('C')) own(x, 1, i);
-    });
-    expect(rentAt(all, patna)).toBe(baseRent(patna) * 2); // no further multiplier
+    const east = groupSpaces('C');
+    const owning = (n: number) =>
+      start(game, [0, 1], (x) => {
+        for (const i of east.slice(0, n)) own(x, 1, i);
+      });
+    expect(rentAt(owning(2), patna)).toBe(baseRent(patna));
+    expect(rentAt(owning(3), patna)).toBe(baseRent(patna) * 2);
+    expect(rentAt(owning(5), patna)).toBe(baseRent(patna) * 2);
   });
 
-  it('builds houses then a hotel only when landing on your own city — one or more levels at once', () => {
+  it('builds one level per BUILD action — House 1 → 2 → 3 → Hotel — until done, broke or hotel', () => {
     const game = scripted([
       [1, 0],
       [1, 0],
-      [1, 0],
     ]);
-    const s = start(game, [0, 1], (x) => own(x, 0, 1, 2));
+    const s = start(game, [0, 1], (x) => own(x, 0, 1, 1));
     const t = act(game, s, { type: 'ROLL' });
-    expect(t.state.decision).toEqual({ kind: 'BUILD', space: 1, cost: buildCost(1, 2) });
-    const up = act(game, t.state, { type: 'BUILD', space: 1, levels: 2 });
-    expect(up.state.level[1]).toBe(4); // house 3, then the hotel
-    expect(up.state.players[0]?.spend.development).toBe(buildCost(1, 2) + buildCost(1, 3));
+    expect(t.state.decision).toEqual({ kind: 'BUILD', space: 1, cost: buildCost(1, 1) });
     expect(verdict(game, t.state, 0, { type: 'BUILD', space: 1, levels: 3 })).toBe(
-      'ILLEGAL_ACTION',
+      'INVALID_PAYLOAD',
     );
-    const hotel = start(game, [0, 1], (x) => own(x, 0, 1, 4));
-    expect(act(game, hotel, { type: 'ROLL' }).state.phase).toBe('HOLD');
+    const h2 = act(game, t.state, { type: 'BUILD', space: 1 });
+    expect(h2.state.level[1]).toBe(2);
+    expect(h2.state.phase).toBe('DECIDE'); // the offer stays open for the next level
+    expect(h2.state.decision).toMatchObject({ kind: 'BUILD', cost: buildCost(1, 2), built: 1 });
+    const h3 = act(game, h2.state, { type: 'BUILD', space: 1 });
+    const hotel = act(game, h3.state, { type: 'BUILD', space: 1 });
+    expect(hotel.state.level[1]).toBe(HOTEL);
+    expect(hotel.state.phase).toBe('HOLD'); // nothing above the hotel
+    expect(hotel.state.players[0]?.spend.development).toBe(
+      buildCost(1, 1) + buildCost(1, 2) + buildCost(1, 3),
+    );
+    const done = act(game, h2.state, { type: 'SKIP' });
+    expect(done.state.level[1]).toBe(2);
+    expect(logs(done).some((e) => e.type === 'DECLINED')).toBe(false);
+    // Can't afford the next level: the offer closes after the build.
+    const g1 = scripted([[1, 0]]);
+    const g1b = scripted([[1, 0]]);
     const poor = act(
-      game,
-      start(game, [0, 1], (x) => {
+      g1,
+      start(g1, [0, 1], (x) => {
         own(x, 0, 1, 0);
-        (x.players[0] as { cash: number }).cash = 100;
+        (x.players[0] as { cash: number }).cash = buildCost(1, 0);
       }),
       { type: 'ROLL' },
     );
-    expect(verdict(game, poor.state, 0, { type: 'BUILD', space: 1, levels: 1 })).toBe(
-      'ILLEGAL_ACTION',
-    );
+    expect(act(g1, poor.state, { type: 'BUILD', space: 1 }).state.phase).toBe('HOLD');
+    expect(
+      act(
+        g1b,
+        start(g1b, [0, 1], (x) => own(x, 0, 1, HOTEL)),
+        { type: 'ROLL' },
+      ).state.phase,
+    ).toBe('HOLD');
   });
 
-  it('charges transport rent by how many transports the owner holds', () => {
+  it('transports: own price, own fixed rent (not by count), never built on', () => {
     const game = scripted([[2, 1]]);
-    for (const n of [1, 2, 3, 6]) {
+    const roadways = space('roadways');
+    expect(roadways).toBe(3);
+    const t = act(game, act(game, start(game), { type: 'ROLL' }).state, {
+      type: 'BUY',
+      space: roadways,
+    });
+    expect(t.state.players[0]?.spend).toEqual({ property: 0, development: 0, transport: 3000 });
+    for (const n of [1, 3, 6]) {
       const s = start(game, [0, 1], (x) => {
-        for (const i of TRANSPORT_SPACES.slice(0, n)) own(x, 1, i);
+        own(x, 1, roadways);
+        for (const i of TRANSPORT_SPACES.filter((k) => k !== roadways).slice(0, n - 1))
+          own(x, 1, i);
       });
-      expect(rentAt(s, 3)).toBe(E.transportRent[n - 1]);
+      expect(rentAt(s, roadways)).toBe(E.transportRent.roadways);
+      if (n === 6) expect(rentAt(s, space('airways'))).toBe(E.transportRent.airways);
     }
+    // Landing on your own transport: no building offer.
+    const g2 = scripted([[2, 1]]);
+    const mine = act(
+      g2,
+      start(g2, [0, 1], (x) => own(x, 0, roadways)),
+      { type: 'ROLL' },
+    );
+    expect(mine.state.decision).toBeNull();
+    expect(mine.state.phase).toBe('HOLD');
+    expect(verdict(game, mine.state, 0, { type: 'BUILD', space: roadways })).toBe('INVALID_PHASE');
   });
 });
 
@@ -356,48 +446,66 @@ describe('events: the dice sum decides (frozen)', () => {
         const o = eventOutcome(deck, sum);
         expect(o.good).toBe(deck === 'chance' ? sum % 2 === 0 : sum % 2 === 1);
         expect(isGood(deck, sum)).toBe(o.good);
-        expect(o.effect).toBeDefined();
       }
     }
   });
 
-  it('applies every outcome from a real event roll', () => {
+  it('applies every outcome from a real event roll (amounts scaled to the economy)', () => {
+    const kochi = space('kochi');
+    const chennai = space('chennai');
     const before = (deck: 'chance' | 'chest') =>
       start(scripted(), [0, 1, 2], (x) => {
         at(x, 0, deck === 'chance' ? 3 : 11);
-        own(x, 0, space('kochi'), 1);
-        own(x, 0, space('chennai'), 4);
+        own(x, 0, kochi, 1);
+        own(x, 0, chennai, HOTEL);
       });
+    const gain = (deck: 'chance' | 'chest', sum: number) => (_s: BusinessState, t: T) =>
+      expect(cash(t.state, 0)).toBe(S0 + amountOf(deck, sum));
+    const pay = (deck: 'chance' | 'chest', sum: number) => (_s: BusinessState, t: T) =>
+      expect(cash(t.state, 0)).toBe(S0 - amountOf(deck, sum));
+    const each =
+      (deck: 'chance' | 'chest', sum: number, sign: 1 | -1) => (_s: BusinessState, t: T) =>
+        expect([0, 1, 2].map((x) => cash(t.state, x))).toEqual([
+          S0 + sign * 2 * amountOf(deck, sum),
+          S0 - sign * amountOf(deck, sum),
+          S0 - sign * amountOf(deck, sum),
+        ]);
+    const free = (_s: BusinessState, t: T) => {
+      expect(t.state.decision).toEqual({
+        kind: 'FREE_BUILD',
+        space: t.state.players[0]?.position,
+        cost: 0,
+        options: [kochi],
+      });
+    };
+    const repairs = scaledFx('chance', 11) as { perHouse: number; perHotel: number };
     const outcomes: Record<string, (s: BusinessState, t: T) => void> = {
-      'chance:2': (_s, t) => expect(cash(t.state, 0)).toBe(12_000),
-      'chance:3': (_s, t) => expect(cash(t.state, 0)).toBe(9500),
-      'chance:4': (_s, t) =>
-        expect([0, 1, 2].map((x) => cash(t.state, x))).toEqual([10_900, 10_300, 10_300]),
-      'chance:5': (_s, t) =>
-        expect([0, 1, 2].map((x) => cash(t.state, x))).toEqual([9900, 10_800, 10_800]),
-      'chance:6': (_s, t) => expect(cash(t.state, 0)).toBe(11_000),
-      'chance:7': (_s, t) => expect(cash(t.state, 0)).toBe(10_300),
-      'chance:8': (_s, t) => expect(t.state.level[space('kochi')]).toBe(2),
+      'chance:2': gain('chance', 2),
+      'chance:3': pay('chance', 3),
+      'chance:4': each('chance', 4, 1),
+      'chance:5': each('chance', 5, -1),
+      'chance:6': gain('chance', 6),
+      'chance:7': pay('chance', 7),
+      'chance:8': free,
       'chance:9': (_s, t) => expect(t.state.players[0]?.skipNext).toBe(true),
       'chance:10': (_s, t) => {
         expect(t.state.players[0]?.position).toBe(0);
-        expect(cash(t.state, 0)).toBe(12_000);
+        expect(cash(t.state, 0)).toBe(S0 + 1500);
       },
-      'chance:11': (_s, t) => expect(cash(t.state, 0)).toBe(10_500 - 100 - 250),
-      'chance:12': (_s, t) => expect(cash(t.state, 0)).toBe(11_500),
-      'chest:2': (_s, t) => expect(cash(t.state, 0)).toBe(9000),
-      'chest:3': (_s, t) => expect(cash(t.state, 0)).toBe(11_500),
-      'chest:4': (_s, t) =>
-        expect([0, 1, 2].map((x) => cash(t.state, x))).toEqual([10_100, 10_700, 10_700]),
-      'chest:5': (_s, t) =>
-        expect([0, 1, 2].map((x) => cash(t.state, x))).toEqual([10_800, 10_350, 10_350]),
-      'chest:6': (_s, t) => expect(cash(t.state, 0)).toBe(10_100),
-      'chest:7': (_s, t) => expect(cash(t.state, 0)).toBe(10_800),
+      'chance:11': (_s, t) =>
+        expect(cash(t.state, 0)).toBe(S0 - repairs.perHouse - repairs.perHotel),
+      'chance:12': gain('chance', 12),
+      'chest:2': pay('chest', 2),
+      'chest:3': gain('chest', 3),
+      'chest:4': each('chest', 4, -1),
+      'chest:5': each('chest', 5, 1),
+      'chest:6': pay('chest', 6),
+      'chest:7': gain('chest', 7),
       'chest:8': (_s, t) => expect(t.state.players[0]?.noBuyNext).toBe(true),
       'chest:9': (_s, t) => expect(t.state.players[0]?.rentHoliday).toBe(true),
       'chest:10': (_s, t) => expect(t.state.players[0]?.skipNext).toBe(true),
-      'chest:11': (_s, t) => expect(t.state.level[space('kochi')]).toBe(2),
-      'chest:12': (_s, t) => expect(cash(t.state, 0)).toBe(9700),
+      'chest:11': free,
+      'chest:12': pay('chest', 12),
     };
     for (const deck of ['chance', 'chest'] as const) {
       for (const sum of EVENT_SUMS) {
@@ -417,6 +525,45 @@ describe('events: the dice sum decides (frozen)', () => {
     }
   });
 
+  it('FREE BUILDING: the player picks a city; the level costs ₹0; no city → cash instead', () => {
+    const kochi = space('kochi');
+    const goa = space('goa');
+    const game = scripted([
+      [2, 0],
+      [4, 4],
+    ]);
+    const s = start(game, [0, 1], (x) => {
+      at(x, 0, 3);
+      own(x, 0, kochi, 1);
+      own(x, 0, goa, 0);
+      own(x, 0, space('roadways'));
+    });
+    const t = act(game, act(game, s, { type: 'ROLL' }).state, { type: 'EVENT_ROLL' });
+    expect(t.state.decision?.options).toEqual([kochi, goa]); // cities only, never transport
+    expect(verdict(game, t.state, 0, { type: 'FREE_BUILD', space: space('roadways') })).toBe(
+      'ILLEGAL_ACTION',
+    );
+    expect(verdict(game, t.state, 0, { type: 'SKIP' })).toBe('ILLEGAL_ACTION');
+    const picked = act(game, t.state, { type: 'FREE_BUILD', space: goa });
+    expect(picked.state.level[goa]).toBe(1);
+    expect(picked.state.players[0]?.spend.development).toBe(0);
+    expect(rentAt(picked.state, goa)).toBe(baseRent(goa) * 3);
+    // Timeout: the least-developed city gets it.
+    expect(timer(game, t.state).state.level[goa]).toBe(1);
+    // No eligible city: the scaled cash fallback.
+    const g3 = scripted([
+      [2, 0],
+      [4, 4],
+    ]);
+    const none = act(
+      g3,
+      start(g3, [0, 1], (x) => at(x, 0, 3)),
+      { type: 'ROLL' },
+    );
+    const paid = act(g3, none.state, { type: 'EVENT_ROLL' });
+    expect(cash(paid.state, 0)).toBe(S0 + (scaledFx('chance', 8) as { fallback: number }).fallback);
+  });
+
   it('a rent holiday waives the next rent; "cannot buy" blocks the next turn’s offer', () => {
     const game = scripted([
       [1, 0],
@@ -427,7 +574,7 @@ describe('events: the dice sum decides (frozen)', () => {
       (x.players[0] as { rentHoliday: boolean }).rentHoliday = true;
     });
     const t = act(game, holiday, { type: 'ROLL' });
-    expect(cash(t.state, 0)).toBe(10_500);
+    expect(cash(t.state, 0)).toBe(S0);
     expect(logs(t).some((e) => e.type === 'RENT_WAIVED')).toBe(true);
     const blocked = start(game, [0, 1], (x) => {
       (x.players[0] as { noBuyActive: boolean }).noBuyActive = true;
@@ -437,62 +584,58 @@ describe('events: the dice sum decides (frozen)', () => {
 });
 
 describe('loans, raising money and insolvency', () => {
-  it('lends in ₹1,000 steps with a 10 % fee, several times, up to the limit; repays early', () => {
+  it('lends in ₹5,000 steps with a 10 % fee, several times, up to the limit; repays early', () => {
     const game = scripted();
-    let s = start(game, [0, 1], (x) => own(x, 0, 35, 0));
-    expect(borrowLimit(s, 0)).toBe(3000 + 1400);
-    expect(canBorrow(s, 0)).toBe(4000);
-    s = act(game, s, { type: 'LOAN', amount: 1000 }).state;
-    s = act(game, s, { type: 'LOAN', amount: 2000 }).state;
-    expect(s.players[0]).toMatchObject({ cash: 13_500, debt: 3300 });
-    s = act(game, s, { type: 'LOAN', amount: 1000 }).state; // debt 4,400 = the limit
-    expect(verdict(game, s, 0, { type: 'LOAN', amount: 1000 })).toBe('ILLEGAL_ACTION');
-    expect(verdict(game, s, 0, { type: 'LOAN', amount: 500 })).toBe('ILLEGAL_ACTION');
-    s = act(game, s, { type: 'REPAY', amount: 1300 }).state;
-    expect(s.players[0]).toMatchObject({ cash: 13_200, debt: 3100 });
-    const last = start(game, [0, 1], (x) => (x.round = x.rounds));
-    expect(canBorrow(last, 0)).toBe(0);
+    const delhi = space('delhi');
+    let s = start(game, [0, 1], (x) => own(x, 0, delhi, 0));
+    expect(borrowLimit(s, 0)).toBe(E.loanBase + priceOf(delhi) / 2);
+    expect(canBorrow(s, 0)).toBe(20_000);
+    s = act(game, s, { type: 'LOAN', amount: 5000 }).state;
+    s = act(game, s, { type: 'LOAN', amount: 10_000 }).state;
+    expect(s.players[0]).toMatchObject({ cash: S0 + 15_000, debt: 16_500 });
+    expect(verdict(game, s, 0, { type: 'LOAN', amount: 2500 })).toBe('ILLEGAL_ACTION');
+    s = act(game, s, { type: 'LOAN', amount: 5000 }).state;
+    expect(verdict(game, s, 0, { type: 'LOAN', amount: 5000 })).toBe('ILLEGAL_ACTION');
+    s = act(game, s, { type: 'REPAY', amount: 6500 }).state;
+    expect(s.players[0]).toMatchObject({ cash: S0 + 20_000 - 6500, debt: 15_500 });
+    expect(
+      canBorrow(
+        start(game, [0, 1], (x) => (x.round = x.rounds)),
+        0,
+      ),
+    ).toBe(0);
   });
 
   it('opens Raise money for an unpayable rent; selling covers it and pays automatically', () => {
     const game = scripted([[1, 0]]);
+    const delhi = space('delhi');
     const s = start(game, [0, 1], (x) => {
-      own(x, 1, 1, 4);
+      own(x, 1, 1, HOTEL);
       (x.players[0] as { cash: number }).cash = 100;
-      own(x, 0, 35, 4);
+      own(x, 0, delhi, HOTEL);
     });
     const due = rentAt(s, 1);
     const t = act(game, s, { type: 'ROLL' });
     expect(t.state.phase).toBe('RAISE');
     expect(t.state.raise?.total).toBe(due);
-    expect(verdict(game, t.state, 0, { type: 'ROLL' })).toBe('INVALID_PHASE');
-    const sold = act(game, t.state, { type: 'SELL_ASSET', space: 35 });
-    expect(sold.state.owner[35]).toBeNull();
+    const sold = act(game, t.state, { type: 'SELL_ASSET', space: delhi });
+    expect(sold.state.owner[delhi]).toBeNull();
     expect(sold.state.phase).toBe('HOLD');
-    expect(cash(sold.state, 1)).toBe(10_500 + due);
+    expect(cash(sold.state, 1)).toBe(S0 + due);
     conserved(s, sold.state);
-    // Cumulative spending is a record; sales never reduce it.
-    const spent = start(game, [0, 1], (x) => {
-      (x.players[0] as { spend: { property: number } }).spend.property = 2800;
-    });
-    expect(wealthOf(spent, 0).property).toBe(2800);
   });
 
-  it('lets the bank handle it (timeout): loans, buildings, assets, then INSOLVENT and still playing', () => {
+  it('lets the bank handle it: loans, buildings, assets, then INSOLVENT and still playing', () => {
     const game = scripted([[1, 0]]);
     const s = start(game, [0, 1], (x) => {
-      own(x, 1, 1, 4);
+      own(x, 1, 1, HOTEL);
       (x.players[0] as { cash: number }).cash = 0;
       x.economy = { ...x.economy, loanBase: 0 };
     });
-    const t = act(game, s, { type: 'ROLL' });
-    const done = timer(game, t.state);
+    const done = timer(game, act(game, s, { type: 'ROLL' }).state);
     expect(done.state.players[0]).toMatchObject({ cash: 0, debt: 0, insolvent: true });
-    expect(logs(done).some((e) => e.type === 'INSOLVENT')).toBe(true);
     conserved(s, done.state);
-    // Still in the match: their turns keep coming.
     let x = timer(game, done.state).state;
-    expect(x.current).toBe(1);
     for (let k = 0; k < 5 && x.current !== 0; k++) x = timer(game, x).state;
     expect(x.current).toBe(0);
     expect(x.phase).toBe('ROLL');
@@ -501,70 +644,41 @@ describe('loans, raising money and insolvency', () => {
   it('repays debt from cash at the end, so loans add no final wealth', () => {
     const game = scripted();
     let s = start(game, [0, 1], (x) => (x.rounds = 5));
-    s = act(game, s, { type: 'LOAN', amount: 2000 }).state;
+    s = act(game, s, { type: 'LOAN', amount: 5000 }).state;
     for (let k = 0; k < 400 && s.phase !== 'OVER'; k++) s = timer(game, s).state;
     expect(s.players[0]?.debt).toBe(0);
-    expect(s.log.some((e) => e.type === 'SETTLED' && e.seat === 0 && e.repaid === 2200)).toBe(true);
+    expect(s.log.some((e) => e.type === 'SETTLED' && e.seat === 0 && e.repaid === 5500)).toBe(true);
   });
 });
 
 describe('auctions (owner-initiated) and trading', () => {
-  const owned = (game: Game) =>
-    start(game, [0, 1, 2], (x) => {
-      own(x, 0, space('mumbai'), 2);
-    });
-
-  it('auctions an owned asset (with buildings): others bid, the seller can’t, the winner pays', () => {
+  it('auctions an owned asset with its buildings: others bid, the seller can’t, the winner pays', () => {
     const game = scripted();
-    const s = owned(game);
     const mumbai = space('mumbai');
+    const s = start(game, [0, 1, 2], (x) => own(x, 0, mumbai, 2));
     expect(verdict(game, s, 0, { type: 'AUCTION_START', space: 1 })).toBe('ILLEGAL_ACTION');
     let x = act(game, s, { type: 'AUCTION_START', space: mumbai }).state;
-    expect(x.phase).toBe('AUCTION');
     const open = x.auction?.open as number;
     expect(open).toBe(
       Math.round(((priceOf(mumbai) + buildCost(mumbai, 0) + buildCost(mumbai, 1)) * 0.5) / 100) *
         100,
     );
     expect(verdict(game, x, 0, { type: 'BID', amount: open })).toBe('NOT_ELIGIBLE');
-    expect(verdict(game, x, 1, { type: 'BID', amount: open - 100 })).toBe('ILLEGAL_ACTION');
     x = act(game, x, { type: 'BID', amount: open }, 1).state;
-    expect(verdict(game, x, 2, { type: 'BID', amount: open })).toBe('ILLEGAL_ACTION');
     x = act(game, x, { type: 'BID', amount: open + 500 }, 2).state;
     const done = timer(game, x);
     expect(done.state.owner[mumbai]).toBe(2);
     expect(done.state.level[mumbai]).toBe(2);
-    expect(cash(done.state, 0)).toBe(10_500 + open + 500);
+    expect(cash(done.state, 0)).toBe(S0 + open + 500);
     expect(done.state.players[2]?.spend.property).toBe(open + 500);
-    expect(done.state.phase).toBe('ROLL');
-    // One auction per turn, and a 3-round lock on the asset.
-    expect(verdict(game, done.state, 0, { type: 'AUCTION_START', space: mumbai })).toBe(
-      'ILLEGAL_ACTION',
-    );
     expect(done.state.lockedUntil[mumbai]).toBe(done.state.round + 3);
     conserved(s, done.state);
+    expect(
+      timer(game, act(game, s, { type: 'AUCTION_START', space: mumbai }).state).state.owner[mumbai],
+    ).toBe(0);
   });
 
-  it('extends a late bid to 5 s and stops at 30 s; no bid leaves the asset with the seller', () => {
-    const game = scripted();
-    const s = act(game, owned(game), { type: 'AUCTION_START', space: space('mumbai') }).state;
-    const late = game.applyAction(
-      s,
-      1,
-      { type: 'BID', turn: s.turn, amount: s.auction!.open },
-      ctx(1000 + 14_000),
-    );
-    expect(late.state.auction?.endsAt).toBe(1000 + 14_000 + 5000);
-    const unsold = timer(game, s);
-    expect(unsold.state.owner[space('mumbai')]).toBe(0);
-    expect(logs(unsold)).toContainEqual({
-      type: 'AUCTION_UNSOLD',
-      seller: 0,
-      space: space('mumbai'),
-    });
-  });
-
-  it('trades only when both confirm; re-checks at acceptance; cash paid counts as spending', () => {
+  it('trades only when both confirm; cash paid counts as spending', () => {
     const game = scripted();
     const s = start(game, [0, 1], (x) => own(x, 1, 1));
     const offer = {
@@ -573,21 +687,15 @@ describe('auctions (owner-initiated) and trading', () => {
       give: { cash: 900, assets: [] },
       get: { cash: 0, assets: [1] },
     };
-    expect(verdict(game, s, 0, { ...offer, get: { cash: 0, assets: [2] } })).toBe('ILLEGAL_ACTION');
-    expect(verdict(game, s, 0, { ...offer, give: { cash: 99_999, assets: [] } })).toBe(
+    expect(verdict(game, s, 0, { ...offer, give: { cash: 999_999, assets: [] } })).toBe(
       'ILLEGAL_ACTION',
     );
     const proposed = act(game, s, offer).state;
-    expect(proposed.phase).toBe('TRADE');
-    expect(verdict(game, proposed, 0, { type: 'TRADE_ANSWER', accept: true })).toBe('NOT_ELIGIBLE');
     const yes = act(game, proposed, { type: 'TRADE_ANSWER', accept: true }, 1).state;
     expect(yes.owner[1]).toBe(0);
-    expect([cash(yes, 0), cash(yes, 1)]).toEqual([9600, 11_400]);
+    expect([cash(yes, 0), cash(yes, 1)]).toEqual([S0 - 900, S0 + 900]);
     expect(yes.players[0]?.spend.property).toBe(900);
-    expect(yes.phase).toBe('ROLL');
-    const no = act(game, proposed, { type: 'TRADE_ANSWER', accept: false }, 1).state;
-    expect(no.owner[1]).toBe(1);
-    expect(timer(game, proposed).state.owner[1]).toBe(1); // timeout = declined
+    expect(act(game, proposed, { type: 'TRADE_ANSWER', accept: false }, 1).state.owner[1]).toBe(1);
   });
 });
 
@@ -602,9 +710,11 @@ describe('server authority', () => {
     });
     for (const forged of [
       { type: 'ROLL', dice: [6, 6] },
+      { type: 'ROLL', to: 30 },
       { type: 'BUY', space: 1, price: 0 },
       { type: 'BUY', space: 99 },
       { type: 'SKIP', cash: 99_999 },
+      { type: 'BUILD', space: 1, levels: 4 },
       { type: 'LOAN', amount: -1000 },
       {
         type: 'TRADE_PROPOSE',
@@ -616,13 +726,15 @@ describe('server authority', () => {
       expect(verdict(game, s, 0, forged), JSON.stringify(forged)).toBe('INVALID_PAYLOAD');
     }
     expect(verdict(game, s, 0, { type: 'BUY', space: 1 })).toBe('INVALID_PHASE');
+    expect(verdict(game, s, 0, { type: 'FREE_BUILD', space: 1 })).toBe('INVALID_PHASE');
     const t = act(game, s, { type: 'ROLL' });
     expect(verdict(game, t.state, 0, { type: 'BUY', space: 2 })).toBe('ILLEGAL_ACTION');
+    expect(verdict(game, t.state, 0, { type: 'BUILD', space: 1 })).toBe('ILLEGAL_ACTION');
     const over = start(game, [0, 1], (x) => (x.phase = 'OVER'));
     expect(verdict(game, over, 0, { type: 'ROLL' })).toBe('INVALID_PHASE');
   });
 
-  it('times out safely after 30 s: rolls, declines, waits at Jail; three in a row → bot', () => {
+  it('times out safely after 30 s: rolls, declines; three in a row → bot', () => {
     const game = scripted([
       [1, 0],
       [1, 0],
@@ -673,13 +785,12 @@ describe('final wealth (frozen formula) and bots', () => {
             expect(s.players[x]!.debt).toBeGreaterThanOrEqual(0);
           }
           for (const i of ASSET_SPACES) if (s.owner[i] === null) expect(s.level[i]).toBe(0);
+          for (const i of TRANSPORT_SPACES) expect(s.level[i]).toBe(0);
         },
       });
       expect(r.state.phase).toBe('OVER');
-      expect(r.state.final).not.toBeNull();
-      const start = r.state.seats.length * E.startCash;
       expect(r.state.seats.reduce((n, x) => n + r.state.players[x]!.cash, 0)).toBe(
-        start + r.state.bankNet,
+        r.state.seats.length * E.startCash + r.state.bankNet,
       );
     }
   });

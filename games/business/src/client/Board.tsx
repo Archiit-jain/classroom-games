@@ -14,19 +14,25 @@ import {
   ASSET_SPACES,
   BOARD,
   HOTEL,
+  TRANSPORT_SPACES,
   baseRent,
   buildCost,
   buildingsValue,
   cellOf,
   cityRent,
+  edgeOf,
   eventOutcome,
+  groupSpaces,
   isCity,
   isTransport,
   priceOf,
-  sideOf,
+  transportRent,
   type BusinessAction,
   type BusinessEvent,
   type BusinessView,
+  type Deck,
+  type Economy,
+  type Group,
   type LogEntry,
   type Space,
 } from '../shared';
@@ -42,7 +48,7 @@ import {
   TransportIcon,
 } from './icons';
 import { f, fk, rupees } from './messages';
-import { HOP_MS } from './timing';
+import { DICE_MS, HOP_MS, LAND_MS, walkMs } from './timing';
 import './business.css';
 
 type Props = BoardProps<BusinessView, BusinessAction, BusinessEvent>;
@@ -68,13 +74,36 @@ const spot = (i: number) => {
 const OUTWARD = 2.2;
 const stand = (i: number) => {
   const p = spot(i);
-  if (BOARD[i]?.kind === 'corner') return p;
-  const side = sideOf(i);
-  if (side === 0) return { x: p.x - OUTWARD, y: p.y };
-  if (side === 1) return { x: p.x, y: p.y - OUTWARD };
-  if (side === 2) return { x: p.x + OUTWARD, y: p.y };
-  return { x: p.x, y: p.y + OUTWARD };
+  switch (edgeOf(i)) {
+    case 'right':
+      return { x: p.x + OUTWARD, y: p.y };
+    case 'top':
+      return { x: p.x, y: p.y - OUTWARD };
+    case 'left':
+      return { x: p.x - OUTWARD, y: p.y };
+    case 'bottom':
+      return { x: p.x, y: p.y + OUTWARD };
+    default:
+      return p;
+  }
 };
+
+/** Event text with the economy's (scaled) amounts filled in. */
+export function eventText(deck: Deck, sum: number, e: Economy): string {
+  const fx = eventOutcome(deck, sum, e).effect;
+  const params: Record<string, string> = { salary: rupees(e.salary) };
+  if ('amount' in fx) params.amount = rupees(fx.amount);
+  if (fx.kind === 'freeBuilding') params.fallback = rupees(fx.fallback);
+  if (fx.kind === 'repairs') {
+    params.perHouse = rupees(fx.perHouse);
+    params.perHotel = rupees(fx.perHotel);
+    params.max = rupees(fx.max);
+  }
+  return fk(`event.${deck}.${sum}`, params);
+}
+
+const REGION_ORDER: readonly Group[] = ['A', 'B', 'C', 'D'];
+const levelName = (lv: number) => fk(`level.${lv}`);
 
 export const seatColor = (seat: number) => `var(--cb-${seatAccent(seat)})`;
 export const spaceName = (i: number, short = false): string => {
@@ -133,11 +162,23 @@ function useCompact(ref: React.RefObject<HTMLElement | null>): boolean {
   return compact;
 }
 
+interface Walk {
+  version: number;
+  seat: number;
+  /** The authoritative path from the server, starting where the pawn stood. */
+  path: number[];
+  step: number;
+  stage: 'dice' | 'walk' | 'landed' | 'done';
+  /** How many times the pawn has stepped onto START so far (keys the pass-START flash). */
+  passed: number;
+}
+
 /**
- * Where each token stands on screen: the mover glides tile by tile along the server's
- * path (CSS transitions between tiles), others stand still.
+ * The pawn walks the server's path space by space in every effects mode: the dice
+ * tumble, then one hop per space (passing START flashes the salary), then a landing.
+ * Decisions, rent and ownership wait until it has landed.
  */
-function useTokenPositions(
+function useWalk(
   view: BusinessView,
   events: readonly BusinessEvent[],
   version: number,
@@ -147,29 +188,56 @@ function useTokenPositions(
     (e): e is Extract<BusinessEvent, { type: 'ROLLED' }> =>
       e.type === 'ROLLED' && e.path.length > 0,
   );
-  const [walk, setWalk] = useState<{
-    version: number;
-    seat: number;
-    path: number[];
-    step: number;
-  } | null>(null);
-  if (rolled && effects !== 'reduced' && walk?.version !== version) {
-    setWalk({ version, seat: rolled.seat, path: [rolled.from, ...rolled.path], step: 0 });
+  const [walk, setWalk] = useState<Walk | null>(null);
+  if (rolled && walk?.version !== version) {
+    setWalk({
+      version,
+      seat: rolled.seat,
+      path: [rolled.from, ...rolled.path],
+      step: 0,
+      stage: rolled.dice.length > 0 ? 'dice' : 'walk',
+      passed: 0,
+    });
   }
   useEffect(() => {
-    if (!walk || walk.step >= walk.path.length - 1) return;
+    if (!walk || walk.stage === 'done') return;
+    const ms =
+      walk.stage === 'dice'
+        ? DICE_MS[effects]
+        : walk.stage === 'walk'
+          ? HOP_MS[effects]
+          : LAND_MS[effects];
+    const v = walk.version;
     const t = setTimeout(
-      () => setWalk((w) => (w && w.version === walk.version ? { ...w, step: w.step + 1 } : w)),
-      HOP_MS[effects],
+      () =>
+        setWalk((w) => {
+          if (!w || w.version !== v) return w;
+          if (w.stage === 'dice') return { ...w, stage: 'walk' };
+          if (w.stage === 'walk') {
+            if (w.step >= w.path.length - 1) return { ...w, stage: 'landed' };
+            const step = w.step + 1;
+            return { ...w, step, passed: w.path[step] === 0 ? w.passed + 1 : w.passed };
+          }
+          return { ...w, stage: 'done' };
+        }),
+      ms,
     );
     return () => clearTimeout(t);
   }, [walk, effects]);
+  const active = walk !== null && walk.stage !== 'done';
   const shown: Record<number, number> = {};
   for (const x of view.seats) shown[x] = view.players[x]?.position ?? 0;
-  const moving =
-    walk && walk.version === version && walk.step < walk.path.length - 1 ? walk.seat : null;
-  if (moving !== null && walk) shown[moving] = walk.path[walk.step] as number;
-  return { shown, moving, step: walk?.step ?? 0 };
+  if (active && walk) shown[walk.seat] = walk.path[walk.step] as number;
+  return {
+    shown,
+    /** The seat whose pawn is still rolling or walking. */
+    moving: active && walk && (walk.stage === 'dice' || walk.stage === 'walk') ? walk.seat : null,
+    /** The seat whose pawn just landed (bounce). */
+    landed: active && walk?.stage === 'landed' ? walk.seat : null,
+    /** Anyone's roll is still being shown (dice → walk → landing). */
+    walking: active,
+    passKey: walk && walk.passed > 0 ? `${walk.version}-${walk.passed}` : null,
+  };
 }
 
 // ───────────────────────────── money flights ─────────────────────────────
@@ -227,10 +295,13 @@ function MoneyLayer({
   root,
   flights,
   effects,
+  delayMs,
 }: {
   root: React.RefObject<HTMLDivElement | null>;
   flights: Flight[];
   effects: EffectsMode;
+  /** Wait for the pawn to land before money moves (rent, salary). */
+  delayMs: number;
 }) {
   const [active, setActive] = useState<
     (Flight & { x0: number; y0: number; x1: number; y1: number; delay: number })[]
@@ -241,20 +312,23 @@ function MoneyLayer({
     const el = root.current;
     if (!el) return;
     const box = el.getBoundingClientRect();
+    const clampX = (x: number) => Math.max(24, Math.min(box.width - 80, x));
     const at = (anchor: string) => {
       const a = el.querySelector(`[data-anchor="${anchor}"]`);
       if (!a) return null;
       const r = a.getBoundingClientRect();
-      return { x: r.left + r.width / 2 - box.left, y: r.top + r.height / 2 - box.top };
+      return { x: clampX(r.left + r.width / 2 - box.left), y: r.top + r.height / 2 - box.top };
     };
     const next = flights.flatMap((fl, i) => {
       const a = at(fl.from);
       const b = at(fl.to);
-      return a && b ? [{ ...fl, x0: a.x, y0: a.y, x1: b.x, y1: b.y, delay: i * 0.12 }] : [];
+      return a && b
+        ? [{ ...fl, x0: a.x, y0: a.y, x1: b.x, y1: b.y, delay: delayMs / 1000 + i * 0.12 }]
+        : [];
     });
     // eslint-disable-next-line react-hooks/set-state-in-effect -- positions are measured from the laid-out DOM
     setActive(next);
-    const t = setTimeout(() => setActive([]), 1400 + next.length * 120);
+    const t = setTimeout(() => setActive([]), delayMs + 1400 + next.length * 120);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the flight ids
   }, [key, effects]);
@@ -294,7 +368,8 @@ export default function BusinessBoard(props: Props) {
   const narrow = useCompact(root);
   const [fit, setFit] = useState(false);
   const zoomed = narrow && !fit && view.phase !== 'OVER';
-  const { shown, moving } = useTokenPositions(view, events, version, effects);
+  const { shown, moving, landed, walking, passKey } = useWalk(view, events, version, effects);
+  const [holdingsOpen, setHoldingsOpen] = useState(false);
   const [focus, setFocus] = useState<{ turn: number; space: number } | null>(null);
   const [sheet, setSheet] = useState<null | 'loan' | 'repay' | 'auction' | 'trade'>(null);
   const [busy, setBusy] = useState(false);
@@ -361,12 +436,34 @@ export default function BusinessBoard(props: Props) {
   );
   const rolledNow = events.some((e) => e.type === 'ROLLED' && e.dice.length > 0);
   const flights = effects === 'reduced' ? [] : flightsFor(fresh, version);
+  const rolledHere = events.find(
+    (e): e is Extract<BusinessEvent, { type: 'ROLLED' }> =>
+      e.type === 'ROLLED' && e.path.length > 0,
+  );
+  const flightDelay = rolledHere
+    ? walkMs(rolledHere.dice.length > 0, rolledHere.path.length, effects)
+    : 0;
+  const rentNow = (() => {
+    const r = fresh.find(
+      (x) =>
+        x.type === 'PAID' && (x.reason === 'rent' || x.reason === 'transport') && x.to !== null,
+    );
+    return r && r.type === 'PAID' ? r : null;
+  })();
+  const rentShown = useFlash(rentNow, version, flightDelay + 2600);
   const mine = view.current === me && view.phase !== 'OVER';
+  // The landing square lights up once the pawn has arrived and a decision is open there.
+  const landingSpace =
+    !walking && ['DECIDE', 'EVENT', 'RAISE'].includes(view.phase)
+      ? (view.players[view.current]?.position ?? null)
+      : null;
   const tilt = !narrow && effects !== 'reduced';
   const latestReaction = (seat: number): BoardReaction | undefined =>
     [...reactions].reverse().find((r) => r.seat === seat);
   const optionSpaces = new Set<number>();
-  if (mine && view.decision && view.decision.kind !== 'JAIL') optionSpaces.add(view.decision.space);
+  if (mine && !walking && view.decision?.kind === 'FREE_BUILD') {
+    for (const i of view.decision.options ?? []) optionSpaces.add(i);
+  }
 
   const stage = (
     <Stage
@@ -376,16 +473,25 @@ export default function BusinessBoard(props: Props) {
       version={version}
       rolledNow={rolledNow}
       eventShown={eventShown}
+      rentShown={walking ? null : rentShown}
       label={label}
       send={send}
       busy={busy}
       final={!narrow}
     />
   );
+  const holdingsCount = ASSET_SPACES.filter((i) => view.owner[i] === me).length;
 
   return (
     <div className={`bz${narrow ? ' bz--narrow' : ''}`} ref={root}>
-      <TurnBanner view={view} me={me} name={nameOf(view.current)} msUntil={msUntil} />
+      <TurnBanner
+        view={view}
+        me={me}
+        name={nameOf(view.current)}
+        msUntil={msUntil}
+        holdings={holdingsCount}
+        onHoldings={() => setHoldingsOpen((x) => !x)}
+      />
       <Players view={view} seats={seats} me={me} reaction={latestReaction} />
 
       <div className="bz-viewport-wrap">
@@ -408,6 +514,7 @@ export default function BusinessBoard(props: Props) {
                   me={me}
                   focus={focus?.space === i}
                   option={optionSpaces.has(i)}
+                  landing={landingSpace === i}
                   sold={sold === i}
                   built={built === i}
                   effects={effects}
@@ -436,8 +543,9 @@ export default function BusinessBoard(props: Props) {
                         seat === me && 'bz-token--me',
                         seat === view.current && 'bz-token--current',
                         seat === moving && 'bz-token--moving',
+                        seat === landed && 'bz-token--landed',
                         view.players[seat]?.insolvent && 'bz-token--insolvent',
-                        effects === 'reduced' && 'bz-token--still',
+                        effects === 'reduced' && 'bz-token--plain',
                       ]
                         .filter(Boolean)
                         .join(' ')}
@@ -461,10 +569,23 @@ export default function BusinessBoard(props: Props) {
                   );
                 })}
               </div>
+              {passKey && (
+                <PassStart key={passKey} amount={view.economy.salary} effects={effects} />
+              )}
             </div>
           </div>
         </div>
         {narrow && <div className="bz-stage-over">{stage}</div>}
+        {narrow && (
+          <button
+            type="button"
+            className="bz-holdings-fab"
+            style={{ '--seat': seatColor(me) } as CSSProperties}
+            onClick={() => setHoldingsOpen((x) => !x)}
+          >
+            {f('myPropertiesN', { n: holdingsCount })}
+          </button>
+        )}
         {narrow && view.phase !== 'OVER' && (
           <button type="button" className="bz-fit" onClick={() => setFit((x) => !x)}>
             {fit ? f('followPlay') : f('seeBoard')}
@@ -484,10 +605,19 @@ export default function BusinessBoard(props: Props) {
         />
       )}
 
+      <Holdings
+        view={view}
+        me={me}
+        open={holdingsOpen}
+        onClose={() => setHoldingsOpen(false)}
+        effects={effects}
+      />
+
       <ActionTray
         view={view}
         me={me}
         mine={mine}
+        walking={walking}
         busy={busy}
         send={send}
         label={label}
@@ -496,7 +626,7 @@ export default function BusinessBoard(props: Props) {
       />
 
       <Log view={view} label={label} />
-      <MoneyLayer root={root} flights={flights} effects={effects} />
+      <MoneyLayer root={root} flights={flights} effects={effects} delayMs={flightDelay} />
     </div>
   );
 }
@@ -508,11 +638,15 @@ function TurnBanner({
   me,
   name,
   msUntil,
+  holdings,
+  onHoldings,
 }: {
   view: BusinessView;
   me: number;
   name: string;
   msUntil(ts: number): number;
+  holdings: number;
+  onHoldings(): void;
 }) {
   const mine = view.current === me;
   const timed = view.phase !== 'HOLD' && view.phase !== 'OVER' && view.phaseMs > 0;
@@ -538,6 +672,14 @@ function TurnBanner({
           ? f('lastRound')
           : f('round', { round: Math.min(view.round, view.rounds), rounds: view.rounds })}
       </span>
+      <button
+        type="button"
+        className="bz-holdings-toggle"
+        style={{ '--seat': seatColor(me) } as CSSProperties}
+        onClick={onHoldings}
+      >
+        {f('myPropertiesN', { n: holdings })}
+      </button>
       {timed && (
         <CountdownRing
           key={`${view.turn}-${view.phase}-${view.phaseEndsAt}`}
@@ -563,8 +705,19 @@ function Players({
   me: number;
   reaction(seat: number): BoardReaction | undefined;
 }) {
+  const strip = useRef<HTMLOListElement>(null);
+  const current = view.current;
+  useEffect(() => {
+    const ol = strip.current;
+    const li = ol?.querySelector<HTMLElement>(`[data-anchor="seat-${current}"]`);
+    if (!ol || !li || ol.scrollWidth <= ol.clientWidth) return;
+    ol.scrollTo({
+      left: li.offsetLeft - (ol.clientWidth - li.clientWidth) / 2,
+      behavior: 'smooth',
+    });
+  }, [current]);
   return (
-    <ol className="bz-players">
+    <ol className="bz-players" ref={strip}>
       {[...seats]
         .sort((a, b) => view.order.indexOf(a.seat) - view.order.indexOf(b.seat))
         .map((s) => {
@@ -634,6 +787,7 @@ function Tile({
   me,
   focus,
   option,
+  landing,
   sold,
   built,
   effects,
@@ -646,6 +800,7 @@ function Tile({
   me: number;
   focus: boolean;
   option: boolean;
+  landing: boolean;
   sold: boolean;
   built: boolean;
   effects: EffectsMode;
@@ -653,7 +808,7 @@ function Tile({
   onClick(): void;
 }) {
   const c = cellOf(index);
-  const side = space.kind === 'corner' ? 'corner' : `s${sideOf(index)}`;
+  const side = edgeOf(index);
   const owner = view.owner[index];
   const level = view.level[index] ?? 0;
   const aria = [spaceName(index)];
@@ -678,6 +833,7 @@ function Tile({
         owner === me && 'bz-tile--mine',
         focus && 'bz-tile--focus',
         option && 'bz-tile--option',
+        landing && 'bz-tile--landing',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -711,7 +867,9 @@ function Tile({
         )}
       </span>
       {owner !== null && owner !== undefined && (
-        <span className="bz-tile__flag" aria-hidden="true" />
+        <span className="bz-tile__flag" aria-hidden="true">
+          {owner === me ? f('you') : ''}
+        </span>
       )}
       {space.kind === 'city' && level > 0 && (
         <span
@@ -770,10 +928,8 @@ const cornerNote = (corner: string, view: BusinessView) =>
 function rentFor(view: BusinessView, i: number): number {
   const owner = view.owner[i];
   if (owner === null || owner === undefined) return 0;
-  if (isTransport(BOARD[i])) {
-    const n = ASSET_SPACES.filter((x) => isTransport(BOARD[x]) && view.owner[x] === owner).length;
-    return view.economy.transportRent[n - 1] ?? 0;
-  }
+  // A transport's own fixed rent.
+  if (isTransport(BOARD[i])) return transportRent(i, view.economy);
   const s = BOARD[i];
   const group = isCity(s) ? s.group : null;
   const count = ASSET_SPACES.filter((x) => {
@@ -857,22 +1013,36 @@ function Die({
   const r = ROTATE[value] ?? ROTATE[1]!;
   if (effects === 'reduced') {
     return (
-      <span className="bz-die bz-die--flat">
+      <motion.span
+        className="bz-die bz-die--flat"
+        initial={roll ? { opacity: 0.3 } : false}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2 }}
+      >
         <Face n={value} />
-      </span>
+      </motion.span>
     );
   }
   return (
     <span className="bz-die">
       <motion.span
         className="bz-die__cube"
-        initial={roll ? { rotateX: r.x + 720 + k * 90, rotateY: r.y - 540, y: -30 } : false}
-        animate={{ rotateX: r.x, rotateY: r.y, y: 0 }}
-        transition={
-          effects === 'full'
-            ? { type: 'spring', stiffness: 90, damping: 13, delay: k * 0.05 }
-            : { duration: 0.35 }
+        initial={roll ? { rotateX: r.x + 720 + k * 90, rotateY: r.y - 540, y: -34, x: 0 } : false}
+        animate={
+          roll
+            ? {
+                rotateX: r.x,
+                rotateY: r.y,
+                y: [-34, 6, -6, 0],
+                x: [0, -5, 5, -2, 0],
+              }
+            : { rotateX: r.x, rotateY: r.y, y: 0, x: 0 }
         }
+        transition={{
+          duration: (DICE_MS[effects] - 100) / 1000,
+          ease: [0.2, 0.75, 0.3, 1],
+          delay: k * 0.04,
+        }}
       >
         {FACES.map(([n, t]) => (
           <span
@@ -917,6 +1087,7 @@ function Stage({
   version,
   rolledNow,
   eventShown,
+  rentShown,
   label,
   send,
   busy,
@@ -928,6 +1099,7 @@ function Stage({
   version: number;
   rolledNow: boolean;
   eventShown: Extract<LogEntry, { type: 'EVENT' }> | null;
+  rentShown: Extract<LogEntry, { type: 'PAID' }> | null;
   label(seat: number): string;
   send: Send;
   busy: boolean;
@@ -956,9 +1128,9 @@ function Stage({
           <motion.span
             key={`s${view.lastRoll?.turn}-${dice.join()}`}
             className="bz-dice__sum"
-            initial={effects === 'reduced' ? false : { scale: 0, opacity: 0 }}
+            initial={rolledNow ? { scale: 0, opacity: 0 } : false}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: effects === 'full' ? 0.6 : 0.2 }}
+            transition={{ delay: (DICE_MS[effects] - 150) / 1000, duration: 0.25 }}
           >
             {sum}
           </motion.span>
@@ -966,7 +1138,35 @@ function Stage({
       )}
       <AnimatePresence>
         {eventShown && (
-          <EventCard key={`ev-${version}`} entry={eventShown} effects={effects} label={label} />
+          <EventCard
+            key={`ev-${version}`}
+            entry={eventShown}
+            effects={effects}
+            label={label}
+            economy={view.economy}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {rentShown && rentShown.to !== null && (
+          <motion.div
+            key={`rent-${rentShown.from}-${rentShown.amount}-${view.turn}`}
+            className="bz-rent"
+            role="status"
+            style={{ '--seat': seatColor(rentShown.to) } as CSSProperties}
+            initial={effects === 'reduced' ? false : { y: 20, opacity: 0, scale: 0.8 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <RupeeChip size={20} />
+            {rentShown.from === me
+              ? f('rentDueYou', { amount: rupees(rentShown.amount), owner: label(rentShown.to) })
+              : f('rentDue', {
+                  name: label(rentShown.from),
+                  amount: rupees(rentShown.amount),
+                  owner: label(rentShown.to),
+                })}
+          </motion.div>
         )}
       </AnimatePresence>
       {view.phase === 'AUCTION' && view.auction && (
@@ -983,10 +1183,12 @@ function EventCard({
   entry,
   effects,
   label,
+  economy,
 }: {
   entry: Extract<LogEntry, { type: 'EVENT' }>;
   effects: EffectsMode;
   label(seat: number): string;
+  economy: Economy;
 }) {
   return (
     <motion.div
@@ -1012,7 +1214,7 @@ function EventCard({
         {f('sum', { sum: entry.sum })}
       </span>
       <span className="bz-event__verdict">{entry.good ? f('good') : f('bad')}</span>
-      <span className="bz-event__text">{fk(`event.${entry.deck}.${entry.sum}`)}</span>
+      <span className="bz-event__text">{eventText(entry.deck, entry.sum, economy)}</span>
       <span className="bz-event__who">{label(entry.seat)}</span>
     </motion.div>
   );
@@ -1199,9 +1401,14 @@ function PropertyCard({
             {rupees(s.price)}
           </p>
           <p className="bz-card__line">
-            {owner !== null && owner !== undefined
-              ? `${f('owner')}: ${label(owner)} · ${f('rentNow')} ${rupees(rentFor(view, index))}`
-              : f('forSale')}
+            {owner !== null && owner !== undefined ? (
+              <>
+                <OwnerChip owner={owner} label={label} /> · {f('rentNow')}{' '}
+                {rupees(rentFor(view, index))} · {levelName(view.level[index] ?? 0)}
+              </>
+            ) : (
+              f('forSale')
+            )}
           </p>
           <p className="bz-card__small">
             {f('rentTable', {
@@ -1224,15 +1431,15 @@ function PropertyCard({
       {s.kind === 'transport' && (
         <>
           <p className="bz-card__line">
-            {f('price')} {rupees(e.transportPrice)} ·{' '}
-            {owner !== null && owner !== undefined
-              ? `${f('owner')}: ${label(owner)}`
-              : f('forSale')}
+            {f('price')} {rupees(s.price)} ·{' '}
+            {owner !== null && owner !== undefined ? (
+              <OwnerChip owner={owner} label={label} />
+            ) : (
+              f('forSale')
+            )}
           </p>
           <p className="bz-card__small">
-            {f('transportRule', {
-              table: e.transportRent.map((r, k) => `${k + 1}: ${rupees(r)}`).join(' · '),
-            })}
+            {f('transportRule', { rent: rupees(transportRent(index, e)) })}
           </p>
         </>
       )}
@@ -1256,6 +1463,7 @@ function ActionTray({
   view,
   me,
   mine,
+  walking,
   busy,
   send,
   label,
@@ -1265,6 +1473,7 @@ function ActionTray({
   view: BusinessView;
   me: number;
   mine: boolean;
+  walking: boolean;
   busy: boolean;
   send: Send;
   label(seat: number): string;
@@ -1283,6 +1492,9 @@ function ActionTray({
       view.phase === 'AUCTION' ? null : (
         <p className="bz-tray__note">{f('waiting', { name: label(view.current) })}</p>
       );
+  } else if (walking && view.phase !== 'ROLL') {
+    // Nothing to decide until the pawn has landed.
+    body = <p className="bz-tray__note bz-tray__moving">🎲 {f('moving')}</p>;
   } else if (view.phase === 'ROLL') {
     body = (
       <>
@@ -1400,6 +1612,7 @@ function ActionTray({
       const short = p.cash < d.cost;
       body = (
         <>
+          <LandingInfo view={view} me={me} space={d.space} label={label} />
           <p className="bz-tray__q">{f('buyQ', { place: spaceName(d.space) })}</p>
           <div className="bz-tray__row">
             <button
@@ -1438,43 +1651,65 @@ function ActionTray({
           )}
         </>
       );
-    } else {
-      const lv = view.level[d.space] ?? 0;
-      const options = Array.from({ length: HOTEL - lv }, (_, k) => k + 1);
+    } else if (d.kind === 'FREE_BUILD') {
       body = (
         <>
-          <p className="bz-tray__q">{f('buildQ', { place: spaceName(d.space) })}</p>
+          <p className="bz-tray__q">{f('freeQ')}</p>
           <div className="bz-tray__row bz-tray__row--wrap">
-            {options.map((n) => {
-              let cost = 0;
-              for (let k = 0; k < n; k++) cost += buildCost(d.space, lv + k, view.economy);
-              const toHotel = lv + n === HOTEL;
-              const what = toHotel
-                ? f('toHotel')
-                : n === 1
-                  ? f('houseN', { n })
-                  : f('housesN', { n });
+            {(d.options ?? []).map((i) => {
+              const lv = view.level[i] ?? 0;
               return (
                 <button
-                  key={n}
+                  key={i}
                   type="button"
                   className="btn btn--primary btn--small"
-                  disabled={busy || p.cash < cost}
-                  onClick={() => void send({ type: 'BUILD', space: d.space, levels: n })}
+                  disabled={busy}
+                  onClick={() => void send({ type: 'FREE_BUILD', space: i })}
                 >
-                  {f('build', { what, price: rupees(cost) })}
+                  {f('freeOpt', {
+                    place: spaceName(i),
+                    from: levelName(lv),
+                    to: levelName(lv + 1),
+                  })}
                 </button>
               );
             })}
+          </div>
+        </>
+      );
+    } else {
+      // BUILD: one level per click (House 1 → 2 → 3 → Hotel); Done ends the turn.
+      const lv = view.level[d.space] ?? 0;
+      const cost = buildCost(d.space, lv, view.economy);
+      const ownerBonus = groupBonus(view, d.space, me);
+      const nextRent = cityRent(d.space, lv + 1, ownerBonus, view.economy);
+      body = (
+        <>
+          <LandingInfo view={view} me={me} space={d.space} label={label} />
+          <p className="bz-tray__q">{f('buildQ', { place: spaceName(d.space) })}</p>
+          <div className="bz-tray__row bz-tray__row--wrap">
+            {lv < HOTEL && (
+              <button
+                type="button"
+                className="btn btn--primary bz-big"
+                disabled={busy || p.cash < cost}
+                onClick={() => void send({ type: 'BUILD', space: d.space })}
+              >
+                {f('buildNext', { what: levelName(lv + 1), price: rupees(cost) })}
+              </button>
+            )}
             <button
               type="button"
-              className="btn btn--small btn--ghost"
+              className="btn btn--ghost"
               disabled={busy}
               onClick={() => void send({ type: 'SKIP' })}
             >
-              {f('notNow')}
+              {(d.built ?? 0) > 0 ? f('done') : f('notNow')}
             </button>
           </div>
+          {lv < HOTEL && (
+            <p className="bz-tray__note">{f('buildThen', { rent: rupees(nextRent) })}</p>
+          )}
         </>
       );
     }
@@ -1506,8 +1741,9 @@ function LoanSheet({
   onDone(): void;
 }) {
   const max = view.canBorrow[me] ?? 0;
-  const steps = [1000, 2000, 5000].filter((x) => x <= max);
-  if (max >= 1000 && !steps.includes(max)) steps.push(max);
+  const step = view.economy.loanStep;
+  const steps = [step, 2 * step, 4 * step].filter((x) => x <= max);
+  if (max >= step && !steps.includes(max)) steps.push(max);
   return (
     <div className="bz-sheet">
       <p className="bz-sheet__title">{f('loanTitle')}</p>
@@ -1515,7 +1751,13 @@ function LoanSheet({
         <p className="bz-sheet__hint">{f('loanNone')}</p>
       ) : (
         <>
-          <p className="bz-sheet__hint">{f('loanHint', { max: rupees(max) })}</p>
+          <p className="bz-sheet__hint">
+            {f('loanHint', {
+              step: rupees(step),
+              debt: rupees(Math.round(step * (1 + view.economy.loanFee))),
+              max: rupees(max),
+            })}
+          </p>
           <div className="bz-tray__row bz-tray__row--wrap">
             {steps.map((amount) => (
               <button
@@ -1883,7 +2125,7 @@ function RaisePanel({
 
 // ───────────────────────────── log ─────────────────────────────
 
-export function logLine(e: LogEntry, label: (seat: number) => string): string {
+export function logLine(e: LogEntry, label: (seat: number) => string, economy: Economy): string {
   const name = (seat: number) => label(seat);
   switch (e.type) {
     case 'ROLLED':
@@ -1923,7 +2165,7 @@ export function logLine(e: LogEntry, label: (seat: number) => string): string {
         name: name(e.seat),
         deck: fk(`deck.${e.deck}`),
         sum: e.sum,
-        good: fk(`event.${e.deck}.${e.sum}`),
+        good: eventText(e.deck, e.sum, economy),
       });
     case 'RENT_WAIVED':
       return f('log.RENT_WAIVED', { name: name(e.seat), amount: rupees(e.amount) });
@@ -1966,7 +2208,9 @@ export function logLine(e: LogEntry, label: (seat: number) => string): string {
     case 'TRADE_DECLINED':
       return f('log.TRADE_DECLINED', { name: name(e.from), to: name(e.to) });
     case 'INSOLVENT':
-      return f('log.INSOLVENT', { name: name(e.seat) });
+      return label(e.seat) === f('you')
+        ? f('log.INSOLVENT_YOU')
+        : f('log.INSOLVENT', { name: name(e.seat) });
     case 'SETTLED':
       return f('log.SETTLED', { name: name(e.seat), amount: rupees(e.repaid) });
   }
@@ -1986,11 +2230,246 @@ function Log({ view, label }: { view: BusinessView; label(seat: number): string 
             key={`${view.log.length - i}`}
             className={`bz-log__item bz-log__item--${e.type.toLowerCase()}`}
           >
-            {logLine(e, label)}
+            {logLine(e, label, view.economy)}
           </li>
         ))}
       </ol>
     </section>
+  );
+}
+
+// ───────────────────────────── ownership ─────────────────────────────
+
+/** Does `seat` hold enough cities of the group of `space` for the ×2 group rent? */
+function groupBonus(view: BusinessView, space: number, seat: number): boolean {
+  const b = BOARD[space];
+  if (!isCity(b)) return false;
+  return (
+    groupSpaces(b.group).filter((i) => view.owner[i] === seat).length >= view.economy.groupThreshold
+  );
+}
+
+function OwnerChip({ owner, label }: { owner: number; label(seat: number): string }) {
+  return (
+    <span className="bz-owner" style={{ '--seat': seatColor(owner) } as CSSProperties}>
+      {f('ownedBy', { name: label(owner) })}
+    </span>
+  );
+}
+
+/** "+₹1,500 · START" rising from the START corner when the pawn steps onto it. */
+function PassStart({ amount, effects }: { amount: number; effects: EffectsMode }) {
+  const p = spot(0);
+  return (
+    <motion.div
+      className="bz-pass"
+      style={{ left: `${p.x}%`, top: `${p.y}%` }}
+      aria-hidden="true"
+      initial={effects === 'reduced' ? { opacity: 1, y: 0 } : { opacity: 0, y: 0, scale: 0.6 }}
+      animate={
+        effects === 'reduced'
+          ? { opacity: [1, 1, 0] }
+          : { opacity: [0, 1, 1, 0], y: [0, -30, -50, -70], scale: [0.6, 1.15, 1, 1] }
+      }
+      transition={{ duration: effects === 'reduced' ? 1.2 : 1.4, ease: 'easeOut' }}
+    >
+      <RupeeChip size={20} />
+      {f('passStart', { amount: rupees(amount) })}
+    </motion.div>
+  );
+}
+
+/** What the player landed on: the property, its rent, its level and their group progress. */
+function LandingInfo({
+  view,
+  me,
+  space,
+  label,
+}: {
+  view: BusinessView;
+  me: number;
+  space: number;
+  label(seat: number): string;
+}) {
+  const b = BOARD[space];
+  if (!isCity(b) && !isTransport(b)) return null;
+  const owner = view.owner[space];
+  const lv = view.level[space] ?? 0;
+  const e = view.economy;
+  return (
+    <div className={`bz-landing ${isCity(b) ? `bz-g-${b.group}` : 'bz-landing--transport'}`}>
+      <span className="bz-landing__stripe" aria-hidden="true" />
+      <span className="bz-landing__icon" aria-hidden="true">
+        {isCity(b) ? <CityIcon id={b.id} size={22} /> : <TransportIcon id={b.id} size={22} />}
+      </span>
+      <span className="bz-landing__body">
+        <span className="bz-landing__name">{spaceName(space)}</span>
+        <span className="bz-landing__meta">
+          {isCity(b) ? f('groupOf', { region: fk(`region.${b.group}`) }) : f('transportSection')} ·{' '}
+          {f('price')} {rupees(priceOf(space, e))}
+        </span>
+        {owner === null || owner === undefined ? (
+          <span className="bz-landing__meta">
+            {isCity(b)
+              ? f('rentIfOwned', { rent: rupees(cityRent(space, 0, false, e)) })
+              : f('fixedRent', { amount: rupees(transportRent(space, e)) })}
+          </span>
+        ) : (
+          <span className="bz-landing__meta">
+            <OwnerChip owner={owner} label={label} />{' '}
+            {isCity(b)
+              ? f('levelNow', { what: levelName(lv), rent: rupees(rentFor(view, space)) })
+              : f('fixedRent', { amount: rupees(transportRent(space, e)) })}
+          </span>
+        )}
+        {isCity(b) && (
+          <span className="bz-landing__meta">
+            {fk(`region.${b.group}`)}:{' '}
+            {f('progress', {
+              n: groupSpaces(b.group).filter((i) => view.owner[i] === me).length,
+              total: groupSpaces(b.group).length,
+            })}
+            {groupBonus(view, space, me) ? ` · ${f('rentDoubled')}` : ''}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function HoldingCard({ view, space }: { view: BusinessView; space: number }) {
+  const b = BOARD[space];
+  if (!isCity(b) && !isTransport(b)) return null;
+  const lv = view.level[space] ?? 0;
+  return (
+    <div
+      className={`bz-hcard ${isCity(b) ? `bz-g-${b.group}` : 'bz-hcard--transport'}`}
+      data-space={space}
+    >
+      <span className="bz-hcard__stripe" aria-hidden="true" />
+      <span className="bz-hcard__top">
+        {isCity(b) ? <CityIcon id={b.id} size={16} /> : <TransportIcon id={b.id} size={16} />}
+        <span className="bz-hcard__name">{spaceName(space, true)}</span>
+      </span>
+      <span className="bz-hcard__row">
+        <span>{f('price')}</span>
+        <strong>{rupees(priceOf(space, view.economy))}</strong>
+      </span>
+      <span className="bz-hcard__row">
+        <span>{f('rentLabel')}</span>
+        <strong>{rupees(rentFor(view, space))}</strong>
+      </span>
+      <span className="bz-hcard__build" aria-label={isCity(b) ? levelName(lv) : f('noBuildings')}>
+        {isTransport(b) ? (
+          <span className="bz-hcard__fixed">{f('fixedRent', { amount: '' }).trim()}</span>
+        ) : lv === HOTEL ? (
+          <Hotel size={18} />
+        ) : lv > 0 ? (
+          Array.from({ length: lv }, (_, k) => <House key={k} size={14} />)
+        ) : (
+          <span className="bz-hcard__fixed">{f('noBuildings')}</span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * MY PROPERTIES: the local player's cities by group (with progress towards the ×2 group
+ * rent) and their transports. A side panel on wide layouts; a toggle opens it as a
+ * floating panel (desktop) or a bottom sheet (phones) elsewhere.
+ */
+function Holdings({
+  view,
+  me,
+  open,
+  onClose,
+  effects,
+}: {
+  view: BusinessView;
+  me: number;
+  open: boolean;
+  onClose(): void;
+  effects: EffectsMode;
+}) {
+  if (!view.players[me]) return null;
+  const threshold = view.economy.groupThreshold;
+  const transports = TRANSPORT_SPACES.filter((i) => view.owner[i] === me);
+  return (
+    <motion.aside
+      className={`bz-holdings${open ? ' bz-holdings--open' : ''}`}
+      aria-label={f('myProperties')}
+      style={{ '--seat': seatColor(me) } as CSSProperties}
+      initial={false}
+      animate={open && effects !== 'reduced' ? { y: 0, opacity: 1 } : undefined}
+    >
+      <header className="bz-holdings__head">
+        <span className="bz-holdings__title">{f('myProperties')}</span>
+        <span className="bz-you">{f('you')}</span>
+        <button
+          type="button"
+          className="bz-holdings__close"
+          onClick={onClose}
+          aria-label={f('close')}
+        >
+          ×
+        </button>
+      </header>
+      {REGION_ORDER.map((g) => {
+        const all = groupSpaces(g);
+        const owned = all.filter((i) => view.owner[i] === me);
+        const bonus = owned.length >= threshold;
+        return (
+          <section
+            key={g}
+            className={`bz-hgroup bz-g-${g}${bonus ? ' bz-hgroup--bonus' : ''}`}
+            aria-label={fk(`region.${g}`)}
+          >
+            <h3 className="bz-hgroup__head">
+              <span className="bz-hgroup__swatch" aria-hidden="true" />
+              <span className="bz-hgroup__name">{fk(`region.${g}`).toUpperCase()}</span>
+              <span className="bz-hgroup__count">
+                {f('progress', { n: owned.length, total: all.length })}
+              </span>
+              {bonus ? (
+                <span className="bz-hgroup__bonus">{f('rentDoubled')}</span>
+              ) : owned.length > 0 ? (
+                <span className="bz-hgroup__hint">
+                  {f('moreForBonus', { n: threshold - owned.length })}
+                </span>
+              ) : null}
+            </h3>
+            {owned.length > 0 ? (
+              <div className="bz-hcards">
+                {owned.map((i) => (
+                  <HoldingCard key={i} view={view} space={i} />
+                ))}
+              </div>
+            ) : (
+              <p className="bz-hgroup__none">{f('noneYet')}</p>
+            )}
+          </section>
+        );
+      })}
+      <section className="bz-hgroup bz-hgroup--transport" aria-label={f('transportSection')}>
+        <h3 className="bz-hgroup__head">
+          <span className="bz-hgroup__swatch" aria-hidden="true" />
+          <span className="bz-hgroup__name">{f('transportSection')}</span>
+          <span className="bz-hgroup__count">
+            {f('progress', { n: transports.length, total: TRANSPORT_SPACES.length })}
+          </span>
+        </h3>
+        {transports.length > 0 ? (
+          <div className="bz-hcards">
+            {transports.map((i) => (
+              <HoldingCard key={i} view={view} space={i} />
+            ))}
+          </div>
+        ) : (
+          <p className="bz-hgroup__none">{f('noneYet')}</p>
+        )}
+      </section>
+    </motion.aside>
   );
 }
 
