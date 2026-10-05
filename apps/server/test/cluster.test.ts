@@ -1,6 +1,6 @@
 import type { AnyGameModule } from '@cg/game-sdk';
 import type { FixtureEvent, FixtureView } from '@cg/game-sdk/fixture';
-import type { MatchStream, MatchUpdate } from '@cg/protocol';
+import type { MatchStream, MatchUpdate, RoomView } from '@cg/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createBusinessGame } from '@cg/game-business/server';
 import type { BusinessView } from '@cg/game-business/shared';
@@ -595,4 +595,86 @@ describe('host hand-over and failover', () => {
       expect(conserved(won.view)).toBe(true);
     }, 45_000);
   });
+});
+
+describe('public matchmaking across instances', () => {
+  /** The fixture game, offered in public play. */
+  const publicFixture = (): AnyGameModule => {
+    const base = testFixture();
+    return {
+      ...base,
+      manifest: {
+        ...base.manifest,
+        id: 'alpha',
+        publicMatch: { enabled: true, targetPlayers: 4, minHumans: 2 },
+      },
+    } as AnyGameModule;
+  };
+  const roomOf = async (cl: TestClient, test: (r: RoomView) => boolean, ms = 6000) =>
+    (await cl.waitForRoom((r) => r !== null && test(r), ms)) as RoomView;
+  const kinds = (r: RoomView) => r.members.map((m) => m.kind).sort();
+
+  it('players on different instances find the same room, timer, start and bots', async () => {
+    c = await startCluster(2, {
+      games: [publicFixture()],
+      overrides: { matchmaking: { fillWindowMs: 800, browsePushMs: 20 } },
+    });
+    await eventually(() => hostIndex(c as TestCluster) >= 0);
+    const host = hostIndex(c);
+    const a = await c.player(host, 'Archit'); // on the host
+    const b = await c.player(1 - host, 'Priya'); // on the other instance
+    const viewer = await c.player(1 - host, 'Viewer');
+    await viewer.emit('public:browse', { on: true });
+    const ra = await a.emit('public:play', { gameId: 'alpha' });
+    if (!ra.ok) throw new Error(ra.code);
+    // The Browse feed on the other instance sees the room created through the host.
+    await viewer.waitFor('public:rooms', (p) => p.rooms.some((x) => x.roomId === ra.room.id));
+    const rb = await b.emit('public:play', { gameId: 'alpha' });
+    expect(rb.ok && rb.room.id).toBe(ra.room.id);
+    const fa = await roomOf(a, (r) => r.public?.state === 'FILLING');
+    const fb = await roomOf(b, (r) => r.public?.state === 'FILLING');
+    expect(fb.public?.fillEndsAt).toBe(fa.public?.fillEndsAt); // one timer, the same for both
+    const sa = await roomOf(a, (r) => r.phase === 'IN_GAME');
+    const sb = await roomOf(b, (r) => r.phase === 'IN_GAME');
+    expect(sb.match?.matchId).toBe(sa.match?.matchId);
+    expect(kinds(sa)).toEqual(['BOT', 'BOT', 'HUMAN', 'HUMAN']);
+    expect(sb.match?.seats).toEqual(sa.match?.seats);
+    await viewer.waitFor('public:rooms', (p) => !p.rooms.some((x) => x.roomId === ra.room.id));
+  });
+
+  it('a host crash during the fill window: same room, timer resumes, bots fill exactly once', async () => {
+    c = await startCluster(3, {
+      games: [publicFixture()],
+      overrides: { matchmaking: { fillWindowMs: 2500 } },
+    });
+    await eventually(() => hostIndex(c as TestCluster) >= 0);
+    const host = hostIndex(c);
+    const [g1, g2] = [0, 1, 2].filter((i) => i !== host) as [number, number];
+    const a = await c.player(g1, 'Archit'); // both players on gateways: their sockets survive
+    const b = await c.player(g2, 'Priya');
+    const ra = await a.emit('public:play', { gameId: 'alpha' });
+    const rb = await b.emit('public:play', { gameId: 'alpha' });
+    if (!ra.ok || !rb.ok) throw new Error('play failed');
+    expect(rb.room.id).toBe(ra.room.id);
+    const before = await roomOf(a, (r) => r.public?.state === 'FILLING');
+    await sleep(300); // the host's next snapshot
+    const crashed = c.nodes[host]?.server as GameServer;
+    await crashed.cluster.abandon();
+    crashed.io.close();
+    await eventually(
+      () => hostIndex(c as TestCluster) >= 0 && hostIndex(c as TestCluster) !== host,
+      5000,
+    );
+    // The restored room is the same one with the same deadline; it starts once, with 2 bots.
+    const started = await roomOf(a, (x) => x.phase === 'IN_GAME', 8000);
+    expect(started.id).toBe(before.id);
+    expect(kinds(started)).toEqual(['BOT', 'BOT', 'HUMAN', 'HUMAN']);
+    const seen = await roomOf(b, (x) => x.phase === 'IN_GAME');
+    expect(seen.match?.matchId).toBe(started.match?.matchId);
+    // Exactly one match start reached each player (no duplicate fill / start).
+    const starts = new Set(
+      a.all('room:snapshot').flatMap((p) => (p.room?.match ? [p.room.match.matchId] : [])),
+    );
+    expect(starts.size).toBe(1);
+  }, 30_000);
 });
