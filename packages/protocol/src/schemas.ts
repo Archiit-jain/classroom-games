@@ -27,6 +27,18 @@ export const C2S = {
   'room:backToLobby': empty,
   'room:reclaimSeat': empty,
 
+  // Public matchmaking (Phase 9). Counts, seats, states and timers are never client input.
+  /** Quick Play: a specific game, or `null` for Any Game. */
+  'public:play': z.strictObject({ gameId: id.nullable() }),
+  /** Join a room seen in the Browse feed (an opaque handle; re-validated on the server). */
+  'public:join': z.strictObject({ roomId: id }),
+  /** Subscribe to (or leave) the live Browse feed. */
+  'public:browse': z.strictObject({ on: z.boolean() }),
+  /** A lone player who waited through the fill window: a private match with bots. */
+  'public:playWithBots': empty,
+  /** RESULTS of a public match: stay for another match, or leave. */
+  'public:resultsChoice': z.strictObject({ stay: z.boolean() }),
+
   'match:action': z.strictObject({
     matchId: id,
     version: z.number().int().nonnegative(),

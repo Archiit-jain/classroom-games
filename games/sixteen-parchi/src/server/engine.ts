@@ -345,7 +345,7 @@ export function createSixteenParchiGame(
       players: { min: PLAYERS, max: PLAYERS },
       sync: 'TURN_PHASE',
       bots: { supported: true, canTakeOverSeat: true },
-      publicMatch: { targetPlayers: PLAYERS, minHumans: 2 },
+      publicMatch: { enabled: true, targetPlayers: PLAYERS, minHumans: 2 },
       reclaim: 'IMMEDIATE',
       layout: { orientation: 'any' },
     },

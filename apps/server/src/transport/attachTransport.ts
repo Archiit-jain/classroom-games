@@ -211,6 +211,12 @@ function bindEvents(
   bind('room:playAgain', 'roomAdmin');
   bind('room:backToLobby', 'roomAdmin');
   bind('room:reclaimSeat', 'roomAdmin');
+  // Public matchmaking: a coarse guard here; the host applies the shared per-player limits.
+  bind('public:play', 'roomJoin');
+  bind('public:join', 'roomJoin');
+  bind('public:browse', null);
+  bind('public:playWithBots', 'roomCreate');
+  bind('public:resultsChoice', 'roomAdmin');
   bind('match:action', 'matchAction');
   bind('match:resync', 'matchAction');
   bind('match:stream', 'stream');

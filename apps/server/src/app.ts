@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AnyGameModule } from '@cg/game-sdk';
@@ -131,6 +132,25 @@ export function createGameServer(options: GameServerOptions): GameServer {
       res.end(JSON.stringify({ status: shuttingDown ? 'shutting_down' : 'ok' }));
       return;
     }
+    // Operator-only matchmaking metrics (design §8): off unless METRICS_TOKEN is configured.
+    if (
+      req.method === 'GET' &&
+      req.url?.split('?')[0]?.endsWith('/metrics') &&
+      config.metricsToken &&
+      sameSecret(req.headers.authorization ?? '', `Bearer ${config.metricsToken}`)
+    ) {
+      cluster
+        .call('metrics', {})
+        .then((result) => {
+          res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+          res.end(JSON.stringify(result));
+        })
+        .catch(() => {
+          res.writeHead(503, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, code: 'SERVER_BUSY' }));
+        });
+      return;
+    }
     res.writeHead(404, { 'content-type': 'text/plain' });
     res.end('Not found');
   });
@@ -262,4 +282,11 @@ export function createGameServer(options: GameServerOptions): GameServer {
     },
     close,
   };
+}
+
+/** Constant-time comparison of two secrets (no early exit on the first difference). */
+function sameSecret(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
 }

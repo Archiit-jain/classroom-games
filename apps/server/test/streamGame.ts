@@ -38,7 +38,7 @@ export function createSketchGame(
       players: { min: 2, max: 3 },
       sync: 'STREAMED',
       bots: { supported: true, canTakeOverSeat: true },
-      publicMatch: { targetPlayers: 3, minHumans: 2 },
+      publicMatch: { enabled: false, targetPlayers: 3, minHumans: 2 },
       reclaim: 'IMMEDIATE',
       layout: { orientation: 'any' },
     },

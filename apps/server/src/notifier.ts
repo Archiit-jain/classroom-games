@@ -3,6 +3,7 @@ import type {
   MatchEnd,
   MatchStream,
   MatchUpdate,
+  PublicRoomListing,
   Reaction,
   RoomEvent,
   RoomView,
@@ -22,4 +23,6 @@ export interface Notifier {
   chatMessage(playerIds: readonly string[], message: ChatMessage): void;
   chatHistory(playerId: string, messages: readonly ChatMessage[]): void;
   reaction(playerIds: readonly string[], reaction: Reaction): void;
+  /** The Browse feed (joinable public rooms). */
+  publicRooms(playerIds: readonly string[], rooms: PublicRoomListing[]): void;
 }

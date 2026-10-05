@@ -373,7 +373,7 @@ export function createPenFightGame(
       players: { min: MIN_PLAYERS, max: MAX_PLAYERS },
       sync: 'SIMULATED',
       bots: { supported: true, canTakeOverSeat: true },
-      publicMatch: { targetPlayers: 4, minHumans: 2 },
+      publicMatch: { enabled: true, targetPlayers: 4, minHumans: 2 },
       reclaim: 'IMMEDIATE',
       layout: { orientation: 'any' },
     },

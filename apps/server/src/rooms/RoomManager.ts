@@ -8,6 +8,7 @@ import {
   ok,
   type GameResults,
   type MatchUpdate,
+  type PublicRoomView,
   type Result,
   type RoomView,
   type TakeoverReason,
@@ -24,7 +25,27 @@ import type { TimerService } from '../util/TimerService';
 import { generateRoomCode, nextBotName } from './naming';
 import { policyFor } from './policies';
 import type { RoomStore } from './RoomStore';
-import type { ActiveMatch, HumanMember, Member, Room, RoomSnapshot, SeatState } from './types';
+import type {
+  ActiveMatch,
+  HumanMember,
+  Member,
+  PublicState,
+  Room,
+  RoomSnapshot,
+  SeatState,
+} from './types';
+
+/** What the matchmaker wants to know about public rooms (counters; all optional). */
+export interface PublicRoomEvents {
+  /** A public room appeared, changed or closed (the Browse feed may need a push). */
+  changed(): void;
+  joined(): void;
+  cancelled(): void;
+  fillCompleted(botSeats: number): void;
+  /** A public match is starting; each value is how long a human waited (ms). */
+  started(waitsMs: number[]): void;
+  playWithBots(): void;
+}
 
 export interface RoomManagerDeps {
   config: ServerConfig;
@@ -37,6 +58,8 @@ export interface RoomManagerDeps {
   notifier: Notifier;
   log: Logger;
   now?: () => number;
+  /** Matchmaking hooks for public rooms (Browse feed, metrics). */
+  publicEvents?: PublicRoomEvents;
 }
 
 type Empty = Record<never, never>;
@@ -55,6 +78,121 @@ export class RoomManager {
 
   constructor(private readonly deps: RoomManagerDeps) {
     this.now = deps.now ?? Date.now;
+  }
+
+  // ───────────────────────────── public rooms ─────────────────────────────
+
+  /** Public rooms a player could join now, for one game or all games. */
+  joinablePublicRooms(gameId: string | null): Room[] {
+    return this.deps.store.all().filter((room) => {
+      if (room.kind !== 'PUBLIC' || room.phase !== 'LOBBY') return false;
+      if (gameId !== null && room.gameId !== gameId) return false;
+      const target = this.deps.registry.get(room.gameId)?.manifest.publicMatch.targetPlayers ?? 0;
+      return room.members.length < target;
+    });
+  }
+
+  /** Would this session be accepted in this public room right now (no name clash etc.)? */
+  canJoinPublic(session: Session, room: Room): boolean {
+    return this.publicJoinProblem(session, room) === null;
+  }
+
+  /** A new, empty public room for a game (only the matchmaker calls this). */
+  createPublic(gameId: string): Result<{ room: Room }> {
+    const game = this.deps.registry.get(gameId);
+    if (!game?.manifest.publicMatch.enabled) return fail('GAME_NOT_FOUND');
+    if (this.deps.store.count() >= this.deps.config.limits.maxRooms) return fail('SERVER_BUSY');
+    const now = this.now();
+    const room: Room = {
+      id: newId('r'),
+      kind: 'PUBLIC',
+      code: null,
+      gameId,
+      settings: game.defaultSettings,
+      phase: 'LOBBY',
+      hostId: null,
+      members: [],
+      barred: new Set(),
+      match: null,
+      startsAt: null,
+      createdAt: now,
+      noHumansSince: null,
+      chat: [],
+      public: { fillEndsAt: null, loneSince: null, resultsEndsAt: null, staying: [] },
+    };
+    this.deps.store.add(room);
+    this.deps.log.info('public room created', { roomId: room.id, gameId });
+    return ok({ room });
+  }
+
+  /** Seats a player in a public room (checks and join in one synchronous step). */
+  joinPublic(session: Session, room: Room): Result<{ room: RoomView }> {
+    if (session.roomId === room.id) return ok({ room: this.view(room) });
+    const problem = this.publicJoinProblem(session, room);
+    if (problem) return fail(problem);
+    room.members.push(humanMember(session, this.now()));
+    session.roomId = room.id;
+    this.deps.publicEvents?.joined();
+    this.evaluatePublic(room);
+    this.broadcast(room);
+    this.deps.notifier.chatHistory(session.id, room.chat);
+    return ok({ room: this.view(room) });
+  }
+
+  /**
+   * A lone public player who waited through the fill window: a PRIVATE match (they host it)
+   * with bots — public matches never start with one human.
+   */
+  playWithBots(session: Session): Result<{ room: RoomView }> {
+    const ctx = this.context(session);
+    if (!ctx) return fail('NOT_IN_ROOM');
+    const { room } = ctx;
+    if (room.kind !== 'PUBLIC' || !room.public) return fail('NOT_PUBLIC');
+    if (room.phase !== 'LOBBY') return fail('INVALID_PHASE');
+    const lone = room.public.loneSince;
+    if (
+      connectedHumans(room) !== 1 ||
+      lone === null ||
+      this.now() < lone + this.deps.config.matchmaking.fillWindowMs
+    ) {
+      return fail('PLAY_WITH_BOTS_NOT_READY');
+    }
+    const game = this.deps.registry.get(room.gameId);
+    if (!game) return fail('GAME_NOT_FOUND');
+    this.removeHuman(room, session.id, 'LEFT');
+    const created = this.create(session, game.manifest.id);
+    if (!created.ok) return created;
+    const own = this.deps.store.get(created.value.room.id) as Room;
+    const seats = Math.max(game.manifest.publicMatch.targetPlayers, game.manifest.players.min);
+    while (own.members.length < Math.min(seats, game.manifest.players.max)) {
+      own.members.push({
+        kind: 'BOT',
+        id: newId('b'),
+        name: nextBotName(own),
+        joinedAt: this.now(),
+      });
+    }
+    this.deps.publicEvents?.playWithBots();
+    const started = this.start(session);
+    if (!started.ok) return started;
+    return ok({ room: this.view(own) });
+  }
+
+  /** RESULTS of a public match: stay for another, or leave. */
+  resultsChoice(session: Session, stay: boolean): Result<Empty> {
+    const ctx = this.context(session);
+    if (!ctx) return fail('NOT_IN_ROOM');
+    const { room } = ctx;
+    if (room.kind !== 'PUBLIC' || !room.public) return fail('NOT_PUBLIC');
+    if (room.phase !== 'RESULTS') return fail('INVALID_PHASE');
+    if (!stay) {
+      this.removeHuman(room, session.id, 'LEFT');
+    } else if (!room.public.staying.includes(session.id)) {
+      room.public.staying.push(session.id);
+      this.broadcast(room);
+    }
+    this.maybeEndResults(room);
+    return ok(EMPTY);
   }
 
   // ───────────────────────────── queries ─────────────────────────────
@@ -98,6 +236,7 @@ export class RoomManager {
             }
           : { kind: 'BOT', id: m.id, name: m.name },
       ),
+      public: this.publicView(room),
       match: room.match
         ? {
             matchId: room.match.matchId,
@@ -161,6 +300,7 @@ export class RoomManager {
       createdAt: now,
       noHumansSince: null,
       chat: [],
+      public: null,
     };
     this.deps.store.add(room);
     session.roomId = room.id;
@@ -196,7 +336,12 @@ export class RoomManager {
   leave(session: Session): Result<Empty> {
     const ctx = this.context(session);
     if (!ctx) return fail('NOT_IN_ROOM');
-    this.removeHuman(ctx.room, session.id, 'LEFT');
+    const { room } = ctx;
+    // A public match that is already starting can't be cancelled (once it runs, Leave forfeits).
+    if (room.kind === 'PUBLIC' && room.phase === 'STARTING') return fail('INVALID_PHASE');
+    if (room.kind === 'PUBLIC' && room.phase === 'LOBBY') this.deps.publicEvents?.cancelled();
+    this.removeHuman(room, session.id, 'LEFT');
+    if (room.kind === 'PUBLIC' && room.phase === 'RESULTS') this.maybeEndResults(room);
     return ok(EMPTY);
   }
 
@@ -277,12 +422,16 @@ export class RoomManager {
     if (room.members.length < game.manifest.players.min) return fail('NOT_ENOUGH_PLAYERS');
     if (room.members.length > game.manifest.players.max) return fail('TOO_MANY_PLAYERS_FOR_GAME');
 
+    this.enterStarting(room);
+    this.broadcast(room);
+    return ok(EMPTY);
+  }
+
+  private enterStarting(room: Room): void {
     const countdown = this.deps.config.timing.startingCountdownMs;
     room.phase = 'STARTING';
     room.startsAt = this.now() + countdown;
     this.deps.timers.set(`room:${room.id}:start`, countdown, () => this.beginMatch(room.id));
-    this.broadcast(room);
-    return ok(EMPTY);
   }
 
   playAgain(session: Session): Result<Empty> {
@@ -416,6 +565,7 @@ export class RoomManager {
     member.graceUntil = null;
     room.noHumansSince = null;
     this.deps.timers.clear(graceKey(room.id, member.id));
+    this.evaluatePublic(room);
 
     const seat = room.phase === 'IN_GAME' ? seatOf(room.match, member.id) : undefined;
     if (seat && room.match) {
@@ -442,6 +592,7 @@ export class RoomManager {
       room.match.runtime.seatChanged(seat.seat, 'DISCONNECTED');
     if (!room.members.some((m) => m.kind === 'HUMAN' && m.connected))
       room.noHumansSince = this.now();
+    this.evaluatePublic(room);
     this.broadcast(room);
   }
 
@@ -493,6 +644,160 @@ export class RoomManager {
 
   private broadcast(room: Room): void {
     this.deps.notifier.roomSnapshot(this.humanIds(room), this.view(room));
+    if (room.kind === 'PUBLIC') this.deps.publicEvents?.changed();
+  }
+
+  private publicView(room: Room): PublicRoomView | null {
+    const pub = room.public;
+    if (room.kind !== 'PUBLIC' || !pub) return null;
+    const match = this.deps.registry.get(room.gameId)?.manifest.publicMatch;
+    const state =
+      room.phase === 'LOBBY'
+        ? pub.fillEndsAt !== null
+          ? 'FILLING'
+          : 'WAITING'
+        : room.phase === 'CLOSED'
+          ? 'RESULTS'
+          : room.phase;
+    return {
+      state,
+      targetPlayers: match?.targetPlayers ?? 0,
+      minHumans: match?.minHumans ?? 0,
+      fillEndsAt: pub.fillEndsAt,
+      playWithBotsAt:
+        room.phase === 'LOBBY' && pub.loneSince !== null
+          ? pub.loneSince + this.deps.config.matchmaking.fillWindowMs
+          : null,
+      resultsEndsAt: pub.resultsEndsAt,
+      staying: [...pub.staying],
+    };
+  }
+
+  /** Why this session can't join this public room right now (null = it can). */
+  private publicJoinProblem(session: Session, room: Room) {
+    if (!session.nickname || !session.nicknameKey) return 'NICKNAME_REQUIRED' as const;
+    if (session.roomId && session.roomId !== room.id) return 'ALREADY_IN_ROOM' as const;
+    if (room.kind !== 'PUBLIC') return 'NOT_PUBLIC' as const;
+    if (room.barred.has(session.id)) return 'REMOVED_FROM_ROOM' as const;
+    if (!policyFor(room).isJoinable(room)) return 'ROOM_IN_PROGRESS' as const;
+    const game = this.deps.registry.get(room.gameId);
+    if (!game || room.members.length >= game.manifest.publicMatch.targetPlayers)
+      return 'ROOM_FULL' as const;
+    const key = session.nicknameKey;
+    const clash = room.members.some((m) =>
+      m.kind === 'HUMAN' ? m.nicknameKey === key : this.deps.moderator.nicknameKey(m.name) === key,
+    );
+    return clash ? ('NICKNAME_TAKEN' as const) : null;
+  }
+
+  /**
+   * The public start rule (design §4): target reached → start; enough connected humans →
+   * one fill window; fewer → the window is cancelled. Only connected humans count.
+   */
+  private evaluatePublic(room: Room): void {
+    const pub = room.public;
+    if (room.kind !== 'PUBLIC' || !pub || room.phase !== 'LOBBY') return;
+    const game = this.deps.registry.get(room.gameId);
+    if (!game) return;
+    const { targetPlayers, minHumans } = game.manifest.publicMatch;
+    const connected = connectedHumans(room);
+    pub.loneSince = connected === 1 ? (pub.loneSince ?? this.now()) : null;
+    if (connected >= minHumans && room.members.length >= targetPlayers) {
+      this.startPublic(room);
+      return;
+    }
+    if (connected >= minHumans) {
+      if (pub.fillEndsAt === null) {
+        const ms = this.deps.config.matchmaking.fillWindowMs;
+        pub.fillEndsAt = this.now() + ms;
+        this.deps.timers.set(fillKey(room.id), ms, () => this.fillWindowEnded(room.id));
+      }
+    } else if (pub.fillEndsAt !== null) {
+      pub.fillEndsAt = null;
+      this.deps.timers.clear(fillKey(room.id));
+    }
+  }
+
+  /** The fill window is over: bots take the empty seats and the match starts. */
+  private fillWindowEnded(roomId: string): void {
+    const room = this.deps.store.get(roomId);
+    const pub = room?.public;
+    if (!room || !pub || room.phase !== 'LOBBY') return;
+    pub.fillEndsAt = null;
+    const game = this.deps.registry.get(room.gameId);
+    if (!game || connectedHumans(room) < game.manifest.publicMatch.minHumans) {
+      this.evaluatePublic(room);
+      this.broadcast(room);
+      return;
+    }
+    const seats = Math.min(
+      Math.max(game.manifest.publicMatch.targetPlayers, game.manifest.players.min),
+      game.manifest.players.max,
+    );
+    let added = 0;
+    while (room.members.length < seats) {
+      room.members.push({
+        kind: 'BOT',
+        id: newId('b'),
+        name: nextBotName(room),
+        joinedAt: this.now(),
+      });
+      added++;
+    }
+    this.deps.publicEvents?.fillCompleted(added);
+    this.startPublic(room);
+    this.broadcast(room);
+  }
+
+  private startPublic(room: Room): void {
+    const pub = room.public as PublicState;
+    pub.fillEndsAt = null;
+    pub.loneSince = null;
+    this.deps.timers.clear(fillKey(room.id));
+    const now = this.now();
+    this.deps.publicEvents?.started(
+      room.members.filter((m) => m.kind === 'HUMAN').map((m) => now - m.joinedAt),
+    );
+    this.enterStarting(room);
+    this.deps.log.info('public match starting', {
+      roomId: room.id,
+      gameId: room.gameId,
+      humans: room.members.filter((m) => m.kind === 'HUMAN').length,
+      bots: room.members.filter((m) => m.kind === 'BOT').length,
+    });
+  }
+
+  /** RESULTS end early once every human has chosen. */
+  private maybeEndResults(room: Room): void {
+    if (room.phase !== 'RESULTS' || !room.public) return;
+    const humans = room.members.filter((m) => m.kind === 'HUMAN');
+    if (humans.every((m) => room.public?.staying.includes(m.id))) this.resultsEnded(room.id);
+  }
+
+  /** Public RESULTS are over: stayers go back to matchmaking; everyone else leaves. */
+  private resultsEnded(roomId: string): void {
+    const room = this.deps.store.get(roomId);
+    const pub = room?.public;
+    if (!room || !pub || room.phase !== 'RESULTS') return;
+    this.deps.timers.clear(resultsKey(room.id));
+    const staying = new Set(
+      pub.staying.filter((id) => room.members.some((m) => m.kind === 'HUMAN' && m.id === id)),
+    );
+    if (staying.size === 0) {
+      this.closeRoom(room);
+      return;
+    }
+    for (const m of [...room.members]) {
+      if (m.kind === 'HUMAN' && !staying.has(m.id)) this.removeHuman(room, m.id, 'LEFT');
+    }
+    room.members = room.members.filter((m) => m.kind === 'HUMAN');
+    this.resetToLobby(room);
+    pub.resultsEndsAt = null;
+    pub.staying = [];
+    pub.fillEndsAt = null;
+    pub.loneSince = null;
+    this.evaluatePublic(room);
+    this.broadcast(room);
   }
 
   private resetToLobby(room: Room): void {
@@ -652,6 +957,19 @@ export class RoomManager {
         this.beginMatch(room.id),
       );
     }
+    // Public rooms: the fill window and the results window continue from their deadlines.
+    room.public = snapshot.public ?? null;
+    const pub = room.public;
+    if (pub && room.phase === 'LOBBY' && pub.fillEndsAt !== null) {
+      this.deps.timers.set(fillKey(room.id), Math.max(0, pub.fillEndsAt - this.now()), () =>
+        this.fillWindowEnded(room.id),
+      );
+    }
+    if (pub && room.phase === 'RESULTS' && pub.resultsEndsAt !== null) {
+      this.deps.timers.set(resultsKey(room.id), Math.max(0, pub.resultsEndsAt - this.now()), () =>
+        this.resultsEnded(room.id),
+      );
+    }
     for (const m of room.members) {
       if (m.kind === 'HUMAN' && !m.connected && m.graceUntil !== null) {
         this.startGrace(room, m, Math.max(0, m.graceUntil - this.now()));
@@ -776,6 +1094,12 @@ export class RoomManager {
     this.deps.bots.detachMatch(matchId);
     match.runtime.stop();
     room.phase = 'RESULTS';
+    if (room.public) {
+      const ms = this.deps.config.matchmaking.resultsMs;
+      room.public.resultsEndsAt = this.now() + ms;
+      room.public.staying = [];
+      this.deps.timers.set(resultsKey(room.id), ms, () => this.resultsEnded(room.id));
+    }
     this.deps.log.info('match finished', { roomId, matchId });
     this.deps.notifier.matchEnd(this.humanIds(room), { matchId, results });
     // Players still away get a fresh grace period to come back to the results/lobby.
@@ -855,6 +1179,7 @@ export class RoomManager {
         this.resetToLobby(room);
       }
     }
+    this.evaluatePublic(room);
     this.broadcast(room);
   }
 
@@ -895,8 +1220,21 @@ export class RoomManager {
       }
     }
     this.deps.store.remove(room.id);
+    if (room.kind === 'PUBLIC') this.deps.publicEvents?.changed();
     this.deps.log.info('room closed', { roomId: room.id });
   }
+}
+
+function connectedHumans(room: Room): number {
+  return room.members.filter((m) => m.kind === 'HUMAN' && m.connected).length;
+}
+
+function fillKey(roomId: string): string {
+  return `room:${roomId}:fill`;
+}
+
+function resultsKey(roomId: string): string {
+  return `room:${roomId}:results`;
 }
 
 function humanMember(session: Session, now: number): HumanMember {

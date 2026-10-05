@@ -1,9 +1,6 @@
 import type { Room } from './types';
 
-/**
- * Behaviour that differs between room kinds. v1 ships the private policy;
- * the public (server-controlled) policy arrives with matchmaking in Phase 9.
- */
+/** Behaviour that differs between room kinds (private: a human host; public: the server). */
 export interface RoomPolicy {
   /** May this player manage the room (game, settings, bots, removals, start)? */
   canManage(room: Room, playerId: string): boolean;
@@ -16,7 +13,12 @@ export const privateRoomPolicy: RoomPolicy = {
   isJoinable: (room) => room.phase === 'LOBBY',
 };
 
+/** Public rooms are run by the server: nobody manages them; only the lobby is joinable. */
+export const publicRoomPolicy: RoomPolicy = {
+  canManage: () => false,
+  isJoinable: (room) => room.phase === 'LOBBY',
+};
+
 export function policyFor(room: Room): RoomPolicy {
-  if (room.kind === 'PRIVATE') return privateRoomPolicy;
-  throw new Error('Public rooms are not implemented yet (Phase 9)');
+  return room.kind === 'PRIVATE' ? privateRoomPolicy : publicRoomPolicy;
 }

@@ -60,6 +60,20 @@ export interface Room {
   noHumansSince: number | null;
   /** Last N censored ROOM-channel messages, for reconnecting players. In memory only. */
   chat: ChatMessage[];
+  /** PUBLIC rooms only: matchmaking state (persisted with the snapshot). */
+  public: PublicState | null;
+}
+
+/** Matchmaking state of a public room (docs/design/PUBLIC_LOBBY_DESIGN.md §4). */
+export interface PublicState {
+  /** FILLING: when bots fill the empty seats and the match starts (server ms). */
+  fillEndsAt: number | null;
+  /** Since when exactly one human has been connected (for "Play with bots"). */
+  loneSince: number | null;
+  /** RESULTS: when the room goes back to matchmaking. */
+  resultsEndsAt: number | null;
+  /** RESULTS: humans who chose "Play again". */
+  staying: string[];
 }
 
 /** A room as plain JSON: what the shared store keeps so another instance can continue it. */

@@ -31,7 +31,7 @@ export const simultaneousGame: GameModule<
     players: { min: 2, max: 4 },
     sync: 'TURN_PHASE',
     bots: { supported: true, canTakeOverSeat: true },
-    publicMatch: { targetPlayers: 4, minHumans: 2 },
+    publicMatch: { enabled: false, targetPlayers: 4, minHumans: 2 },
     reclaim: 'IMMEDIATE',
     layout: { orientation: 'any' },
   },

@@ -14,6 +14,8 @@ export interface Session {
   /** The server instance holding that socket (multi-instance deployments). */
   instanceId: string | null;
   roomId: string | null;
+  /** Subscribed to the public Browse feed (kept with the session across host hand-overs). */
+  browsing?: boolean;
   createdAt: number;
   lastSeenAt: number;
 }

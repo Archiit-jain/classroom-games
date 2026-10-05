@@ -193,7 +193,7 @@ export function createRmcsGame(
       players: { min: 4, max: 4 },
       sync: 'TURN_PHASE',
       bots: { supported: true, canTakeOverSeat: true },
-      publicMatch: { targetPlayers: 4, minHumans: 2 },
+      publicMatch: { enabled: true, targetPlayers: 4, minHumans: 2 },
       reclaim: 'IMMEDIATE',
       layout: { orientation: 'any' },
     },

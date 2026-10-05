@@ -31,6 +31,9 @@ export const ERROR_CODES = [
   'PLAYER_NOT_FOUND',
   'BOT_NOT_FOUND',
   'CANNOT_TARGET_SELF',
+  // Public matchmaking
+  'NOT_PUBLIC',
+  'PLAY_WITH_BOTS_NOT_READY',
   // Matches
   'MATCH_NOT_FOUND',
   'STALE_VERSION',

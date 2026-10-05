@@ -29,6 +29,8 @@ const errors = {
   PLAYER_NOT_FOUND: 'That player isn’t here any more.',
   BOT_NOT_FOUND: 'That bot isn’t here any more.',
   CANNOT_TARGET_SELF: 'You can’t do that to yourself.',
+  NOT_PUBLIC: 'That isn’t a public game.',
+  PLAY_WITH_BOTS_NOT_READY: 'Hang on — let’s wait a little longer for another player.',
   MATCH_NOT_FOUND: 'That game is no longer running.',
   STALE_VERSION: 'The game moved on. Try again.',
   DUPLICATE_ACTION: 'That move was already sent.',

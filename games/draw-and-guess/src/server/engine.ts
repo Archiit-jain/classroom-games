@@ -325,7 +325,7 @@ export function createDrawAndGuessGame(
       players: { min: MIN_PLAYERS, max: MAX_PLAYERS },
       sync: 'STREAMED',
       bots: { supported: true, canTakeOverSeat: true },
-      publicMatch: { targetPlayers: 5, minHumans: 2 },
+      publicMatch: { enabled: true, targetPlayers: 5, minHumans: 2 },
       reclaim: 'NEXT_PHASE_BOUNDARY',
       layout: { orientation: 'any' },
     },

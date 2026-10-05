@@ -41,7 +41,11 @@ export interface GameManifest {
   players: { min: number; max: number };
   sync: SyncStyle;
   bots: { supported: boolean; canTakeOverSeat: boolean };
-  publicMatch: { targetPlayers: number; minHumans: number };
+  /**
+   * Public matchmaking (Phase 9): whether the game is offered in public play, how many
+   * players a public room aims for (bots fill up to it) and how many humans it needs.
+   */
+  publicMatch: { enabled: boolean; targetPlayers: number; minHumans: number };
   reclaim: 'IMMEDIATE' | 'NEXT_PHASE_BOUNDARY';
   layout: { orientation: 'any' | 'portrait-preferred' | 'landscape-preferred' };
 }

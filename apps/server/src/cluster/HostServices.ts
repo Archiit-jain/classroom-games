@@ -8,6 +8,8 @@ import { errorFields, type Logger } from '../log';
 import type { Notifier } from '../notifier';
 import { ReportService, type ReportFlag, type ReportSink } from '../reports/ReportService';
 import { InMemoryRoomStore, type RoomStore } from '../rooms/RoomStore';
+import { Matchmaker } from '../rooms/Matchmaker';
+import { MatchmakingMetrics } from '../rooms/MatchmakingMetrics';
 import { RoomManager } from '../rooms/RoomManager';
 import type { Room, RoomSnapshot } from '../rooms/types';
 import type { GameRegistry } from '../runtime/GameRegistry';
@@ -112,6 +114,8 @@ export class HostServices {
   readonly reports: ReportService;
   readonly reportSink: ReportSink;
   readonly bots: BotManager;
+  readonly matchmaker: Matchmaker;
+  readonly metrics = new MatchmakingMetrics();
   private readonly limiter: RateLimiter;
   private readonly log: Logger;
 
@@ -122,6 +126,7 @@ export class HostServices {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private flushing: Promise<void> | null = null;
   private readonly sweeper: ReturnType<typeof setInterval>;
+  private readonly metricsLog: ReturnType<typeof setInterval>;
   private disposed = false;
 
   private constructor(private readonly deps: HostServicesDeps) {
@@ -138,6 +143,8 @@ export class HostServices {
     });
     const notifier = this.createNotifier();
     let chatForBots: ChatService | null = null;
+    let matchmaker: Matchmaker | null = null;
+    const metrics = this.metrics;
     this.bots = new BotManager({
       timers: this.timers,
       log,
@@ -156,7 +163,33 @@ export class HostServices {
       bots: this.bots,
       notifier,
       log,
+      publicEvents: {
+        changed: () => matchmaker?.changed(),
+        joined: () => metrics.count('joins'),
+        cancelled: () => metrics.count('cancelled'),
+        fillCompleted: (botSeats) => {
+          metrics.count('fillsCompleted');
+          metrics.count('botSeatsFilled', botSeats);
+        },
+        started: (waits) => {
+          metrics.count('matchesStarted');
+          metrics.waited(waits);
+        },
+        playWithBots: () => metrics.count('playWithBots'),
+      },
     });
+    this.matchmaker = new Matchmaker({
+      config,
+      rooms: this.rooms,
+      registry: deps.registry,
+      sessions: this.sessions,
+      notifier,
+      timers: this.timers,
+      limiter: this.limiter,
+      metrics,
+      log,
+    });
+    matchmaker = this.matchmaker;
     this.chat = new ChatService({
       config,
       moderator: deps.moderator,
@@ -176,6 +209,10 @@ export class HostServices {
     });
     this.sweeper = setInterval(() => this.sweep(), config.timing.sweepIntervalMs);
     this.sweeper.unref?.();
+    this.metricsLog = setInterval(() => {
+      if (this.metrics.takeChanged()) log.info('matchmaking metrics', this.metrics.snapshot());
+    }, 60_000);
+    this.metricsLog.unref?.();
   }
 
   /** Builds the services for a new hosting term from whatever the shared store holds. */
@@ -212,6 +249,8 @@ export class HostServices {
       }
       case 'event':
         return this.event(String(data.sessionId), data.name as C2SEventName, data.payload);
+      case 'metrics':
+        return ok(this.metrics.snapshot());
       default:
         return fail('INVALID_PAYLOAD');
     }
@@ -270,6 +309,20 @@ export class HostServices {
         return rooms.backToLobby(session);
       case 'room:reclaimSeat':
         return rooms.reclaimSeat(session);
+      case 'public:play':
+        return this.matchmaker.play(session, p.gameId);
+      case 'public:join':
+        return this.matchmaker.joinListed(session, p.roomId);
+      case 'public:browse':
+        return this.matchmaker.browse(session, p.on);
+      case 'public:playWithBots': {
+        const limited = this.limiter.take(session.id, 'matchmaking');
+        if (!limited)
+          return fail('RATE_LIMITED', this.limiter.retryAfterMs(session.id, 'matchmaking'));
+        return rooms.playWithBots(session);
+      }
+      case 'public:resultsChoice':
+        return rooms.resultsChoice(session, p.stay);
       case 'match:action':
         return rooms.submitAction(session, p.matchId, p.version, p.actionId, p.action);
       case 'match:resync':
@@ -312,6 +365,7 @@ export class HostServices {
       chatMessage: (ids, message) => send(ids, 'chat:message', message),
       chatHistory: (id, messages) => send([id], 'chat:history', { messages: [...messages] }),
       reaction: (ids, reaction) => send(ids, 'chat:reaction', reaction),
+      publicRooms: (ids, rooms) => send(ids, 'public:rooms', { rooms }),
     };
   }
 
@@ -424,7 +478,9 @@ export class HostServices {
     this.dirtySessions.clear();
     await this.disconnectOrphans();
     for (const room of rooms) this.rooms.resendState(room);
+    this.matchmaker.restore();
     if (rooms.length || sessions.length) {
+      this.metrics.count('hostTakeovers');
       this.log.info('state restored', { rooms: rooms.length, sessions: sessions.length });
     }
   }
@@ -467,6 +523,7 @@ export class HostServices {
     this.disposed = true;
     if (this.flushTimer) clearTimeout(this.flushTimer);
     clearInterval(this.sweeper);
+    clearInterval(this.metricsLog);
     this.rooms.dispose(false);
     this.timers.dispose();
   }

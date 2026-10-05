@@ -184,7 +184,7 @@ export function createDotsAndBoxesGame(
       players: { min: MIN_PLAYERS, max: MAX_PLAYERS },
       sync: 'TURN_PHASE',
       bots: { supported: true, canTakeOverSeat: true },
-      publicMatch: { targetPlayers: 4, minHumans: 2 },
+      publicMatch: { enabled: true, targetPlayers: 4, minHumans: 2 },
       reclaim: 'IMMEDIATE',
       layout: { orientation: 'any' },
     },

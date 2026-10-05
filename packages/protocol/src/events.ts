@@ -8,6 +8,7 @@ import type {
   MatchStream,
   MatchUpdate,
   Reaction,
+  PublicRoomListing,
   RoomView,
   TakeoverReason,
 } from './views';
@@ -32,6 +33,11 @@ export interface C2SResults {
   'room:playAgain': Empty;
   'room:backToLobby': Empty;
   'room:reclaimSeat': Empty;
+  'public:play': { room: RoomView };
+  'public:join': { room: RoomView };
+  'public:browse': Empty;
+  'public:playWithBots': { room: RoomView };
+  'public:resultsChoice': Empty;
   'match:action': { version: number };
   'match:resync': { update: MatchUpdate };
   'match:stream': Empty;
@@ -81,6 +87,8 @@ export interface ServerToClientEvents {
   'chat:reaction': (payload: Reaction) => void;
   'chat:history': (payload: { messages: ChatMessage[] }) => void;
   'system:notice': (payload: { code: SystemNoticeCode }) => void;
+  /** The live Browse feed: every joinable public room (best first). */
+  'public:rooms': (payload: { rooms: PublicRoomListing[] }) => void;
 }
 
 /** Socket.IO handshake `auth` payload. */

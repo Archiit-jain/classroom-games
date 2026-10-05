@@ -57,6 +57,35 @@ export interface MatchSummaryView {
   results: GameResults | null;
 }
 
+/** What a public room is doing, as the player sees it. */
+export type PublicRoomState = 'WAITING' | 'FILLING' | 'STARTING' | 'IN_GAME' | 'RESULTS';
+
+/** Matchmaking details of a PUBLIC room (null for private rooms). */
+export interface PublicRoomView {
+  state: PublicRoomState;
+  targetPlayers: number;
+  minHumans: number;
+  /** FILLING: server time when bots fill the empty seats and the match starts. */
+  fillEndsAt: number | null;
+  /** WAITING alone: server time from which "Play with bots" is offered. */
+  playWithBotsAt: number | null;
+  /** RESULTS: server time when the room returns to matchmaking. */
+  resultsEndsAt: number | null;
+  /** RESULTS: humans who chose "Play again". */
+  staying: string[];
+}
+
+/** One joinable public room in the Browse feed. `roomId` is an opaque handle (never shown). */
+export interface PublicRoomListing {
+  roomId: string;
+  gameId: string;
+  humans: number;
+  targetPlayers: number;
+  maxPlayers: number;
+  state: 'WAITING' | 'FILLING';
+  fillEndsAt: number | null;
+}
+
 export interface RoomView {
   id: string;
   kind: RoomKind;
@@ -72,6 +101,7 @@ export interface RoomView {
   minPlayers: number;
   members: MemberView[];
   match: MatchSummaryView | null;
+  public: PublicRoomView | null;
 }
 
 export interface GameInfo {
@@ -80,6 +110,8 @@ export interface GameInfo {
   maxPlayers: number;
   supportsBots: boolean;
   defaultSettings: unknown;
+  /** Public matchmaking values from the game's manifest. */
+  publicMatch: { enabled: boolean; targetPlayers: number; minHumans: number };
 }
 
 /** One per-viewer update of a running match. `view` is always complete. */

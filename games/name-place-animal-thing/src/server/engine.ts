@@ -504,7 +504,7 @@ export function createNpatGame(
       players: { min: MIN_PLAYERS, max: MAX_PLAYERS },
       sync: 'TURN_PHASE',
       bots: { supported: true, canTakeOverSeat: true },
-      publicMatch: { targetPlayers: 6, minHumans: 2 },
+      publicMatch: { enabled: true, targetPlayers: 8, minHumans: 2 },
       reclaim: 'IMMEDIATE',
       layout: { orientation: 'any' },
     },

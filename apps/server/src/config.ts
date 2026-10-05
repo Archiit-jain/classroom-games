@@ -54,6 +54,19 @@ export interface ServerConfig {
     bufferSize: number;
   };
   reports: { maxFlags: number; flagTtlMs: number };
+  /** Public rooms and matchmaking (Phase 9, docs/design/PUBLIC_LOBBY_DESIGN.md). */
+  matchmaking: {
+    /** Once enough humans are present, how long others may still join before bots fill. */
+    fillWindowMs: number;
+    /** RESULTS of a public match: time to choose "Play again" or "Leave". */
+    resultsMs: number;
+    /** Most rooms one Browse push lists. */
+    browseMaxRooms: number;
+    /** Browse pushes are coalesced to at most one per this many ms. */
+    browsePushMs: number;
+  };
+  /** Operator-only metrics endpoint; disabled unless a token is configured. */
+  metricsToken: string | null;
   limits: {
     maxMessageBytes: number;
     maxRooms: number;
@@ -72,6 +85,8 @@ export interface ServerConfig {
     report: BucketSpec;
     reaction: BucketSpec;
     ping: BucketSpec;
+    matchmaking: BucketSpec;
+    browse: BucketSpec;
   };
 }
 
@@ -107,6 +122,8 @@ export const DEFAULT_CONFIG: ServerConfig = {
     bufferSize: 50,
   },
   reports: { maxFlags: 1_000, flagTtlMs: 24 * 60 * 60_000 },
+  matchmaking: { fillWindowMs: 12_000, resultsMs: 15_000, browseMaxRooms: 50, browsePushMs: 250 },
+  metricsToken: null,
   limits: {
     maxMessageBytes: MAX_MESSAGE_BYTES,
     maxRooms: 500,
@@ -127,6 +144,9 @@ export const DEFAULT_CONFIG: ServerConfig = {
     // Quick reactions: one per 1.5 s (spec Appendix A).
     reaction: { burst: 1, perSecond: 1000 / REACTION_INTERVAL_MS },
     ping: { burst: 10, perSecond: 2 },
+    // Quick Play / join / play with bots: a few in a row, then one per 2 s.
+    matchmaking: { burst: 5, perSecond: 0.5 },
+    browse: { burst: 5, perSecond: 1 },
   },
 };
 
@@ -177,6 +197,8 @@ const EnvSchema = z.object({
   BUSINESS_TEST_SCENARIO: z.enum(['scripted']).optional(),
   GAME_TIME_SCALE: z.coerce.number().min(0.05).max(10).optional(),
   LOG_LEVEL: z.enum(['silent', 'error', 'warn', 'info', 'debug']).optional(),
+  PUBLIC_FILL_WINDOW_MS: z.coerce.number().int().min(1000).max(120_000).optional(),
+  METRICS_TOKEN: z.string().min(16).optional(),
 });
 
 /** A configuration that must not run (e.g. production without shared state). */
@@ -226,6 +248,10 @@ export function loadConfig(
     businessTestScenario: isProduction ? null : (parsed.BUSINESS_TEST_SCENARIO ?? null),
     gameTimeScale: isProduction ? 1 : parsed.GAME_TIME_SCALE,
     logLevel: parsed.LOG_LEVEL,
+    ...(parsed.PUBLIC_FILL_WINDOW_MS
+      ? { matchmaking: { fillWindowMs: parsed.PUBLIC_FILL_WINDOW_MS } }
+      : {}),
+    metricsToken: parsed.METRICS_TOKEN ?? null,
   };
   const config = merge(merge(DEFAULT_CONFIG, fromEnv), overrides);
   if (config.production) {
