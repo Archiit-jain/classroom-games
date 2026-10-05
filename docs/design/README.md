@@ -15,3 +15,5 @@ Once a game ships, its rules as implemented live in [../GAME_RULES/](../GAME_RUL
 
 Platform-wide: [PRODUCTION_ARCHITECTURE.md](PRODUCTION_ARCHITECTURE.md) — deployment audit and the
 production (Vercel) architecture, Phase 6 design pass.
+[PUBLIC_LOBBY_DESIGN.md](PUBLIC_LOBBY_DESIGN.md) — public rooms, matchmaking, Quick Play and Browse
+(Phase 9 design).
