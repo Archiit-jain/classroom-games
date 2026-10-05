@@ -19,7 +19,8 @@ export function MemberList({ room }: { room: RoomView }) {
   const me = session?.playerId;
   const isHost = room.hostId === me;
   const inLobby = room.phase === 'LOBBY';
-  const empty = Math.max(0, room.capacity - room.members.length);
+  // Public rooms show open seats up to their target (bots fill the rest at the start).
+  const empty = Math.max(0, (room.public?.targetPlayers ?? room.capacity) - room.members.length);
 
   const remove = async (member: MemberView) => {
     if (member.kind === 'BOT') {

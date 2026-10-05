@@ -3,7 +3,7 @@ import { Avatar, ConfettiBurst, RollingNumber, durationFor, seatAccent, useEffec
 import { motion } from 'motion/react';
 import { gameClients } from '../games/registry';
 import { gameText, t } from '../i18n';
-import { useAppState, useConnection } from '../platform/context';
+import { useAppState, useConnection, useTick } from '../platform/context';
 
 /** Podium order on screen: 2nd, 1st, 3rd. */
 const PODIUM_ORDER = [1, 0, 2];
@@ -141,7 +141,9 @@ export function ResultsView({ room }: { room: RoomView }) {
         </table>
       </div>
 
-      {isHost ? (
+      {room.kind === 'PUBLIC' && room.public ? (
+        <PublicResultsActions room={room} />
+      ) : isHost ? (
         <div className="results__actions">
           <button
             type="button"
@@ -162,5 +164,33 @@ export function ResultsView({ room }: { room: RoomView }) {
         <p className="lobby__waiting">{t('results.waitingForHost')}</p>
       )}
     </section>
+  );
+}
+
+/** Public match results: stay for the next match, or leave (the room decides when time is up). */
+function PublicResultsActions({ room }: { room: RoomView }) {
+  const conn = useConnection();
+  const { session } = useAppState();
+  useTick(250);
+  const pub = room.public;
+  if (!pub) return null;
+  const seconds =
+    pub.resultsEndsAt !== null ? Math.max(0, Math.ceil(conn.msUntil(pub.resultsEndsAt) / 1000)) : 0;
+  const staying = session ? pub.staying.includes(session.playerId) : false;
+  const choose = async (stay: boolean) => {
+    const res = await conn.request('public:resultsChoice', { stay });
+    if (!res.ok) conn.toastError(res);
+  };
+  if (staying) return <p className="lobby__waiting">{t('public.stayingWait', { seconds })}</p>;
+  return (
+    <div className="results__actions">
+      <button type="button" className="btn btn--primary btn--big" onClick={() => void choose(true)}>
+        {t('public.stay')}
+      </button>
+      <button type="button" className="btn btn--big" onClick={() => void choose(false)}>
+        {t('public.leave')}
+      </button>
+      <p className="muted results__countdown">{t('public.resultsCountdown', { seconds })}</p>
+    </div>
   );
 }

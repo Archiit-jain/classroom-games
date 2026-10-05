@@ -67,6 +67,8 @@ export interface PublicRoomView {
   minHumans: number;
   /** FILLING: server time when bots fill the empty seats and the match starts. */
   fillEndsAt: number | null;
+  /** Length of the fill window (for countdown displays). */
+  fillWindowMs: number;
   /** WAITING alone: server time from which "Play with bots" is offered. */
   playWithBotsAt: number | null;
   /** RESULTS: server time when the room returns to matchmaking. */

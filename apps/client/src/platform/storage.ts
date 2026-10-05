@@ -29,4 +29,6 @@ export const KEYS = {
   nickname: 'cg.nickname',
   hidden: 'cg.hiddenPlayers',
   effects: 'cg.effects',
+  /** The last game this device played (Quick Play's default). */
+  lastGame: 'cg.lastGame',
 } as const;

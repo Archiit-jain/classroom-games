@@ -7,6 +7,7 @@ import { t } from '../i18n';
 import { useConnection, useEffectsSetting } from '../platform/context';
 import { LobbyView } from './LobbyView';
 import { MatchView } from './MatchView';
+import { PublicLobbyView } from './PublicLobbyView';
 import { ResultsView } from './ResultsView';
 
 /**
@@ -35,9 +36,17 @@ export function RoomScreen({ room }: { room: RoomView }) {
   const module = gameClients.get(room.gameId);
   const { mode } = useEffectsSetting();
   const holding = useRevealHold(room, module?.revealMs?.(mode) ?? 0);
+  // Entering a room (e.g. from a card far down the home screen): start at the top.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [room.id]);
 
+  const publicLobby =
+    room.kind === 'PUBLIC' && (room.phase === 'LOBBY' || room.phase === 'STARTING');
   const leave = async () => {
-    if (!window.confirm(inMatch ? t('match.confirmLeave') : t('room.confirmLeave'))) return;
+    // Cancelling a public search needs no confirmation; leaving a room or a match does.
+    if (!publicLobby && !window.confirm(inMatch ? t('match.confirmLeave') : t('room.confirmLeave')))
+      return;
     const res = await conn.request('room:leave', {});
     if (!res.ok) conn.toastError(res);
   };
@@ -56,13 +65,21 @@ export function RoomScreen({ room }: { room: RoomView }) {
           )}
           {gameName(room.gameId)}
         </h1>
-        <button type="button" className="btn btn--small btn--ghost" onClick={() => void leave()}>
-          {inMatch ? t('match.leave') : t('room.leave')}
+        <button
+          type="button"
+          className="btn btn--small btn--ghost"
+          disabled={room.kind === 'PUBLIC' && room.phase === 'STARTING'}
+          onClick={() => void leave()}
+        >
+          {inMatch ? t('match.leave') : publicLobby ? t('public.cancel') : t('room.leave')}
         </button>
       </header>
       <div className="room__layout">
         <div className="room__main">
-          {(room.phase === 'LOBBY' || room.phase === 'STARTING') && <LobbyView room={room} />}
+          {publicLobby && <PublicLobbyView room={room} />}
+          {!publicLobby && (room.phase === 'LOBBY' || room.phase === 'STARTING') && (
+            <LobbyView room={room} />
+          )}
           {(room.phase === 'IN_GAME' || holding) && <MatchView room={room} />}
           {room.phase === 'RESULTS' && !holding && <ResultsView room={room} />}
         </div>

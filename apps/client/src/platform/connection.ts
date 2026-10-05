@@ -136,6 +136,12 @@ export class GameConnection {
     return this.actionSender(match, action);
   }
 
+  /** Subscribes to (or leaves) the live public Browse feed. */
+  browse(on: boolean): void {
+    this.store.set(on ? { browsing: true } : { browsing: false, publicRooms: null });
+    void this.request('public:browse', { on });
+  }
+
   async setNickname(nickname: string): Promise<ClientAck<{ nickname: string }>> {
     const res = await this.request('session:setNickname', { nickname });
     if (res.ok) {
@@ -257,13 +263,19 @@ export class GameConnection {
         }
         return { session, games: ready.games };
       });
+      // A new socket: keep the Browse feed going if this player was browsing.
+      if (store.get().browsing) void this.request('public:browse', { on: true });
     });
 
     socket.on('session:displaced', () => {
       store.set({ connection: 'displaced' });
     });
 
+    socket.on('public:rooms', ({ rooms }) => store.set({ publicRooms: rooms }));
+
     socket.on('room:snapshot', ({ room }) => {
+      // Quick Play remembers the last game this device played.
+      if (room?.phase === 'IN_GAME') storage.set(KEYS.lastGame, room.gameId);
       store.set((s) => {
         if (!room) return { room: null, match: null, results: null, chat: [] };
         const sameMatch = room.match && s.match?.matchId === room.match.matchId;

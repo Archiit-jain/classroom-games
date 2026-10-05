@@ -664,6 +664,7 @@ export class RoomManager {
       targetPlayers: match?.targetPlayers ?? 0,
       minHumans: match?.minHumans ?? 0,
       fillEndsAt: pub.fillEndsAt,
+      fillWindowMs: this.deps.config.matchmaking.fillWindowMs,
       playWithBotsAt:
         room.phase === 'LOBBY' && pub.loneSince !== null
           ? pub.loneSince + this.deps.config.matchmaking.fillWindowMs

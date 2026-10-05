@@ -1,14 +1,15 @@
 import type { AnyGameClientModule } from '@cg/game-sdk/client';
 import { NICKNAME_MAX_LENGTH, ROOM_CODE_LENGTH, type GameInfo } from '@cg/protocol';
 import { Wordmark, accentVar, durationFor, useEffects } from '@cg/ui';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useState, type CSSProperties, type FormEvent } from 'react';
 import { randomNameSuggestion } from '../content/nameSuggestions';
-import { gameClients } from '../games/registry';
+import { gameClients, gameName } from '../games/registry';
 import { errorMessage, t } from '../i18n';
 import type { ClientAck } from '../platform/connection';
 import { useAppState, useConnection } from '../platform/context';
 import { KEYS, storage } from '../platform/storage';
+import { BrowsePanel } from './BrowsePanel';
 
 export function HomeScreen() {
   const { session, games, connection } = useAppState();
@@ -20,15 +21,23 @@ export function HomeScreen() {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** A public matchmaking request is in flight ("Finding a game…"). */
+  const [searching, setSearching] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
   const connected = connection === 'connected';
   const playable = [...gameClients.values()].flatMap((module) => {
     const info = games.find((g) => g.id === module.id);
     return info ? [{ module, info }] : [];
   });
+  const publicGames = playable.filter((g) => g.info.publicMatch.enabled);
+  // Quick Play: the last game this device played, if it's still offered publicly.
+  const remembered = storage.get(KEYS.lastGame);
+  const lastGame = publicGames.find((g) => g.module.id === remembered)?.module.id ?? null;
 
-  /** Sets the nickname if needed, then runs the room request. */
-  const withNickname = async (run: () => Promise<ClientAck<unknown>>) => {
+  /** Sets the nickname if needed, then runs the request. */
+  const withNickname = async (run: () => Promise<ClientAck<unknown>>, finding = false) => {
     setBusy(true);
+    setSearching(finding);
     setError(null);
     try {
       if (session?.nickname !== nickname.trim()) {
@@ -39,8 +48,12 @@ export function HomeScreen() {
       if (!res.ok) setError(errorMessage(res.code, res.retryAfterMs));
     } finally {
       setBusy(false);
+      setSearching(false);
     }
   };
+
+  const play = (gameId: string | null) =>
+    void withNickname(() => conn.request('public:play', { gameId }), true);
 
   const join = (e: FormEvent) => {
     e.preventDefault();
@@ -104,8 +117,55 @@ export function HomeScreen() {
         </p>
       )}
 
+      {publicGames.length > 0 && (
+        <motion.section className="play-hub" aria-label={t('public.quickPlay')} {...enter(2)}>
+          <button
+            type="button"
+            className="btn btn--primary btn--big btn--block play-hub__quick"
+            disabled={!connected || busy}
+            onClick={() => play(lastGame)}
+          >
+            <span className="play-hub__bolt" aria-hidden="true">
+              ⚡
+            </span>
+            {lastGame
+              ? t('public.quickPlayGame', { game: gameName(lastGame) })
+              : t('public.quickPlay')}
+          </button>
+          <p className="play-hub__hint muted">{t('public.quickPlayHint')}</p>
+          <div className="play-hub__row">
+            <button
+              type="button"
+              className="btn btn--cyan btn--big"
+              disabled={!connected || busy}
+              onClick={() => play(null)}
+            >
+              {t('public.anyGame')}
+            </button>
+            <button
+              type="button"
+              className="btn btn--pink btn--big"
+              disabled={!connected}
+              aria-expanded={browsing}
+              onClick={() => setBrowsing((b) => !b)}
+            >
+              {browsing ? t('public.back') : t('public.browse')}
+            </button>
+          </div>
+        </motion.section>
+      )}
+
+      {browsing && (
+        <BrowsePanel
+          disabled={!connected || busy}
+          onJoin={(roomId) =>
+            void withNickname(() => conn.request('public:join', { roomId }), true)
+          }
+        />
+      )}
+
       <section className="home__section" aria-labelledby="pick-title">
-        <motion.div {...enter(2)}>
+        <motion.div {...enter(3)}>
           <h2 id="pick-title" className="home__section-title">
             {t('home.pickTitle')}
           </h2>
@@ -116,11 +176,12 @@ export function HomeScreen() {
         ) : (
           <div className="game-grid">
             {playable.map(({ module, info }, i) => (
-              <motion.div key={module.id} {...enter(3 + i)}>
+              <motion.div key={module.id} {...enter(4 + i)}>
                 <GameCard
                   module={module}
                   info={info}
                   disabled={!connected || busy}
+                  onPlay={() => play(module.id)}
                   onCreate={() =>
                     void withNickname(() => conn.request('room:create', { gameId: module.id }))
                   }
@@ -134,7 +195,7 @@ export function HomeScreen() {
       <motion.section
         className="join-card"
         aria-labelledby="join-title"
-        {...enter(4 + playable.length)}
+        {...enter(5 + playable.length)}
       >
         <h2 id="join-title" className="home__section-title">
           {t('home.joinTitle')}
@@ -160,6 +221,28 @@ export function HomeScreen() {
           </button>
         </form>
       </motion.section>
+
+      <AnimatePresence>
+        {searching && (
+          <motion.div
+            className="overlay"
+            role="status"
+            aria-live="assertive"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <span className="searching">
+              <span className="searching__dots" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+              {t('public.searching')}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
@@ -168,11 +251,13 @@ function GameCard({
   module,
   info,
   disabled,
+  onPlay,
   onCreate,
 }: {
   module: AnyGameClientModule;
   info: GameInfo;
   disabled: boolean;
+  onPlay(): void;
   onCreate(): void;
 }) {
   const name = module.messages.name ?? module.id;
@@ -193,15 +278,30 @@ function GameCard({
         <p className="game-card__desc">{module.messages.description}</p>
         <span className="game-card__meta">{players}</span>
       </div>
-      <button
-        type="button"
-        className="btn btn--primary btn--block"
-        disabled={disabled}
-        aria-label={`${t('home.createButton')}: ${name}`}
-        onClick={onCreate}
-      >
-        {t('home.createButton')}
-      </button>
+      <div className="game-card__actions">
+        {info.publicMatch.enabled && (
+          <button
+            type="button"
+            className="btn btn--primary btn--block"
+            disabled={disabled}
+            aria-label={t('public.playLabel', { game: name })}
+            onClick={onPlay}
+          >
+            {t('public.play')}
+          </button>
+        )}
+        <button
+          type="button"
+          className={
+            info.publicMatch.enabled ? 'btn btn--block btn--ghost' : 'btn btn--primary btn--block'
+          }
+          disabled={disabled}
+          aria-label={`${t('home.createButton')}: ${name}`}
+          onClick={onCreate}
+        >
+          {info.publicMatch.enabled ? t('public.privateRoom') : t('home.createButton')}
+        </button>
+      </div>
     </article>
   );
 }

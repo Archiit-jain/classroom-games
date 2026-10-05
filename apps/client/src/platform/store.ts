@@ -1,4 +1,11 @@
-import type { ChatMessage, GameInfo, MatchEnd, ReactionId, RoomView } from '@cg/protocol';
+import type {
+  ChatMessage,
+  GameInfo,
+  MatchEnd,
+  PublicRoomListing,
+  ReactionId,
+  RoomView,
+} from '@cg/protocol';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'displaced';
 
@@ -44,6 +51,10 @@ export interface AppState {
   /** Reactions being shown right now, oldest first. */
   reactions: ReactionEntry[];
   toasts: Toast[];
+  /** Subscribed to the public Browse feed (re-subscribed after a reconnect). */
+  browsing: boolean;
+  /** The latest Browse feed (null until the first push). */
+  publicRooms: PublicRoomListing[] | null;
 }
 
 export const initialState: AppState = {
@@ -60,6 +71,8 @@ export const initialState: AppState = {
   hidden: [],
   reactions: [],
   toasts: [],
+  browsing: false,
+  publicRooms: null,
 };
 
 /** Minimal external store for useSyncExternalStore. */

@@ -144,7 +144,7 @@ export function LobbyView({ room }: { room: RoomView }) {
   );
 }
 
-function StartingOverlay({ startsAt }: { startsAt: number }) {
+export function StartingOverlay({ startsAt }: { startsAt: number }) {
   const conn = useConnection();
   const effects = useEffects();
   useTick(100);
