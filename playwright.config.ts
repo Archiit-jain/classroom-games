@@ -57,6 +57,8 @@ export default defineConfig({
         ALLOWED_ORIGINS: `http://localhost:${CLIENT_PORT}`,
         GAME_TIME_SCALE: '0.25',
         LOG_LEVEL: 'warn',
+        // Public matchmaking: a 4 s fill window instead of 12 s keeps the e2e quick.
+        PUBLIC_FILL_WINDOW_MS: '4000',
       },
     },
     {
