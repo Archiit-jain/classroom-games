@@ -304,8 +304,15 @@ export class GameConnection {
     socket.on('match:update', (update) => {
       const current = store.get().match;
       // Ignore out-of-order deliveries for the same match. Every update carries a
-      // complete view, so a skipped version only means skipped animations.
-      if (current?.matchId === update.matchId && update.version <= current.version) return;
+      // complete view, so a skipped version only means skipped animations. A full
+      // state (reconnect, failover restore) replaces ours even at a lower version.
+      if (
+        current?.matchId === update.matchId &&
+        update.version <= current.version &&
+        !update.reset
+      ) {
+        return;
+      }
       const match = {
         matchId: update.matchId,
         gameId: update.gameId,
@@ -313,6 +320,7 @@ export class GameConnection {
         you: update.you,
         view: update.view,
         events: update.events,
+        ...(update.reset ? { reset: true } : {}),
       };
       store.set({ match });
       // Every update also goes straight to the animation director, so updates

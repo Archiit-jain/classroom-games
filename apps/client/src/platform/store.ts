@@ -17,6 +17,8 @@ export interface MatchState {
   view: unknown;
   /** Events from the latest update, for animations. */
   events: unknown[];
+  /** The server's whole current state (reconnect, failover restore): replaces, never queues. */
+  reset?: boolean;
 }
 
 /** A quick reaction currently on screen (removed again after a couple of seconds). */

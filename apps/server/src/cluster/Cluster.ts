@@ -286,6 +286,13 @@ export class Cluster {
 
   private async tick(): Promise<void> {
     if (this.stopped) return;
+    // Self-fencing: a host that could not renew for 2/3 of the lease (e.g. only ITS
+    // Redis connection hangs — ioredis queues commands instead of failing) stops
+    // hosting before the lease can expire and another instance take over. Its timers
+    // and bots stop with it, so there are never two hosts acting at once.
+    if (this.isHost && Date.now() - this.lastRenewAt > (this.leaseTtlMs * 2) / 3) {
+      this.loseHost('lease renewal overdue');
+    }
     try {
       await this.heartbeat();
       if (this.isHost) {

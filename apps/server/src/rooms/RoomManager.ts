@@ -575,7 +575,10 @@ export class RoomManager {
     this.broadcast(room);
     this.deps.notifier.chatHistory(member.id, room.chat);
     if (seat && room.match?.runtime.isStarted) {
-      this.deps.notifier.matchUpdate(member.id, room.match.runtime.viewFor(seat.seat));
+      this.deps.notifier.matchUpdate(member.id, {
+        ...room.match.runtime.viewFor(seat.seat),
+        reset: true,
+      });
       this.sendStreamReplay(member.id, room.match, seat.seat);
     }
   }
@@ -988,7 +991,7 @@ export class RoomManager {
       if (m.kind !== 'HUMAN' || !m.connected) continue;
       const seat = room.phase === 'IN_GAME' ? seatOf(match, m.id) : undefined;
       if (seat && match?.runtime.isStarted) {
-        this.deps.notifier.matchUpdate(m.id, match.runtime.viewFor(seat.seat));
+        this.deps.notifier.matchUpdate(m.id, { ...match.runtime.viewFor(seat.seat), reset: true });
         this.sendStreamReplay(m.id, match, seat.seat);
       }
     }
@@ -1067,7 +1070,10 @@ export class RoomManager {
     this.broadcast(room);
     const member = findHuman(room, seat.memberId);
     if (member?.connected) {
-      this.deps.notifier.matchUpdate(member.id, match.runtime.viewFor(seat.seat));
+      this.deps.notifier.matchUpdate(member.id, {
+        ...match.runtime.viewFor(seat.seat),
+        reset: true,
+      });
       this.sendStreamReplay(member.id, match, seat.seat);
     }
   }

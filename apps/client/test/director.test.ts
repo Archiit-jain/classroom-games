@@ -79,6 +79,17 @@ describe('AnimationDirector', () => {
     expect(shown.map((s) => s.label)).toEqual(['m1@2']);
   });
 
+  it('a full-state reset replaces everything, even at a lower version (failover restore)', () => {
+    const { director, shown, update } = harness({ big: 900 });
+    director.push(update(5, ['big'])); // a failed host got as far as v5…
+    director.push(update(6, ['big']));
+    director.push({ ...update(3, []), reset: true }); // …the new host restored v3
+    expect(shown.map((s) => s.label)).toEqual(['m1@5', 'm1@3']);
+    expect(director.pending).toBe(0);
+    director.push(update(4, [])); // and play continues from there
+    expect(shown.map((s) => s.label)).toEqual(['m1@5', 'm1@3', 'm1@4']);
+  });
+
   it('passes instant updates straight through', () => {
     const { director, shown, update } = harness({});
     director.push(update(1, ['x']));

@@ -126,6 +126,13 @@ export interface MatchUpdate<View = unknown, Event = unknown> {
   events: Event[];
   view: View;
   serverNow: number;
+  /**
+   * The whole current state, sent on (re)connect, seat reclaim and after a new room
+   * host restored the match (failover). It replaces what the client has even at a
+   * LOWER version (progress a failed host never saved), instead of being ignored as
+   * out of order.
+   */
+  reset?: true;
 }
 
 /**

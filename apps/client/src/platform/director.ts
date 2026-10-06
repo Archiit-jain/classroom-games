@@ -9,13 +9,16 @@
  *   behind, it fast-forwards: the newest update is presented immediately and
  *   the skipped events are dropped (views are complete, so nothing is lost
  *   except animation).
- * - A different match resets everything.
+ * - A different match, or a full-state `reset` update (reconnect, failover
+ *   restore — possibly at a lower version), resets everything.
  */
 
 export interface PresentableUpdate {
   matchId: string;
   version: number;
   events: readonly unknown[];
+  /** The server's whole current state: replaces everything, whatever its version. */
+  reset?: boolean;
 }
 
 export interface DirectorOptions<U extends PresentableUpdate> {
@@ -46,7 +49,7 @@ export class AnimationDirector<U extends PresentableUpdate> {
 
   push(update: U): void {
     const last = this.queue[this.queue.length - 1] ?? this.presented;
-    if (last && last.matchId !== update.matchId) {
+    if ((last && last.matchId !== update.matchId) || update.reset) {
       this.reset();
     } else if (last && update.version <= last.version) {
       return; // duplicate or out-of-order delivery
