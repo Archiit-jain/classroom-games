@@ -14,6 +14,7 @@ import { RoomManager } from '../rooms/RoomManager';
 import type { Room, RoomSnapshot } from '../rooms/types';
 import type { GameRegistry } from '../runtime/GameRegistry';
 import { SessionManager, type Session } from '../session/SessionManager';
+import { EVENT_BUCKETS } from '../transport/eventBuckets';
 import { RateLimiter } from '../util/RateLimiter';
 import { TimerService } from '../util/TimerService';
 import { KEYS, type Cluster, type HostCall } from './Cluster';
@@ -248,7 +249,12 @@ export class HostServices {
         return ok({});
       }
       case 'event':
-        return this.event(String(data.sessionId), data.name as C2SEventName, data.payload);
+        return this.event(
+          String(data.sessionId),
+          data.name as C2SEventName,
+          data.payload,
+          typeof data.ip === 'string' ? data.ip : 'unknown',
+        );
       case 'metrics':
         return ok(this.metrics.snapshot());
       default:
@@ -271,11 +277,22 @@ export class HostServices {
     return ok({});
   }
 
-  private event(sessionId: string, name: C2SEventName, payload: unknown): Result<object> {
+  private event(
+    sessionId: string,
+    name: C2SEventName,
+    payload: unknown,
+    ip: string,
+  ): Result<object> {
     const session = this.sessions.get(sessionId);
     if (!session) return fail('INTERNAL_ERROR');
     const schema = C2S[name];
     if (!schema) return fail('INVALID_PAYLOAD');
+    // The same per-session bucket the gateway applies, counted once for the whole
+    // cluster: reconnecting through another instance doesn't reset it.
+    const bucket = EVENT_BUCKETS[name as keyof typeof EVENT_BUCKETS] ?? null;
+    if (bucket && !this.limiter.take(session.id, bucket)) {
+      return fail('RATE_LIMITED', this.limiter.retryAfterMs(session.id, bucket));
+    }
     const parsed = schema.safeParse(payload);
     if (!parsed.success) return fail('INVALID_PAYLOAD');
     // The payload was validated by the event's schema just above.
@@ -287,8 +304,17 @@ export class HostServices {
         return this.sessions.setNickname(session, p.nickname);
       case 'room:create':
         return rooms.create(session, p.gameId);
-      case 'room:join':
-        return rooms.join(session, p.code);
+      case 'room:join': {
+        // Wrong codes cost the IP's budget (several sessions from one address share it).
+        const guessKey = `ip:${ip}`;
+        if (this.limiter.retryAfterMs(guessKey, 'codeGuess') > 0) {
+          return fail('RATE_LIMITED', this.limiter.retryAfterMs(guessKey, 'codeGuess'));
+        }
+        const joined = rooms.join(session, p.code);
+        if (!joined.ok && joined.code === 'ROOM_NOT_FOUND')
+          this.limiter.take(guessKey, 'codeGuess');
+        return joined;
+      }
       case 'room:leave':
         return rooms.leave(session);
       case 'room:setGame':

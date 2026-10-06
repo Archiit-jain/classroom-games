@@ -5,6 +5,7 @@ import type { ServerConfig } from '../config';
 import { errorFields, type Logger } from '../log';
 import type { GameRegistry } from '../runtime/GameRegistry';
 import type { RateLimiter } from '../util/RateLimiter';
+import { EVENT_BUCKETS, type BucketName } from './eventBuckets';
 import type { IoServer, IoSocket } from './types';
 
 export interface TransportDeps {
@@ -16,8 +17,6 @@ export interface TransportDeps {
   log: Logger;
   isShuttingDown: () => boolean;
 }
-
-type BucketName = keyof ServerConfig['rateLimits'];
 
 /** Concurrent sockets per IP (on this instance). Generous: a whole classroom can share one IP. */
 class ConnectionCounter {
@@ -180,7 +179,15 @@ function bindEvents(
           return;
         }
         attached
-          .then(() => hostCall(deps.cluster, 'event', { sessionId, name, payload: parsed.data }))
+          .then(() =>
+            // The address rides along (memory only) for the host's per-IP code-guess budget.
+            hostCall(deps.cluster, 'event', {
+              sessionId,
+              name,
+              payload: parsed.data,
+              ip: socket.data.ip,
+            }),
+          )
           .then((result) => {
             if (result.ok) reply({ ok: true, ...result.value } as Ack<C2SResults[typeof name]>);
             else
@@ -198,32 +205,9 @@ function bindEvents(
     );
   };
 
-  bind('session:setNickname', 'nickname');
-  bind('room:create', 'roomCreate');
-  bind('room:join', 'roomJoin');
-  bind('room:leave', 'roomAdmin');
-  bind('room:setGame', 'roomAdmin');
-  bind('room:updateSettings', 'roomAdmin');
-  bind('room:addBot', 'roomAdmin');
-  bind('room:removeBot', 'roomAdmin');
-  bind('room:kick', 'roomAdmin');
-  bind('room:start', 'roomAdmin');
-  bind('room:playAgain', 'roomAdmin');
-  bind('room:backToLobby', 'roomAdmin');
-  bind('room:reclaimSeat', 'roomAdmin');
-  // Public matchmaking: a coarse guard here; the host applies the shared per-player limits.
-  bind('public:play', 'roomJoin');
-  bind('public:join', 'roomJoin');
-  bind('public:browse', null);
-  bind('public:playWithBots', 'roomCreate');
-  bind('public:resultsChoice', 'roomAdmin');
-  bind('match:action', 'matchAction');
-  bind('match:resync', 'matchAction');
-  bind('match:stream', 'stream');
-  // Chat and reports apply their own limits on the host (cooldowns, per-report budget).
-  bind('chat:send', null);
-  bind('chat:react', 'reaction');
-  bind('report:submit', null);
+  for (const [name, bucket] of Object.entries(EVENT_BUCKETS)) {
+    bind(name as C2SEventName, bucket);
+  }
 
   // Answered here: clock sync needs no host.
   (socket as unknown as { on(event: string, fn: (...args: unknown[]) => void): void }).on(

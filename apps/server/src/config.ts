@@ -87,6 +87,8 @@ export interface ServerConfig {
     ping: BucketSpec;
     matchmaking: BucketSpec;
     browse: BucketSpec;
+    /** Wrong private-room codes per IP, cluster-wide (anti code-guessing). */
+    codeGuess: BucketSpec;
   };
 }
 
@@ -147,6 +149,9 @@ export const DEFAULT_CONFIG: ServerConfig = {
     // Quick Play / join / play with bots: a few in a row, then one per 2 s.
     matchmaking: { burst: 5, perSecond: 0.5 },
     browse: { burst: 5, perSecond: 1 },
+    // Wrong room codes per IP (a whole classroom may share one): 30 mistakes, then
+    // one more every 10 s. ~887 million codes make guessing a live room hopeless.
+    codeGuess: { burst: 30, perSecond: 0.1 },
   },
 };
 
