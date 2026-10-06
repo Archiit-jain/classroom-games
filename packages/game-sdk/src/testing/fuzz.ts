@@ -1,6 +1,7 @@
 import type { AnyGameModule, SeatIndex } from '../contract';
 import { createRng, type SeededRng } from '../rng';
 import { simulateMatch, type SimulateOptions } from './harness';
+import { deepFreeze } from './stable';
 
 /**
  * Engine fuzzing (Phase 10). While bots play a whole match, every step attacks the
@@ -20,12 +21,18 @@ import { simulateMatch, type SimulateOptions } from './harness';
  */
 export interface FuzzOptions<S> extends Omit<
   SimulateOptions<S>,
-  'probe' | 'probeStream' | 'perturbHidden'
+  'probe' | 'probeStream' | 'perturbHidden' | 'observe'
 > {
   /** Mutated variants tried per seat per step (default 6; each stacks 1–3 mutations). */
   mutationsPerStep?: number;
   /** Earlier legal actions replayed per seat per step (default 4). */
   replaysPerStep?: number;
+  /**
+   * Legal-shaped actions bots never make (e.g. a loan, a vote), built from the current
+   * state so they reach the engine's deeper checks. Each is tried as is and mutated,
+   * from every seat, at every step — streamed steps included.
+   */
+  seedActions?: (state: S) => unknown[];
 }
 
 export interface FuzzReport {
@@ -148,7 +155,8 @@ export function fuzzMatch<S>(game: AnyGameModule, options: FuzzOptions<S>): Fuzz
     );
   };
 
-  const tryAction = (state: S, seat: SeatIndex, attempt: unknown, now: number): void => {
+  /** Returns the resulting (frozen) state when the engine accepted the attempt. */
+  const tryAction = (state: S, seat: SeatIndex, attempt: unknown, now: number): S | null => {
     report.attempts++;
     let parsed: { success: boolean; data?: unknown };
     try {
@@ -158,7 +166,7 @@ export function fuzzMatch<S>(game: AnyGameModule, options: FuzzOptions<S>): Fuzz
     }
     if (!parsed.success) {
       report.rejectedBySchema++;
-      return;
+      return null;
     }
     let verdict: { ok: boolean };
     try {
@@ -168,7 +176,7 @@ export function fuzzMatch<S>(game: AnyGameModule, options: FuzzOptions<S>): Fuzz
     }
     if (!verdict.ok) {
       report.rejectedByEngine++;
-      return;
+      return null;
     }
     report.accepted++;
     try {
@@ -178,8 +186,9 @@ export function fuzzMatch<S>(game: AnyGameModule, options: FuzzOptions<S>): Fuzz
       });
       structuredClone(t.state);
       options.invariant?.(t.state as S);
+      return deepFreeze(t.state as S);
     } catch (err) {
-      fail('applyAction', seat, attempt, err);
+      return fail('applyAction', seat, attempt, err);
     }
   };
 
@@ -209,6 +218,19 @@ export function fuzzMatch<S>(game: AnyGameModule, options: FuzzOptions<S>): Fuzz
     }
   };
 
+  // A seed the engine accepts opens a state the bots never reach (an auction nobody
+  // started, a review with votes): that state is attacked too, one level deep.
+  const trySeeds = (state: S, now: number, depth = 0): void => {
+    const seeds = options.seedActions?.(state) ?? [];
+    for (const seat of seats) {
+      for (const seed of seeds) {
+        const next = tryAction(state, seat, seed, now);
+        tryAction(state, seat, stacked(seed), now);
+        if (next && depth === 0 && rng.next() < 0.25) trySeeds(next, now, 1);
+      }
+    }
+  };
+
   simulateMatch<S, unknown>(game, {
     ...options,
     probe: (state, { action, now }) => {
@@ -221,6 +243,9 @@ export function fuzzMatch<S>(game: AnyGameModule, options: FuzzOptions<S>): Fuzz
       }
       if (seenActions.length < 500) seenActions.push(action);
     },
+    // Seeds run on every state the match passes through (timer-driven phases too, e.g.
+    // NPAT's review), not only when a bot acts.
+    observe: (state, now) => trySeeds(state, now),
     probeStream: (state, { chunk }) => {
       for (const seat of seats) {
         for (let i = 0; i < Math.max(1, mutations >> 1); i++) {

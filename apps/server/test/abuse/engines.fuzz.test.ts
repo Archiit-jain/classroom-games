@@ -2,6 +2,7 @@ import { fuzzMatch } from '@cg/game-sdk/testing';
 import { describe, expect, it } from 'vitest';
 import { defaultGames } from '../../src/app';
 import { loadConfig } from '../../src/config';
+import { seedsFor } from './seeds';
 
 /**
  * Phase 10 §9–10: every product game, attacked at every step of real bot matches
@@ -25,6 +26,9 @@ describe('engine fuzzing', () => {
             maxSteps: 20_000,
             mutationsPerStep: 20,
             replaysPerStep: 10,
+            ...(seedsFor(game.manifest.id) ? { seedActions: seedsFor(game.manifest.id) } : {}),
+            // Some seats count as humans so human-only rules (NPAT voting) are reachable.
+            humans: [0, 1, 2].filter((i) => i < seats),
           });
           attempts += report.attempts;
           // Most hostile attempts must be refused (accepted ones are legal moves in disguise).

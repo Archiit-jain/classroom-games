@@ -54,6 +54,13 @@ export interface SimulateOptions<S> {
    * bot is about to take — the fuzzer (`fuzzMatch`) attacks the engine from here.
    */
   probe?: (state: S, ctx: { seat: SeatIndex; action: unknown; now: number }) => void;
+  /**
+   * Seats the engine should treat as humans (bots still play them here). Default: none,
+   * so rules that need humans (e.g. NPAT voting) can be exercised by passing some.
+   */
+  humans?: SeatIndex[];
+  /** Called after every transition (actions, timers, setup) with the new frozen state. */
+  observe?: (state: S, now: number) => void;
   /** Called before every streamed chunk a bot sends (streams only). */
   probeStream?: (state: S, ctx: { seat: SeatIndex; chunk: unknown; now: number }) => void;
 }
@@ -120,11 +127,15 @@ export function simulateMatch<S, E>(
       for (const seat of seatList)
         assertNoViewLeak(game, state, seat, options.perturbHidden, leakRng);
     }
+    options.observe?.(state, now);
     steps++;
     if (steps > maxSteps) throw new Error(`Match did not finish within ${maxSteps} steps`);
   };
 
-  apply(game.setup(seatList, settings, { now, rng }, { bots: seatList }));
+  const humans = new Set(options.humans ?? []);
+  apply(
+    game.setup(seatList, settings, { now, rng }, { bots: seatList.filter((s) => !humans.has(s)) }),
+  );
 
   while (!game.isOver(state)) {
     let best: { seat: SeatIndex; action: unknown; thinkMs: number } | null = null;
