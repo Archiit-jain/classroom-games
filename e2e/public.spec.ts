@@ -38,7 +38,14 @@ test('Quick Play on two devices: same room, bots fill, the match starts @mobile'
   }
   if (testInfo.project.name === 'mobile') expect(await overflow(b)).toBeLessThanOrEqual(0);
   // That game is now this device's Quick Play game.
-  const game = (await a.locator('.room__title').innerText()).trim();
+  // The title's own text, without the decorative icon (16 Parchi's icon contains "16").
+  const game = await a.locator('.room__title').evaluate((el) =>
+    [...el.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE)
+      .map((n) => n.textContent)
+      .join('')
+      .trim(),
+  );
   a.once('dialog', (d) => void d.accept());
   await a.getByRole('button', { name: 'Leave game' }).click();
   await expect(a.getByRole('button', { name: /^Quick Play/ })).toContainText(game);

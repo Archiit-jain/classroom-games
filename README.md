@@ -185,7 +185,7 @@ See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) and [docs/GAME_SYSTEM.md](doc
 See [docs/TESTING.md](docs/TESTING.md). Current suite: 543 unit/integration tests (the Redis
 adapter and the multi-instance tests run against a real Redis in CI), 42 end-to-end runs (incl. public Quick Play, Browse and bot fill)
 (desktop + mobile, every game, reduced motion, 360 px and landscape phones, a WebSocket leak
-scan) and a production smoke test (Dots & Boxes, a three-player Name Place Animal Thing round
+scan) and a production smoke test (Dots & Boxes, a three-player Name Place Animal Thing round,
 a full Business match, Quick Play and Browse).
 
 ## Known limitations
