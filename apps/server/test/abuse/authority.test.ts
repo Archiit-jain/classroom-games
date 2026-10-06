@@ -90,3 +90,35 @@ describe('clients cannot state outcomes', () => {
     });
   }
 });
+
+describe('declared stream limits fit the largest legal chunk', () => {
+  // The runtime refuses chunks over a game's maxChunkBytes, so the largest chunk a real
+  // player can produce must fit (Hindi answers are 3 bytes per letter).
+  const devanagari = String.fromCodePoint(0x0915).repeat(30);
+  const largest: Record<string, unknown> = {
+    'draw-and-guess': {
+      op: 'stroke',
+      id: 65_535,
+      tool: 'eraser',
+      colour: 11,
+      size: 3,
+      points: Array.from({ length: 128 }, () => 4095),
+    },
+    'name-place-animal-thing': {
+      round: 1000,
+      seq: 1_000_000,
+      answers: { name: devanagari, place: devanagari, animal: devanagari, thing: devanagari },
+    },
+  };
+  for (const game of games.filter((g) => g.stream)) {
+    it(game.manifest.id, () => {
+      const stream = game.stream as NonNullable<typeof game.stream>;
+      const chunk = largest[game.manifest.id];
+      expect(chunk, 'add the largest legal chunk for this game').toBeDefined();
+      expect(stream.chunkSchema.safeParse(chunk).success).toBe(true);
+      expect(Buffer.byteLength(JSON.stringify(chunk))).toBeLessThanOrEqual(
+        stream.limits.maxChunkBytes,
+      );
+    });
+  }
+});

@@ -226,6 +226,11 @@ export class GameRuntime {
     if (!this.started || this.over || this.stopped) return fail('INVALID_PHASE');
     const parsed = stream.chunkSchema.safeParse(rawChunk);
     if (!parsed.success) return fail('INVALID_PAYLOAD');
+    // The game's declared chunk size is a promise to everyone it is relayed to: keep it
+    // here, whatever the schema allows. (Chunks per second: the `stream` rate bucket.)
+    if (Buffer.byteLength(JSON.stringify(parsed.data)) > stream.limits.maxChunkBytes) {
+      return fail('INVALID_PAYLOAD');
+    }
     let result: Result<Record<never, never>> = fail('INVALID_PHASE');
     this.run(() => {
       const out = stream.accept(this.state, seat, parsed.data);

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { MatchStream, MatchUpdate } from '@cg/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setupGameRoom, sleep, startServer, type TestClient, type TestServer } from './helpers';
@@ -59,6 +60,36 @@ describe('streamed games (match:stream)', () => {
       ok: false,
       code: 'MATCH_NOT_FOUND',
     });
+  });
+
+  it('enforces the game’s declared chunk size even when its schema would allow more', async () => {
+    // A game whose schema lets a chunk carry a long note, but whose contract says 64 bytes.
+    const base = createSketchGame({ maxChunks: 10 });
+    const stream = base.stream as NonNullable<typeof base.stream>;
+    const loose = {
+      ...base,
+      stream: {
+        ...stream,
+        chunkSchema: z.strictObject({
+          n: z.number().int().min(0).max(99),
+          note: z.string().max(5_000).optional(),
+        }),
+      },
+    } as unknown as typeof base;
+    t = await startServer({}, { games: [loose] });
+    const artist = await t.player('Archit');
+    const guest = await t.player('Priya');
+    await setupGameRoom('sketch', artist, guest);
+    expect((await artist.emit('room:start', {})).ok).toBe(true);
+    const { matchId } = (await artist.waitFor('match:update')) as Update;
+    expect(
+      await artist.emit('match:stream', { matchId, chunk: { n: 1, note: 'x'.repeat(4_000) } }),
+    ).toEqual({ ok: false, code: 'INVALID_PAYLOAD' });
+    expect(await artist.emit('match:stream', { matchId, chunk: { n: 1, note: 'ok' } })).toEqual({
+      ok: true,
+    });
+    await guest.waitFor('match:stream');
+    expect(JSON.stringify(streams(guest))).not.toContain('xxxx');
   });
 
   it('replays the whole picture after a reconnect and on resync', async () => {
