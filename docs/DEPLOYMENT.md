@@ -1,6 +1,7 @@
 # Deployment
 
-> **Status (Phase 9):** **live** at https://classroom-games-ashy.vercel.app (Vercel + Upstash
+> **Status (Phase 10):** hardening adds no new service or required variable (limits run on
+> the room host; `METRICS_TOKEN` now also reports the host's memory/CPU). Phase 9: **live** at https://classroom-games-ashy.vercel.app (Vercel + Upstash
 > Redis); the production smoke test passes against it. Public matchmaking runs on the same
 > Function and Redis (no new service); it adds two optional variables, `PUBLIC_FILL_WINDOW_MS`
 > and `METRICS_TOKEN`.
@@ -42,7 +43,7 @@ One site, one origin: the browser loads the client from the CDN and opens its We
 | `NODE_ENV`                            | Vercel | set by Vercel  | `production`: no development defaults; the server refuses to start without `REDIS_URL` or with localhost origins.                                                                                      |
 | `LOG_LEVEL`                           | Vercel | no             | `info` by default.                                                                                                                                                                                     |
 | `PUBLIC_FILL_WINDOW_MS`               | Vercel | no             | Public rooms' fill window, 1000–120000 ms (default 12000).                                                                                                                                             |
-| `METRICS_TOKEN`                       | Vercel | no             | At least 16 characters. Enables `GET /api/socket/metrics` (matchmaking counters) for `Authorization: Bearer <token>`; unset = endpoint off.                                                            |
+| `METRICS_TOKEN`                       | Vercel | no             | At least 16 characters. Enables `GET /api/socket/metrics` (matchmaking counters and the host's memory, CPU time and event-loop delay) for `Authorization: Bearer <token>`; unset = endpoint off.       |
 | `VITE_SERVER_URL`, `VITE_SOCKET_PATH` | build  | no             | Only to point the client at a different server; leave unset on Vercel.                                                                                                                                 |
 
 Nothing reads or writes the local filesystem at runtime.
@@ -94,27 +95,47 @@ STOP ends the round, the automatic check marks answers, two of the three players
 `wss://` and WebSocket-only. CI runs the same test on every push against the production build
 with a real Redis.
 
+**Security smoke** (`e2e/smoke/security.spec.ts`, part of `pnpm smoke`; controlled and
+low-volume, safe against the live site): security headers, the HTTP→HTTPS redirect and HSTS,
+a foreign-origin socket handshake refused (403), the metrics endpoint not public, malformed
+requests answered `INVALID_PAYLOAD`, a broken packet ending only its own connection, chat
+censoring / contact removal / repeat refusal between two players, reactions, and a private
+room with bots in **every game** accepting real moves.
+
+**Load test** (opt-in, not a capacity benchmark): with a production build running with
+`METRICS_TOKEN`,
+
+```bash
+LOAD=1 LOAD_URL=http://localhost:4300 LOAD_TOKEN=<token> pnpm vitest run apps/server/test/load
+```
+
+20 then 40 players join public matches in all games and play, chat, react and reconnect; the
+report (latency, errors, server CPU/memory, Redis commands) goes to `$LOAD_OUT` and, in CI
+(which runs it after the smoke test), to the job summary.
+
 ## Readiness checklist
 
-| Item                                   | Status                                                                                                                                                                      |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production client build                | ✔ `pnpm build` → `apps/client/dist`                                                                                                                                         |
-| Production server entry                | ✔ `api/socket.mjs` (Vercel Function); `apps/server/dist/index.js` for a plain Node host                                                                                     |
-| Environment variables validated        | ✔ zod; production refuses missing Redis / missing or localhost origins                                                                                                      |
-| WebSocket URL                          | ✔ same origin, `/api/socket/socket.io`, WebSocket transport only                                                                                                            |
-| HTTPS / WSS                            | ✔ Vercel TLS; HSTS header; `upgrade-insecure-requests`                                                                                                                      |
-| Origins / CORS                         | ✔ same origin; allow-list from env / Vercel domains                                                                                                                         |
-| Security headers                       | ✔ CSP, HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` (`vercel.json`)                                                           |
-| Anonymous sessions across instances    | ✔ in Redis                                                                                                                                                                  |
-| Reconnect across instances             | ✔ tested (multi-instance tests, smoke test)                                                                                                                                 |
-| Room state across instances            | ✔ host lease + snapshots + forwarding (ADR-023)                                                                                                                             |
-| Instance replacement                   | ✔ hand-over and crash failover tested; timers and bots resume                                                                                                               |
-| No localhost assumptions in production | ✔ client and server                                                                                                                                                         |
-| No filesystem dependency               | ✔                                                                                                                                                                           |
-| No dev fixtures in production          | ✔ fixture game off in production (server) and not bundled (client)                                                                                                          |
-| Health check                           | ✔ `GET /api/socket/healthz`                                                                                                                                                 |
-| Live deployment                        | ✔ 2026-10-06: Vercel project `classroom-games` (https://classroom-games-ashy.vercel.app, Functions in bom1) + Upstash Redis; `SMOKE_URL=… pnpm smoke` 5/5 passed against it |
-| Public matchmaking                     | ✔ Quick Play / Any Game / Browse on the room host; multi-instance and failover tested; in the smoke test                                                                    |
+| Item                                   | Status                                                                                                                                                                                   |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production client build                | ✔ `pnpm build` → `apps/client/dist`                                                                                                                                                      |
+| Production server entry                | ✔ `api/socket.mjs` (Vercel Function); `apps/server/dist/index.js` for a plain Node host                                                                                                  |
+| Environment variables validated        | ✔ zod; production refuses missing Redis / missing or localhost origins                                                                                                                   |
+| WebSocket URL                          | ✔ same origin, `/api/socket/socket.io`, WebSocket transport only                                                                                                                         |
+| HTTPS / WSS                            | ✔ Vercel TLS; HSTS header; `upgrade-insecure-requests`                                                                                                                                   |
+| Origins / CORS                         | ✔ same origin; allow-list from env / Vercel domains                                                                                                                                      |
+| Security headers                       | ✔ CSP, HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` (`vercel.json`)                                                                        |
+| Anonymous sessions across instances    | ✔ in Redis                                                                                                                                                                               |
+| Reconnect across instances             | ✔ tested (multi-instance tests, smoke test)                                                                                                                                              |
+| Room state across instances            | ✔ host lease + snapshots + forwarding (ADR-023)                                                                                                                                          |
+| Instance replacement                   | ✔ hand-over and crash failover tested; timers and bots resume                                                                                                                            |
+| No localhost assumptions in production | ✔ client and server                                                                                                                                                                      |
+| No filesystem dependency               | ✔                                                                                                                                                                                        |
+| No dev fixtures in production          | ✔ fixture game off in production (server) and not bundled (client)                                                                                                                       |
+| Health check                           | ✔ `GET /api/socket/healthz`                                                                                                                                                              |
+| Live deployment                        | ✔ 2026-10-06: Vercel project `classroom-games` (https://classroom-games-ashy.vercel.app, Functions in bom1) + Upstash Redis; `SMOKE_URL=… pnpm smoke` 5/5 passed against it              |
+| Public matchmaking                     | ✔ Quick Play / Any Game / Browse on the room host; multi-instance and failover tested; in the smoke test                                                                                 |
+| Abuse resistance (Phase 10)            | ✔ cluster-wide rate limits, host self-fencing, security smoke (headers, origins, malformed requests, moderation, every game) — [MODERATION_HARDENING.md](design/MODERATION_HARDENING.md) |
+| Load (lightweight)                     | ✔ 20/40-player load test in CI on the production build with Redis (job summary); not a capacity benchmark                                                                                |
 
 ## Other hosts
 

@@ -39,7 +39,7 @@ Expandability → Security → Performance → Documentation.
 
 ## Current status
 
-Phases 1–9 are complete: the platform (with quick reactions, streamed games, server-side
+Phases 1–10 are complete (Phase 10: security and abuse hardening, [audit](design/MODERATION_HARDENING.md)): the platform (with quick reactions, streamed games, server-side
 physics and a production-ready multi-instance architecture for Vercel + Redis) plus all seven
 games — Raja Mantri Chor Sipahi, the flagship 16 Parchi, Draw & Guess (working name), Pen
 Fight, Dots & Boxes, Name Place Animal Thing and Business (working title) — in the Color Burst

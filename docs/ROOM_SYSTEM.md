@@ -54,7 +54,9 @@ stateDiagram-v2
   Codes are case- and space-insensitive when typed.
 - **Join:** only in `LOBBY`; fails with `ROOM_NOT_FOUND`, `ROOM_FULL`, `ROOM_IN_PROGRESS`,
   `REMOVED_FROM_ROOM`, `NICKNAME_TAKEN` (look-alike names count as the same) or
-  `ALREADY_IN_ROOM`. Join attempts are rate-limited (anti code-guessing).
+  `ALREADY_IN_ROOM`. Join attempts are rate-limited per session, and wrong codes spend a
+  per-IP budget (30, then one per 10 s) shared by every session from that address and counted
+  once for the whole cluster (anti code-guessing; [SECURITY.md](SECURITY.md#rate-limits)).
 - **Capacity:** the selected game's maximum players.
 - **Host powers** (`LOBBY` unless noted): change game, change settings (validated by the
   game's schema), add/remove bots, remove players (any phase), start; from `RESULTS`:
@@ -105,6 +107,7 @@ Details:
 ## Limits (config)
 
 `maxRooms` (500), `roomCreate` rate limit (burst 3, ~5/min per session), `roomJoin`
-(burst 10, ~20/min), `roomAdmin` (burst 10, 2/s); public play adds `matchmaking` (burst 5,
+(burst 10, ~20/min), `roomAdmin` (burst 10, 2/s), `codeGuess` per IP (burst 30, one per 10 s)
+— all counted on the room host for the whole cluster; public play adds `matchmaking` (burst 5,
 one per 2 s) and `browse` (burst 5, 1/s) on the host, and `matchmaking.fillWindowMs` (12 s,
 env `PUBLIC_FILL_WINDOW_MS`), `resultsMs` (15 s), `browseMaxRooms` (50), `browsePushMs` (250).

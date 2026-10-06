@@ -17,3 +17,5 @@ Platform-wide: [PRODUCTION_ARCHITECTURE.md](PRODUCTION_ARCHITECTURE.md) — depl
 production (Vercel) architecture, Phase 6 design pass.
 [PUBLIC_LOBBY_DESIGN.md](PUBLIC_LOBBY_DESIGN.md) — public rooms, matchmaking, Quick Play and Browse
 (Phase 9 design).
+[MODERATION_HARDENING.md](MODERATION_HARDENING.md) — security audit, abuse cases, findings,
+fixes and limitations (Phase 10).

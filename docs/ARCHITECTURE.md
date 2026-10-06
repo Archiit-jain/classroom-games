@@ -161,6 +161,13 @@ Production runs any number of server instances (Vercel Functions) sharing state 
   host, which picks a room and seats the player in one synchronous step, so concurrent players
   on different instances can't race; fill deadlines and Browse subscriptions are in the
   snapshots and survive failover.
+- Rate limits (Phase 10) are counted on the host too, so they hold whichever instance a
+  player reconnects through; gateways still drop floods before forwarding.
+- **Self-fencing** (Phase 10): a host that cannot renew its lease for 2/3 of the lease time
+  (for example when only its own Redis connection hangs) stops hosting before anyone else
+  can take over — never two hosts at once. Whole-state match updates (`reset: true`: reconnect,
+  reclaim, a new host's restore) replace the client's state even at a lower version
+  ([ADR-028](decisions/ADR-028-cluster-wide-limits-and-self-fencing.md)).
 
 Locally (`pnpm dev`, tests) the same code runs in one process with `MemorySharedStore`; that
 process is always the host. The multi-instance tests run several instances in one process

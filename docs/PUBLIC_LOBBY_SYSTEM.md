@@ -95,7 +95,9 @@ Strict schemas on every `public:*` event (unknown fields rejected); counts, seat
 timers and bot flags are computed on the host only; public rooms refuse host commands
 (`NOT_HOST`). Host-side buckets per player (shared by all instances): `matchmaking`
 (play / join / play with bots: burst 5, one per 2 s) and `browse` (burst 5, one per second),
-plus the gateway's coarse per-socket guards.
+plus every event's own bucket counted on the host for the whole cluster and the gateway's
+coarse per-socket guards ([SECURITY.md](SECURITY.md#rate-limits)). A private room can't be
+entered through `public:join`, even with its id (tested in `abuse/rooms.test.ts`).
 
 ## Metrics
 

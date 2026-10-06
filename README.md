@@ -3,14 +3,17 @@
 Quick multiplayer classroom and childhood games in the browser. No accounts, no login:
 pick a nickname, create or join a room, play.
 
-> **Status: Phase 9 of 12 — all seven games playable with friends, bots or people online, production-ready architecture.**
+> **Status: Phase 10 of 12 — live at https://classroom-games-ashy.vercel.app; all seven games playable with friends, bots or people online; hardened against abuse.**
 > The multiplayer platform (sessions, private rooms, reconnect, bots, chat moderation, quick
 > reactions, live drawing streams, server-side physics) runs on several server instances with
 > shared state in Redis, built for **Vercel**. **Raja Mantri Chor Sipahi**, the flagship
 > **16 Parchi**, **Draw & Guess** (working name), **Pen Fight**, **Dots & Boxes**, **Name Place Animal Thing** and **Business** (working title) are fully
 > playable with friends and bots in the **Color Burst Arcade** design.
 > **Quick Play**, **Any Game** and a live **Browse** list put players into public rooms
-> that fill with bots after a short wait. Next: moderation hardening. See the [roadmap](#roadmap).
+> that fill with bots after a short wait. Rate limits hold across server instances, a host
+> cut off from Redis steps down on its own, and every game is fuzzed with hostile moves
+> ([security audit](docs/design/MODERATION_HARDENING.md)). Next: performance, mobile and
+> animation polish. See the [roadmap](#roadmap).
 
 ## Why
 
@@ -182,11 +185,14 @@ See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) and [docs/GAME_SYSTEM.md](doc
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md). Current suite: 543 unit/integration tests (the Redis
-adapter and the multi-instance tests run against a real Redis in CI), 42 end-to-end runs (incl. public Quick Play, Browse and bot fill)
+See [docs/TESTING.md](docs/TESTING.md). Current suite: 646 unit/integration tests (the Redis
+adapter and the multi-instance tests run against a real Redis in CI) including abuse, fuzzing
+and Redis-failure suites, 42 end-to-end runs (incl. public Quick Play, Browse and bot fill)
 (desktop + mobile, every game, reduced motion, 360 px and landscape phones, a WebSocket leak
 scan) and a production smoke test (Dots & Boxes, a three-player Name Place Animal Thing round,
-a full Business match, Quick Play and Browse).
+a full Business match, Quick Play, Browse, and a security smoke: headers, origins,
+malformed requests, moderation and a real move in every game), plus a lightweight 20/40-player
+load test in CI.
 
 ## Known limitations
 
@@ -211,7 +217,7 @@ a full Business match, Quick Play and Browse).
 7. ✅ Name Place Animal Thing
 8. ✅ Business (working title)
 9. ✅ Public lobby, Quick Play, bot fill, "Play with Bots"
-10. Moderation hardening and abuse testing
+10. ✅ Moderation hardening and abuse testing
 11. Performance, mobile and animation polish
 12. Production deployment
 

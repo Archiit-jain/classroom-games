@@ -19,7 +19,9 @@ flowchart LR
   E --> F{game hook<br/>during a match}
   F -- BLOCK --> Y[CHAT_BLOCKED]
   F -- CONSUME --> Z[handled by the game,<br/>never broadcast]
-  F -- PASS / RESTRICT --> G[censor profanity<br/>remove contact details]
+  F -- PASS / RESTRICT --> R{same as my last<br/>message within 30 s?}
+  R -- yes --> W[CHAT_REPEATED]
+  R -- no --> G[censor profanity<br/>remove contact details]
   G --> H[broadcast to room<br/>or restricted audience]
 ```
 
@@ -36,21 +38,29 @@ flowchart LR
    shown) or `BLOCK` it; a `PASS` may also record public game state (Draw & Guess remembers
    wrong guesses). Only room-channel messages are kept in the history buffer. Bot guesses in
    Draw & Guess take this same path ([ADR-020](decisions/ADR-020-streamed-games.md)).
-4. **Censor:** profanity is replaced with asterisks of the same length; contact details
+4. **Repeat check** (room chat only, Phase 10 owner decision): the same message as the
+   sender's previous one, within 30 s, is refused with `CHAT_REPEATED` ("You just said
+   that.") and not sent. Case, accents and spacing don't make it a new message. Refused
+   repeats still spend the flood budget; nothing is punished; only each player's last
+   message is remembered (in memory). Game input (guesses) is not affected.
+5. **Censor:** profanity is replaced with asterisks of the same length; contact details
    become `[removed]`.
-5. **Broadcast** to the humans in the room (or the restricted audience plus the sender).
+6. **Broadcast** to the humans in the room (or the restricted audience plus the sender).
+
+All of these run on the room host, so the limits, cooldown and repeat check hold whichever
+server instance a player is connected to ([ADR-028](decisions/ADR-028-cluster-wide-limits-and-self-fencing.md)).
 
 ## What the moderator detects
 
 `createModerator()` in `packages/moderation/src/moderator.ts` returns a `Moderator`:
 
-| Category                               | How                                                                                                                                                    |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| English profanity, sexual terms, slurs | obscenity's English dataset (with its whitelist)                                                                                                       |
-| Romanised Hindi / Hinglish abuse       | our list in `datasets.ts` (incl. `bc`, `mc`, `bsdk`, …)                                                                                                |
-| Insults                                | our list: stupid, idiot, dumb, moron, loser, kys, "kill yourself"                                                                                      |
-| Evasion                                | obscenity transformers (confusable letters, leetspeak, repeated letters), zero-width characters removed, spaced-out letters ("f u c k", "s.t.u.p.i.d") |
-| Contact details                        | URLs, `www.`, bare domains, "x dot com", emails, phone numbers (9+ digits), `@handles`, "insta: name"-style handles                                    |
+| Category                               | How                                                                                                                                                                         |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| English profanity, sexual terms, slurs | obscenity's English dataset (with its whitelist)                                                                                                                            |
+| Romanised Hindi / Hinglish abuse       | our list in `datasets.ts` (incl. `bc`, `mc`, `bsdk`, …)                                                                                                                     |
+| Insults                                | our list: stupid, idiot, dumb, moron, loser, kys, "kill yourself"                                                                                                           |
+| Evasion                                | obscenity transformers (confusable letters, leetspeak, repeated letters), zero-width characters removed, spaced-out letters ("f u c k", "s.t.u.p.i.d")                      |
+| Contact details                        | URLs, `www.`, bare domains, "x dot com", emails, phone numbers (9+ digits in any script — 0–9, Devanagari, Bengali, Arabic-Indic…), `@handles`, "insta: name"-style handles |
 
 **False-positive guards:** whole-word patterns; obscenity's whitelist plus our allow-list
 (Classroom, class, pass, assassin, Scunthorpe, grass, cocktail, analysis, Sussex, …);
@@ -70,7 +80,8 @@ Nicknames use the same moderator but are **rejected** rather than censored:
 2–16 characters after trimming, letters/numbers/spaces/`_ . - '`/emoji only, at least one
 letter or number, no names starting with "Bot" (so a human can never pass as a bot —
 confirmed by the product owner in the Phase 2 review), no profanity or contact details. Uniqueness inside a room uses a look-alike key ("Archit",
-"Archít", "ARCH1T", "A r c h i t" collide).
+"Archít", "ARCH1T", "A r c h i t", and "Archit" written with a Cyrillic or Greek look-alike
+letter all collide), so nobody can sit next to a player under a copy of their name.
 
 ## Mute and report
 
@@ -111,6 +122,16 @@ match ([ADR-018](decisions/ADR-018-quick-reactions.md)).
 
 The only chat storage is the last 50 censored room messages, in memory, deleted with the
 room. It exists so reconnecting players see recent chat.
+
+## Evasion tests (Phase 10)
+
+`packages/moderation/test/hardening.test.ts` keeps the evasion battery: spacing, dots and
+dashes between letters, leetspeak, stretched letters, repeated punctuation, zero-width and
+soft-hyphen characters, Cyrillic/Greek look-alikes, fullwidth letters, Hinglish (incl.
+stretched and capitalised forms), and every contact-detail form above — plus ordinary chat
+that must stay untouched ("chod do yaar", "chakka", "class assessment", Russian-looking
+text, short numbers). Known gaps, kept on purpose: a spaced two-letter "m c" passes (the
+bc/mc whole-word rule) and spelled-out numbers ("nine eight seven…") are not phone numbers.
 
 ## Maintaining the word lists
 
