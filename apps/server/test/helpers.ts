@@ -14,6 +14,7 @@ import type {
 import { io as ioClient, type Socket } from 'socket.io-client';
 import { createGameServer, type GameServer } from '../src/app';
 import { loadConfig, mergeConfig, type ConfigOverrides } from '../src/config';
+import type { Logger } from '../src/log';
 import type { ReportSink } from '../src/reports/ReportService';
 
 type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -43,7 +44,7 @@ export interface ConnectOptions {
 
 export async function startServer(
   overrides: ConfigOverrides = {},
-  options: { games?: AnyGameModule[]; reportSink?: ReportSink } = {},
+  options: { games?: AnyGameModule[]; reportSink?: ReportSink; log?: Logger } = {},
 ): Promise<TestServer> {
   const config = mergeConfig(
     loadConfig(
@@ -61,6 +62,7 @@ export async function startServer(
     config,
     games: options.games ?? [testFixture()],
     ...(options.reportSink ? { reportSink: options.reportSink } : {}),
+    ...(options.log ? { log: options.log } : {}),
   });
   const port = await server.listen(0);
   const url = `http://127.0.0.1:${port}`;
@@ -89,6 +91,10 @@ export async function startServer(
   };
 }
 
+interface RawEngine {
+  on(event: 'packet', fn: (packet: { data?: unknown }) => void): void;
+}
+
 interface Waiter {
   event: string;
   predicate: (payload: unknown) => boolean;
@@ -97,10 +103,19 @@ interface Waiter {
 
 export class TestClient {
   readonly received = new Map<string, unknown[]>();
+  /** Every raw frame the server sent this client (Engine.IO payloads), for leak scans. */
+  readonly frames: string[] = [];
   private waiters: Waiter[] = [];
   ready!: SessionReady;
 
   private constructor(readonly socket: ClientSocket) {
+    // The Engine.IO connection exists once the manager opens; record from then on.
+    socket.io.on('open', () => {
+      const engine = (socket.io as unknown as { engine: RawEngine }).engine;
+      engine.on('packet', (packet) => {
+        if (typeof packet.data === 'string') this.frames.push(packet.data);
+      });
+    });
     socket.onAny((event: string, payload: unknown) => {
       const list = this.received.get(event) ?? [];
       list.push(payload);

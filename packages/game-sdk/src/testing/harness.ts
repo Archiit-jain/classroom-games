@@ -49,6 +49,13 @@ export interface SimulateOptions<S> {
    * virtual clock), as the server does. Off by default.
    */
   streams?: boolean;
+  /**
+   * Called before every bot action with the current (frozen) state and the action a
+   * bot is about to take — the fuzzer (`fuzzMatch`) attacks the engine from here.
+   */
+  probe?: (state: S, ctx: { seat: SeatIndex; action: unknown; now: number }) => void;
+  /** Called before every streamed chunk a bot sends (streams only). */
+  probeStream?: (state: S, ctx: { seat: SeatIndex; chunk: unknown; now: number }) => void;
 }
 
 export interface SimulationResult<S, E> {
@@ -163,6 +170,7 @@ export function simulateMatch<S, E>(
       const step = steps.shift() as { at: number; chunk: unknown };
       now = Math.max(now, step.at);
       if (steps.length === 0) plans.delete(nextChunk.seat);
+      options.probeStream?.(state, { seat: nextChunk.seat, chunk: step.chunk, now });
       const stream = game.stream;
       const parsed = stream?.chunkSchema.safeParse(step.chunk);
       const out =
@@ -184,6 +192,7 @@ export function simulateMatch<S, E>(
 
     if (best && (!nextTimer || now + best.thinkMs < nextTimer.at)) {
       now += best.thinkMs;
+      options.probe?.(state, { seat: best.seat, action: best.action, now });
       const action = game.actionSchema.parse(best.action);
       const verdict = game.validateAction(state, best.seat, action);
       if (!verdict.ok) {
