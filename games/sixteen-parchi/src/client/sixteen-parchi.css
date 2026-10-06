@@ -512,18 +512,6 @@
   color: var(--color-text-muted);
 }
 
-/* Settings preview */
-.sp-settings__preview {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 38px;
-}
-.sp-settings__random {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
 .sp-desk__text,
 .sp-desk__big {
   text-wrap: balance;

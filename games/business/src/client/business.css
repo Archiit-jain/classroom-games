@@ -1462,17 +1462,6 @@
   border-left: 4px solid var(--bz-chance);
 }
 
-/* ───────── Settings ───────── */
-.bz-stepper {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.bz-stepper__input {
-  width: 5.5em;
-  text-align: center;
-}
-
 @keyframes bz-stamp {
   from {
     transform: scale(2);

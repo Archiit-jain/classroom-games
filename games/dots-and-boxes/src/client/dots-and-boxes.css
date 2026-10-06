@@ -243,16 +243,6 @@
   color: var(--cb-yellow);
 }
 
-/* Settings preview */
-.db-settings {
-  align-items: center;
-}
-.db-settings__preview {
-  width: 72px;
-  height: 72px;
-  fill: var(--color-text);
-}
-
 /* Landscape phones: players and status beside a board sized to the screen height. */
 @media (orientation: landscape) and (max-height: 520px) {
   .db {

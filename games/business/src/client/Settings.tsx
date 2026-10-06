@@ -2,6 +2,7 @@ import type { SettingsProps } from '@cg/game-sdk/client';
 import { useState } from 'react';
 import { MAX_ROUNDS, MIN_ROUNDS, type BusinessSettings } from '../shared';
 import { f } from './messages';
+import './settings.css';
 
 const clamp = (n: number) => Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, Math.round(n)));
 

@@ -1,6 +1,7 @@
 import type { SettingsProps } from '@cg/game-sdk/client';
 import { GRID_SIZES, type DotsSettings, type GridSize } from '../shared';
 import { f } from './messages';
+import './settings.css';
 
 /** Host picks the grid (5×5 by default); guests see it read-only, with a tiny preview. */
 export default function DotsSettingsForm({

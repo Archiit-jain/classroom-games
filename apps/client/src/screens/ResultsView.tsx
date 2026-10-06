@@ -99,7 +99,10 @@ export function ResultsView({ room }: { room: RoomView }) {
       </div>
 
       <div className="panel results__panel">
-        <table className="results__table">
+        {/* Many stat columns (Business) turn into one card per player on phones. */}
+        <table
+          className={columns.length > 2 ? 'results__table results__table--wide' : 'results__table'}
+        >
           <thead>
             <tr>
               <th scope="col">#</th>
@@ -130,7 +133,11 @@ export function ResultsView({ room }: { room: RoomView }) {
                     )}
                   </td>
                   {columns.map((c) => (
-                    <td key={c.key} className="results__num">
+                    <td
+                      key={c.key}
+                      className="results__num"
+                      data-label={module ? gameText(module.messages, c.labelKey) : c.key}
+                    >
                       <RollingNumber value={stats[p.seat]?.[c.key] ?? 0} durationMs={1400} />
                     </td>
                   ))}

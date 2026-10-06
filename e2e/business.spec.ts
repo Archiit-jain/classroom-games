@@ -279,6 +279,16 @@ for (const [label, viewport] of [
     test.setTimeout(420_000);
     const page = await newPlayer(browser, 'Meera', { viewport, isMobile: true, hasTouch: true });
     await createRoom(page, BUSINESS);
+    // The lobby's settings are styled before the board (and its stylesheet) ever loaded:
+    // − / rounds / + sit on one row (they used to stack, unstyled).
+    await expect(page.locator('.bz-stepper > *')).toHaveCount(3);
+    const stepper = await page
+      .locator('.bz-stepper > *')
+      .evaluateAll((els) => els.map((e) => e.getBoundingClientRect()));
+    expect(stepper).toHaveLength(3);
+    const [minus, box, plus] = stepper as [DOMRect, DOMRect, DOMRect];
+    expect(minus.right).toBeLessThanOrEqual(box.left);
+    expect(box.right).toBeLessThanOrEqual(plus.left);
     await setRounds(page, 5);
     await page.getByRole('button', { name: 'Add bot' }).click();
     await page.getByRole('button', { name: 'Start game' }).click();
@@ -310,6 +320,28 @@ for (const [label, viewport] of [
     await playUntilResults([page]);
     await expectResults(page, 2);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
+    // Five stat columns on a phone: no label or value is squeezed into a column one letter
+    // wide ("F / I / N / A / L…" on Android Chrome). Each stays at most two lines tall.
+    const cells = await page
+      .locator('.results__table th:visible, .results__num:visible')
+      .evaluateAll((els) =>
+        els
+          // On phones the header row is hidden from sight (kept for screen readers).
+          .filter((e) => {
+            const head = e.closest('thead');
+            return !head || getComputedStyle(head).clipPath === 'none';
+          })
+          .map((e) => ({
+            text: e.textContent,
+            height: e.getBoundingClientRect().height,
+            width: e.getBoundingClientRect().width,
+          })),
+      );
+    expect(cells.length).toBeGreaterThan(0);
+    for (const cell of cells) {
+      expect(cell.height, `${cell.text} is ${Math.round(cell.height)} px tall`).toBeLessThan(64);
+      expect(cell.width, `${cell.text} is ${Math.round(cell.width)} px wide`).toBeGreaterThan(24);
+    }
   });
 }
 

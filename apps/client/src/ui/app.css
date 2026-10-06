@@ -544,8 +544,6 @@
 }
 .results__table {
   width: 100%;
-  /* Long names and several stat columns wrap on narrow phones instead of widening the page. */
-  overflow-wrap: anywhere;
   border-collapse: separate;
   border-spacing: 0 6px;
 }
@@ -584,6 +582,8 @@
 .results__name {
   font-family: var(--font-display);
   font-weight: 700;
+  /* Only a long name may break anywhere; headers and numbers never break mid-word. */
+  overflow-wrap: anywhere;
 }
 .results__name .badge {
   margin-left: 6px;
@@ -593,6 +593,61 @@
   font-family: var(--font-display);
   font-weight: 800;
   color: var(--cb-yellow);
+  white-space: nowrap;
+}
+.results__table th.results__num {
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+/* Phones: a table with many stat columns becomes one card per player — place and name
+   on top, then the stats as labelled pairs — instead of squeezing every column. */
+@media (max-width: 599px) {
+  .results__table--wide,
+  .results__table--wide tbody,
+  .results__table--wide tr,
+  .results__table--wide td {
+    display: block;
+  }
+  .results__table--wide thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .results__table--wide .results__row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    margin-bottom: var(--space-2);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .results__table--wide .results__row--first {
+    background: rgba(255, 210, 63, 0.18);
+  }
+  .results__table--wide .results__row td,
+  .results__table--wide .results__row--first td {
+    border-radius: 0;
+    background: none;
+  }
+  .results__table--wide .results__num {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: 4px 12px;
+  }
+  .results__table--wide .results__num::before {
+    content: attr(data-label);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-text-muted);
+  }
+  .results__table--wide .results__num:last-child {
+    padding-bottom: 12px;
+  }
 }
 .results__actions {
   display: flex;

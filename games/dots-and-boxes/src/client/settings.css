@@ -1,0 +1,10 @@
+/* Lobby settings. Imported by Settings.tsx, not the board, because the lobby shows the
+   settings before the board (and its stylesheet) has ever loaded. */
+.db-settings {
+  align-items: center;
+}
+.db-settings__preview {
+  width: 72px;
+  height: 72px;
+  fill: var(--color-text);
+}

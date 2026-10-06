@@ -4,6 +4,7 @@ import { CATEGORIES, categoryById } from '../shared/categories';
 import type { ParchiSettings } from '../shared/types';
 import { ItemIcon } from './icons/items';
 import { parchiMessages as m } from './messages';
+import './settings.css';
 
 /** Host picks the category (default Random); guests see it read-only. */
 export default function ParchiSettingsForm({

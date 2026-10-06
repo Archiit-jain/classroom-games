@@ -1,0 +1,12 @@
+/* Lobby settings. Imported by Settings.tsx, not the board, because the lobby shows the
+   settings before the board (and its stylesheet) has ever loaded. */
+.sp-settings__preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+}
+.sp-settings__random {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

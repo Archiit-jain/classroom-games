@@ -1,0 +1,11 @@
+/* Lobby settings. Imported by Settings.tsx, not the board, because the lobby shows the
+   settings before the board (and its stylesheet) has ever loaded. */
+.bz-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bz-stepper__input {
+  width: 5.5em;
+  text-align: center;
+}
