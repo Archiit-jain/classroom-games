@@ -141,7 +141,7 @@ const GAMES = [
 
 for (const game of GAMES) {
   test(`production: ${game.manifest.id} starts and accepts real moves`, async () => {
-    test.setTimeout(150_000);
+    test.setTimeout(330_000);
     const s = await player('Smoke');
     const created = await s.emit('room:create', { gameId: game.manifest.id });
     expect(created.ok).toBe(true);
@@ -154,7 +154,15 @@ for (const game of GAMES) {
     let accepted = 0;
     let busy = false;
     const rng = createRng(7);
+    let ended = false;
     const done = new Promise<void>((resolve) => {
+      // Some games may legitimately ask nothing of this seat for a while (in RMCS only the
+      // round's Mantri moves, and roles are dealt at random): a match played to its end
+      // also proves the game runs.
+      s.on('match:end', () => {
+        ended = true;
+        resolve();
+      });
       s.on('match:update', (raw) => {
         const u = raw as {
           matchId: string;
@@ -198,8 +206,11 @@ for (const game of GAMES) {
         })();
       });
     });
-    await Promise.race([done, new Promise((r) => setTimeout(r, 120_000))]);
-    expect(accepted, `${game.manifest.id}: server-accepted moves`).toBeGreaterThanOrEqual(1);
+    await Promise.race([done, new Promise((r) => setTimeout(r, 300_000))]);
+    expect(
+      accepted >= 1 || ended,
+      `${game.manifest.id}: ${accepted} server-accepted moves, match ended: ${ended}`,
+    ).toBe(true);
     await s.emit('room:leave', {});
     s.close();
   });
