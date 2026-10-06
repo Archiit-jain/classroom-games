@@ -15,6 +15,7 @@ import type { Room, RoomSnapshot } from '../rooms/types';
 import type { GameRegistry } from '../runtime/GameRegistry';
 import { SessionManager, type Session } from '../session/SessionManager';
 import { EVENT_BUCKETS } from '../transport/eventBuckets';
+import { processStats } from '../util/processStats';
 import { RateLimiter } from '../util/RateLimiter';
 import { TimerService } from '../util/TimerService';
 import { KEYS, type Cluster, type HostCall } from './Cluster';
@@ -256,7 +257,8 @@ export class HostServices {
           typeof data.ip === 'string' ? data.ip : 'unknown',
         );
       case 'metrics':
-        return ok(this.metrics.snapshot());
+        // The host's own resource use rides along (operator-only endpoint, no player data).
+        return ok({ ...this.metrics.snapshot(), process: processStats() });
       default:
         return fail('INVALID_PAYLOAD');
     }

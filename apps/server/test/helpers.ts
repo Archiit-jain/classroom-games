@@ -40,6 +40,8 @@ export interface TestServer {
 export interface ConnectOptions {
   token?: string;
   origin?: string;
+  /** Socket.IO path (the production build serves it at /api/socket/socket.io). */
+  path?: string;
 }
 
 export async function startServer(
@@ -137,6 +139,7 @@ export class TestClient {
       reconnection: false,
       auth: options.token ? { token: options.token } : {},
       ...(options.origin ? { extraHeaders: { origin: options.origin } } : {}),
+      ...(options.path ? { path: options.path } : {}),
     });
     const client = new TestClient(socket);
     client.ready = await client.waitFor('session:ready');

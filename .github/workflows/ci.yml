@@ -90,8 +90,21 @@ jobs:
           REDIS_URL: redis://localhost:6379
           ALLOWED_ORIGINS: http://localhost:4300
           LOG_LEVEL: info
+          # CI-only token for the load test's server statistics (operator endpoint).
+          METRICS_TOKEN: ci-load-test-token-0001
       - name: Wait until it answers
         run: for i in $(seq 60); do curl -sf http://localhost:4300/api/socket/healthz && exit 0; sleep 1; done; exit 1
       - run: pnpm smoke
+      # Lightweight load test (Phase 10): 20 then 40 players on the production build
+      # with Redis; the report (latency, errors, CPU, memory, Redis commands) goes to
+      # the job summary. Not a capacity benchmark.
+      - name: Lightweight load test
+        run: pnpm vitest run apps/server/test/load
+        env:
+          LOAD: '1'
+          LOAD_URL: http://localhost:4300
+          LOAD_TOKEN: ci-load-test-token-0001
+          LOAD_SECONDS: '45'
+          REDIS_URL: redis://localhost:6379
       - if: ${{ always() }}
         run: cat server.log
