@@ -185,7 +185,7 @@ See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) and [docs/GAME_SYSTEM.md](doc
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md). Current suite: 646 unit/integration tests (the Redis
+See [docs/TESTING.md](docs/TESTING.md). Current suite: 647 unit/integration tests (the Redis
 adapter and the multi-instance tests run against a real Redis in CI) including abuse, fuzzing
 and Redis-failure suites, 42 end-to-end runs (incl. public Quick Play, Browse and bot fill)
 (desktop + mobile, every game, reduced motion, 360 px and landscape phones, a WebSocket leak

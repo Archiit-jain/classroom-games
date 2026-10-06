@@ -163,9 +163,11 @@ Production runs any number of server instances (Vercel Functions) sharing state 
   snapshots and survive failover.
 - Rate limits (Phase 10) are counted on the host too, so they hold whichever instance a
   player reconnects through; gateways still drop floods before forwarding.
-- **Self-fencing** (Phase 10): a host that cannot renew its lease for 2/3 of the lease time
-  (for example when only its own Redis connection hangs) stops hosting before anyone else
-  can take over — never two hosts at once. Whole-state match updates (`reset: true`: reconnect,
+- **Self-fencing** (Phase 10): a host that can't reach the store (its previous cluster tick is
+  still waiting or failed — e.g. only its own Redis connection hangs) and whose renewal is
+  overdue by half the lease stops hosting before anyone else can take over — never two hosts
+  at once. A freeze (Vercel pausing an idle instance) is not store trouble: after it the host
+  simply renews. Whole-state match updates (`reset: true`: reconnect,
   reclaim, a new host's restore) replace the client's state even at a lower version
   ([ADR-028](decisions/ADR-028-cluster-wide-limits-and-self-fencing.md)).
 
