@@ -17,10 +17,9 @@ const drawnLines = async (page: Page) =>
       .evaluateAll((els) => els.map((e) => e.getAttribute('data-edge'))),
   );
 
-/** Draws the first free line of a 4×4 grid on this page. */
-async function drawOne(page: Page): Promise<string> {
+/** Draws the first free line of an n×n grid (default 4×4) on this page. */
+async function drawOne(page: Page, n = 4): Promise<string> {
   const drawn = await drawnLines(page);
-  const n = 4;
   const lines: { id: string; x: number; y: number }[] = [];
   for (let r = 0; r <= n; r++)
     for (let c = 0; c < n; c++) lines.push({ id: `h:${r}:${c}`, x: c + 0.5, y: r });
@@ -365,4 +364,72 @@ test('production: two devices play a full Business match, staying in sync throug
       expect(url).toContain('transport=websocket');
     }
   }
+});
+
+test('production: Quick Play on two devices — minimum humans, bot fill, play, reconnect', async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const a = await recordedDevice(browser, 'Quick A');
+  const b = await recordedDevice(browser, 'Quick B');
+  const updates = (d: { frames: string[] }) =>
+    d.frames.filter((f) => f.includes('"match:update"')).length;
+  await a.page.getByRole('button', { name: /^Quick Play/ }).click();
+  await expect(a.page.locator('.public-lobby')).toBeVisible({ timeout: 15_000 });
+  // One human never starts a public match.
+  await expect(a.page.locator('.public-status')).toContainText('Waiting for another player');
+  await a.page.waitForTimeout(3000);
+  await expect(a.page.locator('.match')).toHaveCount(0);
+  await b.page.getByRole('button', { name: /^Quick Play/ }).click();
+  for (const d of [a, b]) {
+    await expect(d.page.locator('.public-status')).toContainText('Starting soon', {
+      timeout: 15_000,
+    });
+  }
+  const game = (await a.page.locator('.room__title').innerText()).trim();
+  await expect(b.page.locator('.room__title')).toHaveText(game);
+  // The fill window ends: bots take the open seats and the match starts on both devices.
+  for (const d of [a, b]) {
+    await expect(d.page.locator('.match')).toBeVisible({ timeout: 40_000 });
+  }
+  // Gameplay proceeds (bots and timers keep the match moving).
+  const before = updates(b);
+  await expect.poll(() => updates(b), { timeout: 40_000 }).toBeGreaterThan(before);
+  // B disconnects and reconnects: same room, same seat, the match goes on.
+  await b.page.reload();
+  await expect(b.page.locator('.match')).toBeVisible({ timeout: 20_000 });
+  await expect(b.page.locator('.room__title')).toHaveText(game);
+  await expect(b.page.getByText('A bot is playing for you.')).toHaveCount(0);
+  const after = updates(b);
+  await expect.poll(() => updates(b), { timeout: 40_000 }).toBeGreaterThan(after);
+  for (const url of [...a.sockets, ...b.sockets]) {
+    expect(url).toContain('/api/socket/socket.io/');
+    expect(url).toContain('transport=websocket');
+  }
+});
+
+test('production: a specific game from its card, joined from Browse, played across devices', async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const a = await recordedDevice(browser, 'Card A');
+  const b = await recordedDevice(browser, 'Browse B');
+  await b.page.getByRole('button', { name: 'Browse games' }).click();
+  await a.page.getByRole('button', { name: 'Play Dots & Boxes with people online' }).click();
+  await expect(a.page.locator('.public-lobby')).toBeVisible({ timeout: 15_000 });
+  // The room appears live in B's list; B joins it.
+  const card = b.page.locator('.room-card').filter({ hasText: 'Dots & Boxes' }).first();
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  await card.getByRole('button', { name: 'Join Dots & Boxes' }).click();
+  for (const d of [a, b]) {
+    await expect(d.page.locator('.db-paper')).toBeVisible({ timeout: 40_000 });
+  }
+  // A human move on one device appears on the other (bots may move first).
+  await expect
+    .poll(async () => (await myTurn(a.page)) || (await myTurn(b.page)), { timeout: 40_000 })
+    .toBe(true);
+  const mover = (await myTurn(a.page)) ? a.page : b.page;
+  const watcher = mover === a.page ? b.page : a.page;
+  const line = await drawOne(mover, 5);
+  await expect(watcher.locator(`line[data-edge="${line}"]`)).toHaveCount(1);
 });
