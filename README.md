@@ -3,13 +3,14 @@
 Quick multiplayer classroom and childhood games in the browser. No accounts, no login:
 pick a nickname, create or join a room, play.
 
-> **Status: Phase 8 of 12 — all seven games playable, production-ready architecture.**
+> **Status: Phase 9 of 12 — all seven games playable with friends, bots or people online, production-ready architecture.**
 > The multiplayer platform (sessions, private rooms, reconnect, bots, chat moderation, quick
 > reactions, live drawing streams, server-side physics) runs on several server instances with
 > shared state in Redis, built for **Vercel**. **Raja Mantri Chor Sipahi**, the flagship
 > **16 Parchi**, **Draw & Guess** (working name), **Pen Fight**, **Dots & Boxes**, **Name Place Animal Thing** and **Business** (working title) are fully
 > playable with friends and bots in the **Color Burst Arcade** design.
-> Next: the public lobby and matchmaking. See the [roadmap](#roadmap).
+> **Quick Play**, **Any Game** and a live **Browse** list put players into public rooms
+> that fill with bots after a short wait. Next: moderation hardening. See the [roadmap](#roadmap).
 
 ## Why
 
@@ -181,18 +182,19 @@ See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) and [docs/GAME_SYSTEM.md](doc
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md). Current suite: 529 unit/integration tests (the Redis
-adapter and the multi-instance tests run against a real Redis in CI), 32 end-to-end runs
+See [docs/TESTING.md](docs/TESTING.md). Current suite: 543 unit/integration tests (the Redis
+adapter and the multi-instance tests run against a real Redis in CI), 42 end-to-end runs (incl. public Quick Play, Browse and bot fill)
 (desktop + mobile, every game, reduced motion, 360 px and landscape phones, a WebSocket leak
 scan) and a production smoke test (Dots & Boxes, a three-player Name Place Animal Thing round
-and a full Business match).
+a full Business match, Quick Play and Browse).
 
 ## Known limitations
 
 - A live deployment needs a Vercel project and a Redis database (see DEPLOYMENT.md).
 - One instance at a time hosts every room (others forward to it); sharding rooms across hosts is
   a later step if needed.
-- All seven games are playable; public lobby and matchmaking arrive in Phase 9.
+- Public matchmaking has no skill rating, queues or room merging (v1); a lone player is offered
+  a private match with bots instead of a public start.
 - Business is best with 3–6 players (two-player games are more decided by the early lead).
 - Client bundle is ≈ 150 KB gzipped (Motion; game boards load separately); trimming is
   planned for Phase 11.
@@ -208,7 +210,7 @@ and a full Business match).
 6. ✅ Dots & Boxes + production architecture (Vercel + Redis)
 7. ✅ Name Place Animal Thing
 8. ✅ Business (working title)
-9. Public lobby, Quick Play, bot fill, "Play with Bots"
+9. ✅ Public lobby, Quick Play, bot fill, "Play with Bots"
 10. Moderation hardening and abuse testing
 11. Performance, mobile and animation polish
 12. Production deployment

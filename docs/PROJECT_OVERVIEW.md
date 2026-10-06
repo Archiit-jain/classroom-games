@@ -39,11 +39,12 @@ Expandability → Security → Performance → Documentation.
 
 ## Current status
 
-Phases 1–8 are complete: the platform (with quick reactions, streamed games, server-side
+Phases 1–9 are complete: the platform (with quick reactions, streamed games, server-side
 physics and a production-ready multi-instance architecture for Vercel + Redis) plus all seven
 games — Raja Mantri Chor Sipahi, the flagship 16 Parchi, Draw & Guess (working name), Pen
 Fight, Dots & Boxes, Name Place Animal Thing and Business (working title) — in the Color Burst
-Arcade design. The
+Arcade design, playable in private rooms or through public matchmaking (Quick Play, Any
+Game, Browse, bot fill — [PUBLIC_LOBBY_SYSTEM.md](PUBLIC_LOBBY_SYSTEM.md)). The
 12-phase plan is in the README [roadmap](../README.md#roadmap).
 
 ## Roles

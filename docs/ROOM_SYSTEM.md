@@ -1,25 +1,36 @@
 # Room system
 
 Implementation: `apps/server/src/rooms/` (`RoomManager`, `RoomStore`, `policies.ts`,
-`naming.ts`). Phase 1 implements **private rooms**; public rooms arrive in Phase 9 (see
-[PUBLIC_LOBBY_SYSTEM.md](PUBLIC_LOBBY_SYSTEM.md)).
+`naming.ts`, `Matchmaker.ts`). Two kinds: **private rooms** (code + host, below) and
+**public rooms** (server-created, no code, no host — matchmaking, fill window and bot fill are
+described in [PUBLIC_LOBBY_SYSTEM.md](PUBLIC_LOBBY_SYSTEM.md)).
 
 ## Room model
 
 ```text
 Room {
-  id, kind: 'PRIVATE', code, gameId, settings, phase, hostId,
+  id, kind: 'PRIVATE' | 'PUBLIC', code (null when public), gameId, settings, phase,
+  hostId (null when public),
   members: (HumanMember | BotMember)[],   // join order = seat order at match start
   barred: Set<playerId>,                   // removed by the host
   match: { matchId, runtime, seats: SeatState[], results, pendingReclaims } | null,
-  startsAt, chat (last 50 censored messages), noHumansSince
+  startsAt, chat (last 50 censored messages), noHumansSince,
+  public: { fillEndsAt, loneSince, resultsEndsAt, staying } | null
 }
 SeatState { seat, memberId, memberKind, displayName,
             takeover: { botId, botName, reason: DISCONNECTED | IDLE | LEFT } | null,
             forfeited }
 ```
 
-Room behaviour that differs by kind lives in a `RoomPolicy` (`canManage`, `isJoinable`).
+Room behaviour that differs by kind lives in a `RoomPolicy` (`canManage`, `isJoinable`):
+`privateRoomPolicy` (the host manages; joinable in `LOBBY`) and `publicRoomPolicy` (nobody
+manages — host commands answer `NOT_HOST`; joinable in `LOBBY` below the target).
+
+## Room phases (public)
+
+`LOBBY` (WAITING → FILLING: one fill window once `minHumans` are connected) → `STARTING`
+(bots fill to the target; leaving refused) → `IN_GAME` → `RESULTS` (Play again / Leave, 15 s)
+→ back to `LOBBY` with the stayers, or `CLOSED`. Details: [PUBLIC_LOBBY_SYSTEM.md](PUBLIC_LOBBY_SYSTEM.md).
 
 ## Room phases (private)
 
@@ -94,4 +105,6 @@ Details:
 ## Limits (config)
 
 `maxRooms` (500), `roomCreate` rate limit (burst 3, ~5/min per session), `roomJoin`
-(burst 10, ~20/min), `roomAdmin` (burst 10, 2/s).
+(burst 10, ~20/min), `roomAdmin` (burst 10, 2/s); public play adds `matchmaking` (burst 5,
+one per 2 s) and `browse` (burst 5, 1/s) on the host, and `matchmaking.fillWindowMs` (12 s,
+env `PUBLIC_FILL_WINDOW_MS`), `resultsMs` (15 s), `browseMaxRooms` (50), `browsePushMs` (250).

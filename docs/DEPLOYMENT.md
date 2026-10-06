@@ -1,12 +1,11 @@
 # Deployment
 
-> **Status (Phase 7):** Name Place Animal Thing added nothing to deploy (no new
-> environment variables, services or headers; it runs through the same Function and Redis).
+> **Status (Phase 9):** public matchmaking runs on the same Function and Redis (no new
+> service); it adds two optional variables, `PUBLIC_FILL_WINDOW_MS` and `METRICS_TOKEN`.
 > Since Phase 6: the platform is built for production on **Vercel + Redis**
 > ([ADR-023](decisions/ADR-023-multi-instance-cluster.md)). The production build, the Vercel
 > configuration and a production smoke test exist and pass locally and in CI; a live
 > deployment needs the external setup below (a Vercel project and a Redis database).
-> Public matchmaking is Phase 9.
 
 ## Shape
 
@@ -40,6 +39,8 @@ One site, one origin: the browser loads the client from the CDN and opens its We
 | `ALLOWED_ORIGINS`                     | Vercel | custom domains | Comma-separated origins, e.g. `https://games.example.com`. The deployment's own `*.vercel.app` domains are allowed automatically (`VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_PROJECT_PRODUCTION_URL`). |
 | `NODE_ENV`                            | Vercel | set by Vercel  | `production`: no development defaults; the server refuses to start without `REDIS_URL` or with localhost origins.                                                                                      |
 | `LOG_LEVEL`                           | Vercel | no             | `info` by default.                                                                                                                                                                                     |
+| `PUBLIC_FILL_WINDOW_MS`               | Vercel | no             | Public rooms' fill window, 1000–120000 ms (default 12000).                                                                                                                                             |
+| `METRICS_TOKEN`                       | Vercel | no             | At least 16 characters. Enables `GET /api/socket/metrics` (matchmaking counters) for `Authorization: Bearer <token>`; unset = endpoint off.                                                            |
 | `VITE_SERVER_URL`, `VITE_SOCKET_PATH` | build  | no             | Only to point the client at a different server; leave unset on Vercel.                                                                                                                                 |
 
 Nothing reads or writes the local filesystem at runtime.
@@ -70,6 +71,8 @@ ALLOWED_ORIGINS=http://localhost:4300 pnpm serve:production 4300
 pnpm smoke
 ```
 
+Two browsers use **Quick Play** (same public room, the fill window, bots fill, both play, one
+reloads), and two use a game's **Play** button and **Browse** to meet in a Dots & Boxes room.
 Two separate browsers open the site, create and join a private room, play Dots & Boxes and
 exchange moves, then one reloads (a new WebSocket, possibly on another instance): the room,
 board and seat must survive. A third test plays a **full Business match** with two
@@ -103,7 +106,7 @@ with a real Redis.
 | No dev fixtures in production          | ✔ fixture game off in production (server) and not bundled (client)                                                |
 | Health check                           | ✔ `GET /api/socket/healthz`                                                                                       |
 | Live deployment                        | ⏳ needs the external setup above, then `SMOKE_URL=… pnpm smoke`                                                  |
-| Public matchmaking                     | Phase 9                                                                                                           |
+| Public matchmaking                     | ✔ Quick Play / Any Game / Browse on the room host; multi-instance and failover tested; in the smoke test          |
 
 ## Other hosts
 

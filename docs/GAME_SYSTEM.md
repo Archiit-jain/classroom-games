@@ -81,18 +81,20 @@ Audience helpers: `toAll(e)`, `toSeats([1], e)`, `toAllExcept([1], e)`.
 
 Every game is a `GameModule` (server) + `GameClientModule` (client) pair registered in
 `apps/server/src/app.ts` (`defaultGames`) and `apps/client/src/games/registry.ts`. All seven
-games use this same server-authoritative runtime — none has its own networking.
+games use this same server-authoritative runtime — none has its own networking. Every game is
+open to public play (`manifest.publicMatch`): at least 2 humans, bots fill to the public
+target ([public lobby](PUBLIC_LOBBY_SYSTEM.md)).
 
-| Game                        | Id                        | Players | Sync         | Status            | Rules / design                                                                                     |
-| --------------------------- | ------------------------- | ------- | ------------ | ----------------- | -------------------------------------------------------------------------------------------------- |
-| Raja Mantri Chor Sipahi     | `rmcs`                    | 4       | `TURN_PHASE` | Shipped (Phase 2) | [rules](GAME_RULES/RAJA_MANTRI_CHOR_SIPAHI.md)                                                     |
-| 16 Parchi                   | `sixteen-parchi`          | 4       | `TURN_PHASE` | Shipped (Phase 3) | [rules](GAME_RULES/16_PARCHI.md), [design](design/16_PARCHI_DESIGN.md)                             |
-| Draw & Guess (working name) | `draw-and-guess`          | 3–6     | `STREAMED`   | Shipped (Phase 4) | [rules](GAME_RULES/DRAW_AND_GUESS.md), [design](design/DRAW_AND_GUESS_DESIGN.md)                   |
-| Pen Fight                   | `pen-fight`               | 2–4     | `SIMULATED`  | Shipped (Phase 5) | [rules](GAME_RULES/PEN_FIGHT.md), [design](design/PEN_FIGHT_DESIGN.md)                             |
-| Dots & Boxes                | `dots-and-boxes`          | 2–4     | `TURN_PHASE` | Shipped (Phase 6) | [rules](GAME_RULES/DOTS_AND_BOXES.md), [design](design/DOTS_AND_BOXES_DESIGN.md)                   |
-| Name Place Animal Thing     | `name-place-animal-thing` | 2–8     | `TURN_PHASE` | Shipped (Phase 7) | [rules](GAME_RULES/NAME_PLACE_ANIMAL_THING.md), [design](design/NAME_PLACE_ANIMAL_THING_DESIGN.md) |
-| Business (working title)    | `business`                | 2–6     | `TURN_PHASE` | Shipped (Phase 8) | [rules](GAME_RULES/BUSINESS.md), [design](design/BUSINESS_REDESIGN.md)                             |
-| Count Up (fixture)          | `fixture`                 | 2–4     | `TURN_PHASE` | Dev/test only     | [below](#the-fixture-game-count-up)                                                                |
+| Game                        | Id                        | Players | Public target | Sync         | Status            | Rules / design                                                                                     |
+| --------------------------- | ------------------------- | ------- | ------------: | ------------ | ----------------- | -------------------------------------------------------------------------------------------------- |
+| Raja Mantri Chor Sipahi     | `rmcs`                    | 4       |             4 | `TURN_PHASE` | Shipped (Phase 2) | [rules](GAME_RULES/RAJA_MANTRI_CHOR_SIPAHI.md)                                                     |
+| 16 Parchi                   | `sixteen-parchi`          | 4       |             4 | `TURN_PHASE` | Shipped (Phase 3) | [rules](GAME_RULES/16_PARCHI.md), [design](design/16_PARCHI_DESIGN.md)                             |
+| Draw & Guess (working name) | `draw-and-guess`          | 3–6     |             5 | `STREAMED`   | Shipped (Phase 4) | [rules](GAME_RULES/DRAW_AND_GUESS.md), [design](design/DRAW_AND_GUESS_DESIGN.md)                   |
+| Pen Fight                   | `pen-fight`               | 2–4     |             4 | `SIMULATED`  | Shipped (Phase 5) | [rules](GAME_RULES/PEN_FIGHT.md), [design](design/PEN_FIGHT_DESIGN.md)                             |
+| Dots & Boxes                | `dots-and-boxes`          | 2–4     |             4 | `TURN_PHASE` | Shipped (Phase 6) | [rules](GAME_RULES/DOTS_AND_BOXES.md), [design](design/DOTS_AND_BOXES_DESIGN.md)                   |
+| Name Place Animal Thing     | `name-place-animal-thing` | 2–8     |             8 | `TURN_PHASE` | Shipped (Phase 7) | [rules](GAME_RULES/NAME_PLACE_ANIMAL_THING.md), [design](design/NAME_PLACE_ANIMAL_THING_DESIGN.md) |
+| Business (working title)    | `business`                | 2–6     |             6 | `TURN_PHASE` | Shipped (Phase 8) | [rules](GAME_RULES/BUSINESS.md), [design](design/BUSINESS_REDESIGN.md)                             |
+| Count Up (fixture)          | `fixture`                 | 2–4     |             — | `TURN_PHASE` | Dev/test only     | [below](#the-fixture-game-count-up)                                                                |
 
 Ids of games not yet built are planned names. Room capacity always comes from the game's
 `manifest.players`, so 6- and 8-player games need no platform change.

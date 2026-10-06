@@ -31,3 +31,4 @@ Consequences. Status is `Accepted`, `Proposed` (waiting for approval) or `Supers
 | [024](ADR-024-private-drafts-and-voting.md)      | Private autosaved drafts on the stream path; server-side answer voting (frozen rule)                        | Accepted                                    |
 | [025](ADR-025-business-economy.md)               | Business: ring-road board, clearance sales instead of elimination, an economy tuned by simulation           | Superseded by 026                           |
 | [026](ADR-026-business-redesign.md)              | Business redesign: square board, cumulative-spending final wealth, events by dice sum, loans and insolvency | Accepted                                    |
+| [027](ADR-027-public-matchmaking.md)             | Public matchmaking runs on the room host (atomic joins, bot fill, Browse push)                              | Accepted                                    |
