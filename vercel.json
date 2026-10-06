@@ -6,7 +6,7 @@
   "functions": {
     "api/socket.mjs": { "maxDuration": 300, "memory": 1024 }
   },
-  "rewrites": [{ "source": "/api/socket/:path*", "destination": "/api/socket" }],
+  "rewrites": [{ "source": "/api/socket/(.*)", "destination": "/api/socket" }],
   "headers": [
     {
       "source": "/(.*)",

@@ -31,7 +31,20 @@ if (!existsSync(join(dist, 'index.html'))) {
 }
 
 const { default: fn } = await import(new URL('../api/socket.mjs', import.meta.url).href);
-const isFunction = (url = '') => url.startsWith('/api/socket');
+// Route like Vercel: the Function's own path, plus vercel.json's rewrite applied literally, so
+// a rewrite Vercel wouldn't match fails here too. Only "<prefix>(.*)" sources are emulated —
+// Vercel's `:path*` does not match a trailing slash, and socket.io's path ends with one
+// (`/api/socket/socket.io/?EIO=4…`).
+const rewrite = vercel.rewrites.find((r) => r.destination === '/api/socket');
+if (!/^\/[\w/-]*\(\.\*\)$/.test(rewrite?.source ?? '')) {
+  console.error(`Unsupported rewrite source in vercel.json: ${rewrite?.source}`);
+  process.exit(1);
+}
+const rewritePath = new RegExp(`^${rewrite.source}$`);
+const isFunction = (url = '') => {
+  const path = url.split('?')[0];
+  return path === '/api/socket' || rewritePath.test(path);
+};
 
 const server = createServer((req, res) => {
   if (isFunction(req.url)) {
