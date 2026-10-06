@@ -25,6 +25,8 @@ type Empty = Record<never, never>;
  */
 export class ChatService {
   private readonly cooldownUntil = new Map<string, number>();
+  /** Each player's last room message (normalised) — only to refuse an exact repeat. */
+  private readonly lastMessage = new Map<string, { key: string; at: number }>();
   private readonly now: () => number;
 
   constructor(private readonly deps: ChatServiceDeps) {
@@ -61,13 +63,21 @@ export class ChatService {
     }
 
     // 2. Normalise, 3. let the running game intercept (e.g. drawing-game guesses).
-    const decision = this.deps.rooms.interceptChat(
-      room,
-      session.id,
-      this.deps.moderator.normalize(text),
-    );
+    const normalized = this.deps.moderator.normalize(text);
+    const decision = this.deps.rooms.interceptChat(room, session.id, normalized);
     if (decision.kind === 'BLOCK') return fail(decision.code);
     if (decision.kind === 'CONSUME') return ok({});
+
+    // Room chat only: the same message again within the window is spam, not conversation
+    // (refused, never punished). Game input such as guesses keeps the game's own rules.
+    if (!inputLimit) {
+      const key = normalized; // case, accents and spacing don't make it a new message
+      const last = this.lastMessage.get(session.id);
+      if (last && last.key === key && now - last.at < this.deps.config.chat.repeatWindowMs) {
+        return fail('CHAT_REPEATED');
+      }
+      this.lastMessage.set(session.id, { key, at: now });
+    }
 
     // 4. Detect + censor, 5. broadcast.
     const { display } = this.deps.moderator.moderate(text);
@@ -158,5 +168,8 @@ export class ChatService {
   sweep(): void {
     const now = this.now();
     for (const [id, until] of this.cooldownUntil) if (until <= now) this.cooldownUntil.delete(id);
+    const window = this.deps.config.chat.repeatWindowMs;
+    for (const [id, last] of this.lastMessage)
+      if (now - last.at >= window) this.lastMessage.delete(id);
   }
 }

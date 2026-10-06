@@ -52,6 +52,8 @@ export interface ServerConfig {
     perSecond: number;
     cooldownMs: number;
     bufferSize: number;
+    /** The same message again from the same player within this window is refused. */
+    repeatWindowMs: number;
   };
   reports: { maxFlags: number; flagTtlMs: number };
   /** Public rooms and matchmaking (Phase 9, docs/design/PUBLIC_LOBBY_DESIGN.md). */
@@ -122,6 +124,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
     perSecond: 1,
     cooldownMs: 30_000,
     bufferSize: 50,
+    repeatWindowMs: 30_000,
   },
   reports: { maxFlags: 1_000, flagTtlMs: 24 * 60 * 60_000 },
   matchmaking: { fillWindowMs: 12_000, resultsMs: 15_000, browseMaxRooms: 50, browsePushMs: 250 },

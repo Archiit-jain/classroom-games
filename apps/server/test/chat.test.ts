@@ -35,7 +35,11 @@ describe('room chat', () => {
     t = await startServer({ chat: { burst: 3, perSecond: 2, cooldownMs: 1000 } });
     const a = await t.player('Archit');
     await setupRoom(a);
-    for (let i = 0; i < 3; i++) expect((await a.emit('chat:send', { text: 'fuck' })).ok).toBe(true);
+    // Different texts: an exact repeat would be refused as spam (CHAT_REPEATED), which is
+    // not what this test is about.
+    for (const text of ['fuck', 'fuck you', 'fuck this']) {
+      expect((await a.emit('chat:send', { text })).ok).toBe(true);
+    }
     const flooded = await a.emit('chat:send', { text: 'hello' });
     expect(flooded).toEqual({ ok: false, code: 'CHAT_COOLDOWN', retryAfterMs: 1000 });
     expect(a.all('room:snapshot').at(-1)?.room?.members).toHaveLength(1); // still in the room

@@ -46,6 +46,7 @@ export const ERROR_CODES = [
   // Chat
   'CHAT_EMPTY',
   'CHAT_COOLDOWN',
+  'CHAT_REPEATED',
   'CHAT_BLOCKED',
 ] as const;
 

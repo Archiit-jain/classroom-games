@@ -41,6 +41,7 @@ const errors = {
   SEAT_CONTROLLED_BY_BOT: 'A bot is playing for you. Tap “I’m back” first.',
   CHAT_EMPTY: 'Type a message first.',
   CHAT_COOLDOWN: 'You’re sending messages too fast. Wait {seconds}s.',
+  CHAT_REPEATED: 'You just said that.',
   CHAT_BLOCKED: 'You can’t chat right now.',
   TIMEOUT: 'The server didn’t answer. Check your connection.',
   OFFLINE: 'You’re offline. Reconnecting…',
