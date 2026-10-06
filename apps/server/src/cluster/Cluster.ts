@@ -79,6 +79,10 @@ export class Cluster {
 
   private lease: string | null = null;
   private lastRenewAt = 0;
+  /** When the running tick started (null between ticks): a stuck tick means a stuck store. */
+  private tickStartedAt: number | null = null;
+  /** The last tick could not reach the store. */
+  private lastTickFailed = false;
   private becoming: Promise<boolean> | null = null;
   private hostCache: { instance: string; at: number } | null = null;
   private readonly pending = new Map<
@@ -286,13 +290,19 @@ export class Cluster {
 
   private async tick(): Promise<void> {
     if (this.stopped) return;
-    // Self-fencing: a host that could not renew for 2/3 of the lease (e.g. only ITS
-    // Redis connection hangs — ioredis queues commands instead of failing) stops
-    // hosting before the lease can expire and another instance take over. Its timers
-    // and bots stop with it, so there are never two hosts acting at once.
-    if (this.isHost && Date.now() - this.lastRenewAt > (this.leaseTtlMs * 2) / 3) {
-      this.loseHost('lease renewal overdue');
+    // Self-fencing: when THIS instance can't reach the store — its previous tick is still
+    // waiting (ioredis queues commands while disconnected) or failed — a host whose
+    // renewal is overdue by half the lease stops hosting (timers and bots stop) before
+    // the lease can expire and another instance take over: never two hosts at once.
+    // A freeze (Vercel pausing an idle instance) leaves the store healthy: after it,
+    // the next tick simply renews and hosting continues.
+    const storeTrouble = this.tickStartedAt !== null || this.lastTickFailed;
+    if (storeTrouble && this.isHost && Date.now() - this.lastRenewAt > this.leaseTtlMs / 2) {
+      this.loseHost('store unreachable, lease renewal overdue');
     }
+    if (this.tickStartedAt !== null) return; // one tick at a time
+    this.tickStartedAt = Date.now();
+    this.lastTickFailed = false;
     try {
       await this.heartbeat();
       if (this.isHost) {
@@ -303,7 +313,10 @@ export class Cluster {
         await this.tryBecomeHost();
       }
     } catch (err) {
+      this.lastTickFailed = true;
       this.log.warn('cluster tick failed', errorFields(err));
+    } finally {
+      this.tickStartedAt = null;
     }
   }
 

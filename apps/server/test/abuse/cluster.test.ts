@@ -107,6 +107,29 @@ describe('Redis trouble', () => {
     expect(log.errors.filter((e) => /engine|handler failed|unhandled/iu.test(e))).toEqual([]);
   });
 
+  it('a host that was frozen (Vercel pauses idle instances) keeps hosting when Redis is fine', async () => {
+    // Found on production: the first self-fencing rule stepped down after ANY long gap
+    // since the last renewal — including a freeze, during which nothing runs — and the
+    // hand-over lost a room that had not been saved yet.
+    const log = captureLog();
+    c = await startCluster(2, { log });
+    const host = hostIndex(c);
+    const a = await c.player(host, 'Anu');
+    const code = await setupRoom(a);
+    await sleep(200);
+    // Freeze the whole process (all instances) for longer than half the lease (600 ms)
+    // but less than the whole lease: no timer runs, the store stays reachable.
+    const until = Date.now() + 450;
+    while (Date.now() < until) {
+      // busy wait = a frozen instance
+    }
+    await sleep(500); // ticks run again
+    expect(log.warnings.filter((w) => w.startsWith('stopped hosting'))).toEqual([]);
+    expect(c.nodes[host]?.server.cluster.isHost).toBe(true);
+    const b = await c.player(1 - host, 'Bela');
+    expect(await b.emit('room:join', { code })).toEqual(expect.objectContaining({ ok: true }));
+  });
+
   it('Redis down for every instance, then back: requests fail safely, the room survives', async () => {
     c = await startCluster(2, { faults: true });
     const a = await c.player(1, 'Anu');
