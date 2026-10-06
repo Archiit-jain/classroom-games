@@ -136,6 +136,67 @@ describe('Redis trouble', () => {
   });
 });
 
+describe('failover idempotence', () => {
+  async function crashHost(cl: TestCluster): Promise<void> {
+    const host = hostIndex(cl);
+    const crashed = (cl.nodes[host] as TestCluster['nodes'][number]).server;
+    await crashed.cluster.abandon();
+    crashed.io.close();
+    await eventually(() => hosts(cl) === 1, 5000);
+  }
+
+  it('an action acknowledged before a host crash is not applied again when retried', async () => {
+    // Long turns: no timeout move may change the counter while the host fails over.
+    c = await startCluster(3, { games: [testFixture({ turnMs: 60_000 })] });
+    const gateway = [0, 1, 2].find((i) => i !== hostIndex(c as TestCluster)) as number;
+    const a = await c.player(gateway, 'Anu');
+    const b = await c.player(gateway, 'Bela');
+    await setupRoom(a, b);
+    expect((await a.emit('room:start', {})).ok).toBe(true);
+    const first = (await a.waitFor('match:update')) as FixUpdate;
+    const mover = first.view.turn === first.you ? a : b;
+    const ref = (mover.all('match:update').at(-1) ?? first) as FixUpdate;
+    const id = 'retry-me-after-a-crash';
+    expect((await mover.act(ref, { type: 'ADD', amount: 2 }, id)).ok).toBe(true);
+    const after = (await mover.waitFor(
+      'match:update',
+      (u) => (u as FixUpdate).version > ref.version,
+    )) as FixUpdate;
+    await sleep(250); // committed
+    await crashHost(c);
+    // The client never saw its acknowledgement (say) and retries with the same id.
+    const retry = await mover.act(after, { type: 'ADD', amount: 2 }, id);
+    expect(retry).toEqual(expect.objectContaining({ ok: false, code: 'DUPLICATE_ACTION' }));
+    const resynced = await mover.emit('match:resync', { matchId: first.matchId });
+    expect(resynced.ok).toBe(true);
+    const total = (resynced.ok ? (resynced.update as FixUpdate) : after).view.counter;
+    expect(total).toBe(after.view.counter); // added once, not twice
+  });
+
+  it('a host crash on the results screen: the room comes back there, one new match starts', async () => {
+    c = await startCluster(3, { games: [testFixture()] });
+    const gateway = [0, 1, 2].find((i) => i !== hostIndex(c as TestCluster)) as number;
+    const a = await c.player(gateway, 'Anu');
+    const b = await c.player(gateway, 'Bela');
+    await setupRoom(a, b);
+    autoPlay(a, 3);
+    autoPlay(b, 3);
+    expect((await a.emit('room:start', {})).ok).toBe(true);
+    await a.waitForRoom((r) => r?.phase === 'RESULTS', 15_000);
+    await sleep(250);
+    a.clear('room:snapshot'); // whatever arrives now comes from the new host's restore
+    await crashHost(c);
+    const restored = await a.waitForRoom((r) => r !== null, 5000);
+    expect(restored?.phase).toBe('RESULTS');
+    // A double "Play again" (two taps, a retry) starts one match.
+    const tally = await Promise.all([a.emit('room:playAgain', {}), a.emit('room:playAgain', {})]);
+    expect(tally.filter((t) => t.ok)).toHaveLength(1);
+    await a.waitForRoom((r) => r?.phase === 'IN_GAME', 5000);
+    const matchIds = new Set((a.all('match:update') as FixUpdate[]).map((u) => u.matchId));
+    expect(matchIds.size).toBe(2); // the first match and exactly one new one
+  });
+});
+
 type DrawUpdate = MatchUpdate<DrawView, DrawEvent>;
 const PACK: WordEntry[] = [
   { word: 'umbrella', aliases: [], difficulty: 'easy' },
