@@ -3,9 +3,11 @@ import {
   TestClient,
   eventually,
   expectConnectError,
+  setupRoom,
   startServer,
   type TestServer,
 } from '../helpers';
+import { DEFAULT_CONFIG } from '../../src/config';
 import { captureLog, expectHealthy, forgedTokens, reconnectStorm } from './harness';
 
 /** Phase 10 §3: session abuse. */
@@ -96,6 +98,33 @@ describe('session abuse', () => {
     expect(room?.members.map((m) => m.id).filter((id) => id === guest.playerId)).toHaveLength(1);
     expect(room?.members).toHaveLength(2);
     await expectHealthy(ts.url);
+  });
+
+  it('a full session table evicts the oldest idle sessions instead of locking new players out', async () => {
+    ts = await startServer({ limits: { maxSessions: 4 } });
+    // Someone fills the table with named sessions and walks away…
+    const flood: TestClient[] = [];
+    for (let i = 0; i < 3; i++) flood.push(await ts.player(`Flood${i}`));
+    // …while one real player sits in a room.
+    const real = await ts.player('Real');
+    await setupRoom(real);
+    for (const f of flood) f.close();
+    await eventually(() => ts.server.services.sessions.size === 4);
+    // A newcomer still gets in (the oldest idle session makes room)…
+    const newcomer = await ts.player('Newcomer');
+    expect(newcomer.playerId).toBeTruthy();
+    // …and the player in a room keeps their session and seat.
+    const back = await TestClient.connect(ts.url, { token: real.ready.token as string });
+    expect(back.playerId).toBe(real.playerId);
+    expect(ts.server.services.sessions.size).toBeLessThanOrEqual(4);
+  });
+
+  it('a whole class behind one address can arrive at once', async () => {
+    // The production default (the test helper otherwise lifts this limit).
+    const perIp = DEFAULT_CONFIG.limits.newSessionsPerIpPerMinute;
+    ts = await startServer({ limits: { newSessionsPerIpPerMinute: perIp } });
+    const clients = await Promise.all(Array.from({ length: 45 }, () => ts.connect()));
+    expect(new Set(clients.map((c) => c.playerId)).size).toBe(45);
   });
 
   it('one session holds at most one room', async () => {

@@ -65,8 +65,13 @@ export class SessionManager {
         return ok({ session: existing });
       }
     }
-    if (this.byId.size >= this.config.limits.maxSessions) return fail('SERVER_BUSY');
     if (!this.allowNewSession(ip)) return fail('RATE_LIMITED');
+    // A full table makes room by forgetting the longest-idle sessions (disconnected and
+    // not in a room — they only lose a remembered nickname), so nobody can lock new
+    // players out by creating sessions. Only when every session is in use: busy.
+    if (this.byId.size >= this.config.limits.maxSessions && !this.evictIdle()) {
+      return fail('SERVER_BUSY');
+    }
 
     const secret = newToken();
     const now = this.now();
@@ -85,6 +90,20 @@ export class SessionManager {
     this.byTokenHash.set(session.tokenHash, session);
     this.changes?.touched(session.id);
     return ok({ session, token: secret });
+  }
+
+  /** Forgets the longest-idle session that is neither connected nor in a room. */
+  private evictIdle(): boolean {
+    let oldest: Session | null = null;
+    for (const session of this.byId.values()) {
+      if (session.socketId || session.roomId) continue;
+      if (!oldest || session.lastSeenAt < oldest.lastSeenAt) oldest = session;
+    }
+    if (!oldest) return false;
+    this.byId.delete(oldest.id);
+    this.byTokenHash.delete(oldest.tokenHash);
+    this.changes?.removed(oldest.id);
+    return true;
   }
 
   private allowNewSession(ip: string): boolean {

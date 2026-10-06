@@ -134,7 +134,10 @@ export const DEFAULT_CONFIG: ServerConfig = {
     maxRooms: 500,
     maxSessions: 20_000,
     maxConnectionsPerIp: 60,
-    newSessionsPerIpPerMinute: 30,
+    // A school's classes often share one public IP: 40 children opening the site at
+    // once must all get in. (A full session table evicts idle sessions, so this rate
+    // cannot lock other players out.)
+    newSessionsPerIpPerMinute: 120,
   },
   rateLimits: {
     socket: { burst: 40, perSecond: 20 },
