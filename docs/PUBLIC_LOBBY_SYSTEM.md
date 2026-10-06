@@ -106,7 +106,7 @@ something changed; readable at `GET /api/socket/metrics` with `Authorization: Be
 $METRICS_TOKEN` (disabled when `METRICS_TOKEN` is unset). No personal data.
 
 Measured (two instances, in-process store, 40 players, `PERF=1 pnpm vitest run
-public.perf`): create a room 0.7–1.4 ms average (slowest 1.9–8.3 ms, the first rooms while the code warms up), join 0.6–0.7 ms (p90 0.8–1.2 ms) over two runs, end to end through a gateway to the
+public.perf`): create a room 0.7–1.4 ms average (slowest 1.9–8.3 ms; with 10 samples p90 is the slowest, probably warm-up), join 0.6–0.7 ms (p90 0.8–1.2 ms) over two runs, end to end through a gateway to the
 host; about 11 cross-instance messages per player including connecting and naming; 2 store
 commits for 40 joins (batched); 2 Browse pushes for 40 joins (coalesced). Real Redis adds its
 network round trip to each forwarded call.
