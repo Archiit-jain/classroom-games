@@ -92,7 +92,7 @@ describe.skipIf(!enabled)('public matchmaking measurements', () => {
 
     const before = { ...counts };
     const create: number[] = [];
-    const join: number[] = [];
+    const joins: number[] = [];
     const N = 40; // 40 players → 10 full rooms (target 4): 10 creations, 30 joins
     const t0 = performance.now();
     for (let i = 0; i < N; i++) {
@@ -101,7 +101,7 @@ describe.skipIf(!enabled)('public matchmaking measurements', () => {
       const res = await p.emit('public:play', { gameId: 'alpha' });
       const took = performance.now() - start;
       expect(res.ok).toBe(true);
-      (i % 4 === 0 ? create : join).push(took);
+      (i % 4 === 0 ? create : joins).push(took);
     }
     const elapsed = performance.now() - t0;
     await new Promise((r) => setTimeout(r, 600));
@@ -112,7 +112,7 @@ describe.skipIf(!enabled)('public matchmaking measurements', () => {
     const report = {
       players: N,
       createRoomMs: stats(create),
-      joinRoomMs: stats(join),
+      joinRoomMs: stats(joins),
       storeOps: delta,
       crossInstanceMessages: delta.publish ?? 0,
       browsePushes: pushes,
