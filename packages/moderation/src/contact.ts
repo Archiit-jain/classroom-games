@@ -31,8 +31,9 @@ const DETECTORS: Detector[] = [
       'giu',
     ),
   },
-  // Phone numbers: 9+ digits, optionally separated by single spaces/dashes/dots/brackets.
-  { re: /(?<![\p{L}\p{N}])\+?\d(?:[\s\-.()]?\d){8,}(?![\p{L}\p{N}])/gu },
+  // Phone numbers: 9+ digits in any script (0–9, Devanagari ०–९, Bengali, Arabic-Indic…),
+  // optionally separated by single spaces/dashes/dots/brackets.
+  { re: /(?<![\p{L}\p{N}])\+?\p{Nd}(?:[\s\-.()]?\p{Nd}){8,}(?![\p{L}\p{N}])/gu },
   // "insta: rahul_07", "add me on snap id xyz", "whatsapp pe 98…" (numbers caught above).
   {
     re: new RegExp(
