@@ -204,7 +204,7 @@ export class Cluster {
           await this.options.becomeHost(value);
         } catch (err) {
           this.log.error('restore failed', errorFields(err));
-          await this.store.release(KEYS.host, value);
+          await this.store.release(KEYS.host, value).catch(() => undefined);
           return false;
         }
         this.lease = value;
@@ -213,6 +213,11 @@ export class Cluster {
         this.log.info('became host', { instanceId: this.instanceId, epoch });
         void this.publish(KEYS.all, { t: 'host-changed', host: this.instanceId });
         return true;
+      } catch (err) {
+        // The store is unreachable (or was closed): stay a gateway; the next tick retries.
+        // Callers fire this without awaiting, so it must never reject.
+        this.log.warn('host takeover failed', errorFields(err));
+        return false;
       } finally {
         this.becoming = null;
       }
@@ -388,7 +393,10 @@ export class Cluster {
     // spreads the attempts; the lease lets exactly one win).
     this.hostCache = null;
     if (this.options.localSocketCount() > 0 && !this.stopped) {
-      setTimeout(() => void this.tryBecomeHost(), Math.floor(Math.random() * 150)).unref?.();
+      setTimeout(
+        () => void (this.stopped ? undefined : this.tryBecomeHost()),
+        Math.floor(Math.random() * 150),
+      ).unref?.();
     }
   }
 }
