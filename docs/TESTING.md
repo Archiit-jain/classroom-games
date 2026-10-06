@@ -100,7 +100,7 @@ separate browsers play a Name Place Animal Thing round (private drafts, reconnec
 automatic check, the frozen 3-player vote, exact scores), and two browsers play a full
 Business match (dice, purchase, rent, building, event, loan and auction in sync, a reload mid-match), **Quick Play** on two devices (fill window, bot fill, a move each, a reload) and **a game card + Browse** (Dots & Boxes 5 × 5 joined from the live list) — against the
 production build on one origin (`tools/serve-production.mjs`, the bundled Vercel Function) with
-a real Redis in CI, or against a deployment with `SMOKE_URL`.
+a real Redis in CI, or against a deployment with `SMOKE_URL` (5/5 against the live Vercel site on 2026-10-06).
 
 ## Techniques
 
@@ -131,4 +131,4 @@ a real Redis in CI, or against a deployment with `SMOKE_URL`.
 
 ## Not yet
 
-A large-scale load test (only the in-process 40-player measurement exists), a smoke run against a live Vercel deployment, Playwright in Firefox/WebKit, a real low-end device run.
+A large-scale load test (only the in-process 40-player measurement exists), Playwright in Firefox/WebKit, a real low-end device run.
