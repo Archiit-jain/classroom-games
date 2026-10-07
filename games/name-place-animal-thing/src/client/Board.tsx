@@ -357,7 +357,10 @@ function Worksheet({
                 onChange={(e) => sheet.change(c, e.target.value)}
                 onBlur={sheet.flush}
                 onKeyDown={(e) => next(i, e)}
-                onFocus={(e) => e.target.scrollIntoView({ block: 'nearest', behavior: 'smooth' })}
+                // Immediate (a smooth scroll gets cancelled when focus and the round's
+                // start, or the keyboard, arrive together); the field's scroll margin keeps
+                // it clear of the pinned STOP bar.
+                onFocus={(e) => e.target.scrollIntoView({ block: 'nearest' })}
                 data-category={c}
               />
               <AnimatePresence>

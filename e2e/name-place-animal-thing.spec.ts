@@ -244,6 +244,33 @@ test('Name Place Animal Thing fits a 360 px phone while writing, reviewing and o
   expect(await overflow()).toBeLessThanOrEqual(0);
 });
 
+test('Name Place Animal Thing on a landscape phone: a focused field is never under the STOP bar @mobile', async ({
+  browser,
+}) => {
+  test.setTimeout(60_000);
+  const page = await newPlayer(browser, 'Ishaan', {
+    viewport: { width: 844, height: 390 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  await createRoom(page, NPAT);
+  await page.getByRole('button', { name: 'Add bot' }).click();
+  await page.getByRole('button', { name: 'Start game' }).click();
+  await expect(page.locator('.np-letter')).toHaveText(/^[A-Z]$/);
+  // Each field, as it gets focus (the first one automatically), sits fully above the
+  // STOP bar pinned to the bottom of this 390 px screen.
+  for (const c of CATEGORIES) {
+    const field = page.locator(`input[data-category="${c}"]`);
+    await field.focus();
+    const clear = await field.evaluate((el) => {
+      const bar = document.querySelector('.np-actions')?.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      return !!bar && r.top >= 0 && r.bottom <= bar.top;
+    });
+    expect(clear, `${c} is hidden by the STOP bar`).toBe(true);
+  }
+});
+
 test('Name Place Animal Thing is playable with reduced motion', async ({ browser }) => {
   test.setTimeout(150_000);
   const host = await newPlayer(browser, 'Kabir', { reducedMotion: 'reduce' });

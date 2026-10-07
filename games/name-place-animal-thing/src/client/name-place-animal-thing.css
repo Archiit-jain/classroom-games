@@ -250,6 +250,14 @@
 }
 
 /* ───────── STOP bar ───────── */
+/* The STOP bar is pinned to the bottom while you write: a field that gets focus (and the
+   phone keyboard) is scrolled fully above it, never underneath (short landscape screens). */
+html:has(.np-actions) {
+  scroll-padding-bottom: 96px;
+}
+.np-field__input {
+  scroll-margin-bottom: 96px;
+}
 .np-actions {
   position: sticky;
   bottom: 0;
