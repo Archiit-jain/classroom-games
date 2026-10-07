@@ -263,7 +263,7 @@
 .bz-insolvent {
   padding: 0 4px;
   border-radius: 4px;
-  background: var(--color-danger);
+  background: var(--color-danger-deep);
   color: #fff;
   font-weight: 900;
   animation: bz-stamp 500ms var(--ease-pop) both;
@@ -1495,7 +1495,7 @@
 }
 .bz-log__item--insolvent {
   color: #fff;
-  background: var(--color-danger);
+  background: var(--color-danger-deep);
 }
 .bz-log__item--event {
   border-left: 4px solid var(--bz-chance);
@@ -1586,7 +1586,7 @@
   padding: 0 3px;
   border: 1.5px solid var(--bz-ink);
   border-radius: 4px;
-  background: var(--color-danger);
+  background: var(--color-danger-deep);
   color: #fff;
   font-size: 9px;
   font-weight: 900;

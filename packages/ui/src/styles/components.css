@@ -63,7 +63,8 @@
   --btn-fg: var(--cb-ink);
 }
 .btn--danger {
-  --btn-bg: var(--color-danger);
+  /* White text needs the deeper red (4.5:1); the bright red stays for borders and tints. */
+  --btn-bg: var(--color-danger-deep);
   --btn-fg: #fff;
 }
 .btn--ghost {
@@ -218,7 +219,8 @@
   background: var(--cb-cyan);
 }
 .badge--you {
-  background: var(--cb-pink);
+  /* Deeper pink so the small white YOU stays readable (4.5:1). */
+  background: var(--cb-pink-deep);
   color: #fff;
 }
 .badge--away {
@@ -348,6 +350,8 @@
 }
 .nametag__sub {
   display: block;
+  /* Small text on the pink band: ink, not white, to stay readable. */
+  color: var(--cb-ink);
   font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.12em;
