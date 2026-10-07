@@ -6,7 +6,7 @@ export type ClientErrorCode = 'TIMEOUT' | 'OFFLINE';
 const errors = {
   INVALID_PAYLOAD: 'That didn’t work. Please try again.',
   RATE_LIMITED: 'Slow down a little and try again.',
-  SERVER_BUSY: 'The server is busy right now. Please try again in a moment.',
+  SERVER_BUSY: 'Classroom Games is busy right now. Please try again in a moment.',
   INTERNAL_ERROR: 'Something went wrong on our side. Please try again.',
   NICKNAME_REQUIRED: 'Pick a nickname first.',
   NICKNAME_INVALID: 'Nicknames need 2–16 letters or numbers.',
@@ -43,7 +43,7 @@ const errors = {
   CHAT_COOLDOWN: 'You’re sending messages too fast. Wait {seconds}s.',
   CHAT_REPEATED: 'You just said that.',
   CHAT_BLOCKED: 'You can’t chat right now.',
-  TIMEOUT: 'The server didn’t answer. Check your connection.',
+  TIMEOUT: 'No answer yet — check your internet connection and try again.',
   OFFLINE: 'You’re offline. Reconnecting…',
 } satisfies Record<ErrorCode | ClientErrorCode, string>;
 
@@ -68,13 +68,13 @@ export const en = {
   },
   connection: {
     connecting: 'Connecting…',
-    waking: 'Waking up the game server… this can take up to a minute.',
+    waking: 'Getting the games ready… this can take a few seconds.',
     unreachable:
-      'The game server isn’t responding. Still trying — check your internet connection or come back a bit later.',
+      'Can’t reach the games right now. Still trying — check your internet connection or come back a bit later.',
     devServerDown:
       'Can’t reach the game server at {url} — it isn’t running. Start it with “pnpm dev” in the Classroom Games folder; this page reconnects by itself.',
     reconnecting: 'Connection lost. Reconnecting…',
-    restarting: 'The server is restarting. You’ll be reconnected shortly.',
+    restarting: 'The games are restarting. You’ll be back in a moment.',
     displaced: 'You opened Classroom Games in another tab.',
     useHere: 'Use this tab',
   },
