@@ -106,5 +106,9 @@ jobs:
           LOAD_TOKEN: ci-load-test-token-0001
           LOAD_SECONDS: '45'
           REDIS_URL: redis://localhost:6379
+          LOAD_OUT: load-report.json
+      - name: Load test report
+        if: ${{ always() }}
+        run: cat load-report.json || echo "no load report"
       - if: ${{ always() }}
         run: cat server.log
