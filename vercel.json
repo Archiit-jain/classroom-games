@@ -3,6 +3,7 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm build",
   "outputDirectory": "apps/client/dist",
+  "regions": ["bom1"],
   "functions": {
     "api/socket.mjs": { "maxDuration": 300, "memory": 1024 }
   },

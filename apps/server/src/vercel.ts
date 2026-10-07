@@ -21,6 +21,10 @@ server.httpServer.prependListener('request', rewrite);
 server.httpServer.prependListener('upgrade', rewrite);
 
 await server.start();
-log.info('function instance ready', { instanceId: server.cluster.instanceId });
+log.info('function instance ready', {
+  instanceId: server.cluster.instanceId,
+  // Where this function actually runs (the request log's region is only the entry point).
+  region: process.env.VERCEL_REGION ?? null,
+});
 
 export default server.httpServer;
