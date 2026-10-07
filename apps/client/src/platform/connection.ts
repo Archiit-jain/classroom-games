@@ -22,6 +22,15 @@ type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export type ClientAck<T> = Ack<T> | { ok: false; code: ClientErrorCode; retryAfterMs?: number };
 
 const REQUEST_TIMEOUT_MS = 8000;
+/**
+ * Liveness: a dropped Wi-Fi or mobile connection often leaves the socket looking open
+ * while nothing arrives, and Socket.IO's own heartbeat only notices after up to ~45 s —
+ * a silently frozen game. While the page is visible the client pings every few seconds
+ * (answered by the instance it is connected to, no game work); no answer → say so and
+ * reconnect at once.
+ */
+const LIVENESS_EVERY_MS = 5000;
+const LIVENESS_TIMEOUT_MS = 4000;
 const SLOW_CONNECT_MS = 3000;
 /** Matches the waking-up message's promise of "up to a minute". */
 const UNREACHABLE_MS = 60_000;
@@ -71,6 +80,50 @@ export class GameConnection {
     });
     this.armConnectTimers();
     this.wire();
+    this.watchLiveness();
+  }
+
+  private checkingAlive = false;
+
+  private watchLiveness(): void {
+    if (typeof window === 'undefined') return;
+    setInterval(() => void this.checkAlive(), LIVENESS_EVERY_MS);
+    // The phone says it lost the network: show it now, and reconnect as soon as it is back.
+    window.addEventListener('offline', () => this.connectionLost());
+    window.addEventListener('online', () => {
+      if (!this.socket.connected) this.socket.connect();
+    });
+    // Coming back to the tab (e.g. unlocking the phone) is when dead connections show up.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') void this.checkAlive();
+    });
+  }
+
+  private async checkAlive(): Promise<void> {
+    if (this.checkingAlive || !this.socket.connected) return;
+    if (document.visibilityState !== 'visible') return; // background timers are throttled
+    this.checkingAlive = true;
+    try {
+      const s = this.socket as unknown as {
+        timeout(ms: number): { emitWithAck(event: string, payload: unknown): Promise<unknown> };
+      };
+      const alive = await s
+        .timeout(LIVENESS_TIMEOUT_MS)
+        .emitWithAck('time:ping', { clientTs: Date.now() })
+        .then(
+          () => true,
+          () => false,
+        );
+      if (!alive && this.socket.connected) this.connectionLost();
+    } finally {
+      this.checkingAlive = false;
+    }
+  }
+
+  /** The connection is gone even if the socket hasn't noticed: close it, which reconnects. */
+  private connectionLost(): void {
+    if (this.store.get().connection === 'displaced') return;
+    this.socket.io.engine?.close();
   }
 
   // ─────────────────────────── requests ───────────────────────────
