@@ -772,6 +772,56 @@
 .game-card__actions .btn {
   min-height: 48px;
 }
+/* Phones: a compact card — icon beside the name, Play and Private room side by side — so
+   all seven games are a short scroll away instead of seven screens. */
+@media (max-width: 599px) {
+  .game-grid {
+    gap: var(--space-3);
+  }
+  .game-card {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-areas:
+      'art body'
+      'actions actions';
+    align-items: start;
+    column-gap: 14px;
+    row-gap: var(--space-3);
+    padding: 14px;
+  }
+  .game-card__art {
+    grid-area: art;
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+  }
+  .game-card__art svg {
+    width: 44px;
+    height: 44px;
+  }
+  .game-card__body {
+    grid-area: body;
+    gap: 4px;
+  }
+  .game-card__name {
+    font-size: 1.25rem;
+  }
+  .game-card__desc {
+    font-size: var(--text-sm);
+  }
+  .game-card__actions {
+    grid-area: actions;
+    flex-direction: row;
+  }
+  .game-card__actions .btn {
+    flex: 1;
+    min-width: 0;
+  }
+  .play-hub__row .btn {
+    padding-inline: 8px;
+    font-size: 1rem;
+  }
+}
 
 .browse {
   display: flex;
