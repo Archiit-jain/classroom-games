@@ -84,8 +84,12 @@ export function attachTransport(io: IoServer, deps: TransportDeps): { settled():
       return next(new Error('RATE_LIMITED'));
     }
     const auth = (socket.handshake.auth ?? {}) as HandshakeAuth;
+    const started = Date.now();
     hostCall(cluster, 'resolve', { token: auth.token, ip })
       .then((resolved) => {
+        const ms = Date.now() - started;
+        // Players wait for this before the home screen works: slow ones are worth a line.
+        if (ms > 300) deps.log.info('slow handshake', { ms, ok: resolved.ok });
         if (!resolved.ok) {
           connections.release(ip);
           next(new Error(resolved.code));

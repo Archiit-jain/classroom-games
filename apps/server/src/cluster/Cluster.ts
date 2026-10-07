@@ -199,11 +199,13 @@ export class Cluster {
     if (this.isHost) return true;
     if (this.becoming) return this.becoming;
     this.becoming = (async () => {
+      const t0 = Date.now();
       try {
         const epoch = await this.store.incr(KEYS.hostEpoch, 365 * 24 * 3600_000);
         const value = `${this.instanceId}:${epoch}`;
         if (!(await this.store.acquire(KEYS.host, value, this.leaseTtlMs))) return false;
         this.lastRenewAt = Date.now();
+        const leaseMs = Date.now() - t0;
         try {
           await this.options.becomeHost(value);
         } catch (err) {
@@ -214,7 +216,13 @@ export class Cluster {
         this.lease = value;
         this.hostCache = { instance: this.instanceId, at: Date.now() };
         this.retryCallsNotTo(this.instanceId);
-        this.log.info('became host', { instanceId: this.instanceId, epoch });
+        // Timings show what a takeover costs the player who triggered it.
+        this.log.info('became host', {
+          instanceId: this.instanceId,
+          epoch,
+          leaseMs,
+          restoreMs: Date.now() - t0 - leaseMs,
+        });
         void this.publish(KEYS.all, { t: 'host-changed', host: this.instanceId });
         return true;
       } catch (err) {
@@ -265,6 +273,7 @@ export class Cluster {
   private async handOver(): Promise<void> {
     const lease = this.lease;
     if (!lease) return;
+    const t0 = Date.now();
     try {
       await this.options.flush();
     } catch (err) {
@@ -274,7 +283,7 @@ export class Cluster {
     this.hostCache = null;
     this.options.stopHosting();
     await this.store.release(KEYS.host, lease).catch(() => undefined);
-    this.log.info('handed host role over', { instanceId: this.instanceId });
+    this.log.info('handed host role over', { instanceId: this.instanceId, ms: Date.now() - t0 });
     void this.publish(KEYS.all, { t: 'host-released' });
   }
 
