@@ -202,6 +202,7 @@ export class Cluster {
       const t0 = Date.now();
       try {
         const epoch = await this.store.incr(KEYS.hostEpoch, 365 * 24 * 3600_000);
+        const incrMs = Date.now() - t0;
         const value = `${this.instanceId}:${epoch}`;
         if (!(await this.store.acquire(KEYS.host, value, this.leaseTtlMs))) return false;
         this.lastRenewAt = Date.now();
@@ -221,6 +222,7 @@ export class Cluster {
           instanceId: this.instanceId,
           epoch,
           leaseMs,
+          incrMs,
           restoreMs: Date.now() - t0 - leaseMs,
         });
         void this.publish(KEYS.all, { t: 'host-changed', host: this.instanceId });
@@ -279,11 +281,16 @@ export class Cluster {
     } catch (err) {
       this.log.error('flush before hand-over failed', errorFields(err));
     }
+    const flushMs = Date.now() - t0;
     this.lease = null;
     this.hostCache = null;
     this.options.stopHosting();
     await this.store.release(KEYS.host, lease).catch(() => undefined);
-    this.log.info('handed host role over', { instanceId: this.instanceId, ms: Date.now() - t0 });
+    this.log.info('handed host role over', {
+      instanceId: this.instanceId,
+      ms: Date.now() - t0,
+      flushMs,
+    });
     void this.publish(KEYS.all, { t: 'host-released' });
   }
 
