@@ -51,6 +51,37 @@
   }
 }
 
+/* A phone on its side: the board fills the screen height on the left and stays in view;
+   turn, players, your actions and properties sit in a column beside it. */
+.bz--landscape {
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 36%);
+  grid-template-areas:
+    'board banner'
+    'board players'
+    'board tray'
+    'board card'
+    'board holdings'
+    'board log'
+    'final final';
+  grid-template-rows: auto auto auto auto auto 1fr auto;
+  align-items: start;
+}
+.bz--landscape .bz-viewport-wrap {
+  position: sticky;
+  top: 6px;
+}
+.bz--landscape .bz-viewport--zoom {
+  height: calc(100dvh - 12px);
+  min-height: 0;
+}
+.bz--landscape .bz-players {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* The tray is already beside the board: no need to pin it to the bottom. */
+.bz--narrow.bz--landscape .bz-tray--mine {
+  position: static;
+}
+
 /* ───────── Turn banner ───────── */
 .bz-banner {
   grid-area: banner;
@@ -1327,6 +1358,14 @@
   position: sticky;
   bottom: 6px;
   z-index: 10;
+}
+/* On phones your action tray is pinned to the bottom of the screen during your turn, so
+   the board's own buttons (My properties, See whole board) live in its top corners —
+   at the bottom the tray would cover them. */
+.bz--narrow .bz-holdings-fab,
+.bz--narrow .bz-fit {
+  top: 8px;
+  bottom: auto;
 }
 .bz-big {
   min-height: 52px;

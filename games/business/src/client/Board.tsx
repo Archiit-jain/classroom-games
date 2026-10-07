@@ -144,12 +144,22 @@ function useFlash<T>(value: T | null, key: number, ms: number): T | null {
  * Phones (narrow, or short in landscape) zoom in and follow the play; bigger screens show
  * the whole board and tilt it.
  */
-function useCompact(ref: React.RefObject<HTMLElement | null>): boolean {
-  const [compact, setCompact] = useState(false);
+function useCompact(ref: React.RefObject<HTMLElement | null>): {
+  compact: boolean;
+  landscape: boolean;
+} {
+  const [state, setState] = useState({ compact: false, landscape: false });
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const check = () => setCompact(el.clientWidth < 640 || window.innerHeight < 500);
+    const check = () => {
+      const compact = el.clientWidth < 640 || window.innerHeight < 500;
+      // A phone on its side: too short for the stacked layout, wide enough for two columns.
+      const landscape = window.innerHeight < 500 && el.clientWidth >= 640;
+      setState((s) =>
+        s.compact === compact && s.landscape === landscape ? s : { compact, landscape },
+      );
+    };
     const ro = new ResizeObserver(check);
     ro.observe(el);
     window.addEventListener('resize', check);
@@ -159,7 +169,7 @@ function useCompact(ref: React.RefObject<HTMLElement | null>): boolean {
       window.removeEventListener('resize', check);
     };
   }, [ref]);
-  return compact;
+  return state;
 }
 
 interface Walk {
@@ -365,7 +375,7 @@ export default function BusinessBoard(props: Props) {
   const { view, events, version, me, seats, effects, msUntil, reactions } = props;
   const root = useRef<HTMLDivElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
-  const narrow = useCompact(root);
+  const { compact: narrow, landscape } = useCompact(root);
   const [fit, setFit] = useState(false);
   const zoomed = narrow && !fit && view.phase !== 'OVER';
   const { shown, moving, landed, walking, passKey } = useWalk(view, events, version, effects);
@@ -483,7 +493,10 @@ export default function BusinessBoard(props: Props) {
   const holdingsCount = ASSET_SPACES.filter((i) => view.owner[i] === me).length;
 
   return (
-    <div className={`bz${narrow ? ' bz--narrow' : ''}`} ref={root}>
+    <div
+      className={`bz${narrow ? ' bz--narrow' : ''}${narrow && landscape ? ' bz--landscape' : ''}`}
+      ref={root}
+    >
       <TurnBanner
         view={view}
         me={me}

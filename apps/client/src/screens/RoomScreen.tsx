@@ -36,10 +36,13 @@ export function RoomScreen({ room }: { room: RoomView }) {
   const module = gameClients.get(room.gameId);
   const { mode } = useEffectsSetting();
   const holding = useRevealHold(room, module?.revealMs?.(mode) ?? 0);
-  // Entering a room (e.g. from a card far down the home screen): start at the top.
+  // Entering a room (e.g. from a card far down the home screen), and a match starting
+  // (the host tapped Start at the bottom of a long lobby, e.g. on a landscape phone) or
+  // ending: start at the top, where the countdown, the game and then the podium are.
+  const startingOrPlaying = room.phase === 'STARTING' || room.phase === 'IN_GAME';
   useEffect(() => {
     window.scrollTo({ top: 0 });
-  }, [room.id]);
+  }, [room.id, startingOrPlaying]);
 
   const publicLobby =
     room.kind === 'PUBLIC' && (room.phase === 'LOBBY' || room.phase === 'STARTING');

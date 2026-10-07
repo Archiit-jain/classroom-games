@@ -303,6 +303,26 @@ for (const [label, viewport] of [
     await expect(page.getByRole('button', { name: 'Roll the dice' })).toBeEnabled({
       timeout: 30_000,
     });
+    // Start was tapped low in the lobby: the game opens at the top, not on the chat.
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    // On your turn nothing covers the board's own buttons (the tray used to, on phones).
+    for (const name of [/My properties · \d/, /See whole board/]) {
+      const button = page.getByRole('button', { name }).first();
+      const hit = await button.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        el.scrollIntoView({ block: 'nearest' });
+        const r2 = el.getBoundingClientRect();
+        const top = document.elementFromPoint(r2.left + r2.width / 2, r2.top + r2.height / 2);
+        return { reachable: !!top && (top === el || el.contains(top)), width: r.width };
+      });
+      expect(hit.reachable, `${String(name)} is covered`).toBe(true);
+    }
+    if (viewport.height < 500) {
+      // A phone on its side: the actions sit beside the board, not under it.
+      const board = await page.locator('.bz-viewport').boundingBox();
+      const tray = await page.locator('.bz-tray').boundingBox();
+      expect(tray && board && tray.x).toBeGreaterThanOrEqual((board?.x ?? 0) + (board?.width ?? 0));
+    }
     await page.locator('.bz-tile[data-space="33"]').click();
     await expect(page.locator('.bz-card__name')).toHaveText('Mumbai');
     await page.getByRole('button', { name: 'Close' }).click({ timeout: 10_000 });
