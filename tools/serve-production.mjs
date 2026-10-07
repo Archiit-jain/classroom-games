@@ -23,6 +23,8 @@ const types = {
   '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2',
   '.json': 'application/json',
+  '.png': 'image/png',
+  '.txt': 'text/plain; charset=utf-8',
 };
 
 if (!existsSync(join(dist, 'index.html'))) {
@@ -56,9 +58,11 @@ const server = createServer((req, res) => {
     /^([/\\])+/,
     '',
   );
-  let file = join(dist, path);
+  let file = join(dist, path || 'index.html');
   if (!file.startsWith(dist) || !existsSync(file) || statSync(file).isDirectory()) {
-    file = join(dist, 'index.html');
+    // Like Vercel: the site is one page; anything else is the 404 page with a 404 status.
+    file = join(dist, path === '' ? 'index.html' : '404.html');
+    if (path !== '') res.statusCode = 404;
   }
   if (file.includes(`${join('dist', 'assets')}`)) {
     for (const { key, value } of assetHeaders) res.setHeader(key, value);

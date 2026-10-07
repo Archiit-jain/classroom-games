@@ -70,7 +70,7 @@ test('friendly errors for a wrong code and a disallowed nickname', async ({ brow
   await page.getByLabel('Room code', { exact: true }).fill('ZZZZZZ');
   await page.getByRole('button', { name: 'Join', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText(
-    'No room with that code. Check the code and try again.',
+    'No room with that code — check it, or the room may have closed.',
   );
 
   await page.getByLabel('Your nickname').fill('Bot Fake');

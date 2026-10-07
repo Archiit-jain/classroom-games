@@ -1701,7 +1701,8 @@
 /* ───────── My properties ───────── */
 .bz-holdings-toggle {
   flex: none;
-  padding: 4px 10px;
+  min-height: 36px;
+  padding: 4px 12px;
   border: 2px solid var(--bz-ink);
   border-radius: var(--radius-pill);
   background: var(--seat);
