@@ -74,6 +74,7 @@ export const en = {
     devServerDown:
       'Can’t reach the game server at {url} — it isn’t running. Start it with “pnpm dev” in the Classroom Games folder; this page reconnects by itself.',
     reconnecting: 'Connection lost. Reconnecting…',
+    offline: 'You’re offline. The game picks up again as soon as your internet is back.',
     restarting: 'The games are restarting. You’ll be back in a moment.',
     displaced: 'You opened Classroom Games in another tab.',
     useHere: 'Use this tab',

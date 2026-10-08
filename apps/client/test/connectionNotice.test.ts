@@ -6,6 +6,7 @@ const base = {
   slow: false,
   unreachable: false,
   serverRestarting: false,
+  offline: false,
 } as const;
 
 describe('connection banner notice', () => {
@@ -22,6 +23,22 @@ describe('connection banner notice', () => {
   it('in production: waking up first, then not responding after the wake-up window', () => {
     expect(connectionNotice({ ...base, slow: true }, false)).toBe('waking');
     expect(connectionNotice({ ...base, slow: true, unreachable: true }, false)).toBe('unreachable');
+  });
+
+  it('a lost connection says "reconnecting", never that the server is waking up (Phase 11)', () => {
+    const lost = { ...base, connection: 'reconnecting' } as const;
+    expect(connectionNotice({ ...lost, slow: true }, false)).toBe('reconnecting');
+    expect(connectionNotice({ ...lost, slow: true, unreachable: true }, false)).toBe('unreachable');
+  });
+
+  it('says "offline" while the device has no network (airplane mode)', () => {
+    expect(connectionNotice({ ...base, connection: 'reconnecting', offline: true }, false)).toBe(
+      'offline',
+    );
+    expect(connectionNotice({ ...base, slow: true, unreachable: true, offline: true }, true)).toBe(
+      'offline',
+    );
+    expect(connectionNotice({ ...base, connection: 'connected', offline: true }, false)).toBeNull();
   });
 
   it('in development: says the local server is not running instead of waking up', () => {

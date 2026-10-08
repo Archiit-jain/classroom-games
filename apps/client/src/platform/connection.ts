@@ -89,8 +89,12 @@ export class GameConnection {
     if (typeof window === 'undefined') return;
     setInterval(() => void this.checkAlive(), LIVENESS_EVERY_MS);
     // The phone says it lost the network: show it now, and reconnect as soon as it is back.
-    window.addEventListener('offline', () => this.connectionLost());
+    window.addEventListener('offline', () => {
+      this.store.set({ offline: true });
+      this.connectionLost();
+    });
     window.addEventListener('online', () => {
+      this.store.set({ offline: false });
       if (!this.socket.connected) this.socket.connect();
     });
     // Coming back to the tab (e.g. unlocking the phone) is when dead connections show up.

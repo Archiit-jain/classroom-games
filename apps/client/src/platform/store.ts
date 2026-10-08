@@ -42,6 +42,8 @@ export interface AppState {
   /** True when still not connected after the server's maximum wake-up time. */
   unreachable: boolean;
   serverRestarting: boolean;
+  /** The device says it has no network at all (airplane mode, Wi-Fi gone). */
+  offline: boolean;
   session: { playerId: string; nickname: string | null } | null;
   games: GameInfo[];
   room: RoomView | null;
@@ -63,6 +65,7 @@ export const initialState: AppState = {
   connection: 'connecting',
   slow: false,
   unreachable: false,
+  offline: typeof navigator !== 'undefined' && navigator.onLine === false,
   serverRestarting: false,
   session: null,
   games: [],
