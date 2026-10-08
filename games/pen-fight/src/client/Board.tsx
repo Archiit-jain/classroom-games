@@ -64,6 +64,14 @@ const subscribePortrait = (cb: () => void) => {
   return () => mq.removeEventListener('change', cb);
 };
 const isPortrait = () => window.matchMedia(PORTRAIT_QUERY).matches;
+/** A phone on its side: too short for the desk under the header, so desk and controls sit side by side. */
+const LANDSCAPE_QUERY = '(orientation: landscape) and (max-height: 500px)';
+const subscribeLandscape = (cb: () => void) => {
+  const mq = window.matchMedia(LANDSCAPE_QUERY);
+  mq.addEventListener('change', cb);
+  return () => mq.removeEventListener('change', cb);
+};
+const isLandscape = () => window.matchMedia(LANDSCAPE_QUERY).matches;
 
 /** World ↔ SVG: on a portrait phone the landscape desk is drawn turned 90° (input mapped back). */
 function makeFrame(portrait: boolean) {
@@ -154,8 +162,15 @@ export default function PenBoard({
   reactions,
 }: BoardProps<FightView, FightAction, FightEvent>) {
   const portrait = useSyncExternalStore(subscribePortrait, isPortrait, () => false);
+  const landscape = useSyncExternalStore(subscribeLandscape, isLandscape, () => false);
   const frame = useMemo(() => makeFrame(portrait), [portrait]);
   const svgRef = useRef<SVGSVGElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // On a phone on its side the page header would push the desk off screen: bring the game
+  // itself to the top when it starts that way and whenever the phone is turned.
+  useEffect(() => {
+    if (landscape) rootRef.current?.scrollIntoView({ block: 'start' });
+  }, [landscape]);
 
   const seatInfo = (seat: number): SeatView | undefined => seats.find((s) => s.seat === seat);
   const nameOf = (seat: number) => seatInfo(seat)?.displayName ?? `#${seat + 1}`;
@@ -377,7 +392,10 @@ export default function PenBoard({
       : { duration: durationFor(effects, 900, 500) / 1000, ease: 'easeInOut' as const };
 
   return (
-    <div className={`pf${portrait ? ' pf--portrait' : ''}`}>
+    <div
+      ref={rootRef}
+      className={`pf${portrait ? ' pf--portrait' : ''}${landscape ? ' pf--landscape' : ''}`}
+    >
       <div className="pf-top">
         <span className={`pf-round${view.suddenDeath ? ' pf-round--sd' : ''}`}>
           {f('round', { n: view.round })}

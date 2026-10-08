@@ -111,3 +111,35 @@ test('Pen Fight is playable with reduced motion (no replay animation)', async ({
   // Nothing flew: no motion ghosts, sparks or confetti were ever drawn.
   expect(await host.locator('.pf-pen--ghost, .pf-spark, .cb-confetti__piece').count()).toBe(0);
 });
+
+test('Pen Fight on a phone turned sideways: the whole desk and the controls are on screen @mobile', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const page = await newPlayer(browser, 'Ishaan', {
+    viewport: { width: 844, height: 390 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  await createRoom(page, PEN_FIGHT);
+  await page.getByRole('button', { name: 'Add bot' }).click();
+  await page.getByRole('button', { name: 'Start game' }).click();
+  await expect(page.getByText('Your flick!')).toBeVisible({ timeout: 20_000 });
+  await page.waitForTimeout(500);
+  const box = (selector: string) =>
+    page.locator(selector).evaluate((e) => {
+      const r = e.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+    });
+  const desk = await box('.pf-svg');
+  const controls = await box('.pf-controls');
+  // No scrolling needed to aim: the desk fits the screen height, the controls sit beside it.
+  expect(desk.top).toBeGreaterThanOrEqual(0);
+  expect(desk.bottom).toBeLessThanOrEqual(390);
+  expect(controls.left).toBeGreaterThanOrEqual(desk.right);
+  expect(controls.bottom).toBeLessThanOrEqual(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844);
+  // And a flick from there still lands.
+  expect(await flick(page)).toBe(true);
+  await expect(page.getByText('Your flick!')).toBeHidden({ timeout: 10_000 });
+});

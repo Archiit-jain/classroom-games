@@ -141,6 +141,39 @@
   /* Keep the turned desk on screen with the controls on a phone. */
   max-height: 68vh;
 }
+/* A phone on its side: the desk fills the screen height on the left; the round, turn
+   order and aiming controls stack on the right, so the whole desk stays in view. */
+.pf--landscape {
+  display: grid;
+  grid-template-columns: auto minmax(200px, 1fr);
+  grid-template-areas:
+    'stage top'
+    'stage order'
+    'stage controls';
+  grid-template-rows: auto auto 1fr;
+  align-items: start;
+  column-gap: 12px;
+  scroll-margin-top: 6px;
+}
+.pf--landscape .pf-top {
+  grid-area: top;
+  flex-wrap: wrap;
+  min-height: 0;
+}
+.pf--landscape .pf-order {
+  grid-area: order;
+}
+.pf--landscape .pf-stage {
+  grid-area: stage;
+}
+.pf--landscape .pf-controls {
+  grid-area: controls;
+}
+.pf--landscape .pf-svg {
+  width: auto;
+  height: calc(100dvh - 12px);
+  max-width: 62vw;
+}
 .pf-svg--aim {
   cursor: grab;
 }
