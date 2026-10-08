@@ -387,7 +387,7 @@ test('Business is playable with reduced motion: every change is in the log', asy
   expect(await host.locator('.cb-confetti__piece').count()).toBe(0);
 });
 
-test('Business scripted: insolvency without elimination, then a hotel built level by level', async ({
+test('Business scripted: insolvency without elimination, then one house per landing', async ({
   browser,
 }) => {
   // The scripted server (playwright.config.ts): every roll is 6 + 6 (spaces 12, 24, START, 12…),
@@ -421,21 +421,23 @@ test('Business scripted: insolvency without elimination, then a hotel built leve
   await expect(debtor.locator('.bz-player--me .bz-insolvent')).toBeVisible();
   await expect(debtor.locator('.bz-token--me.bz-token--insolvent')).toHaveCount(1);
   await expect(owner.locator('.bz-log')).toContainText('is INSOLVENT');
-  // The owner comes back to 12 three turns later and builds House 1, 2, 3, then the Hotel —
-  // one BUILD click per level. The insolvent player keeps rolling meanwhile.
-  const hotel = (page: Page) => page.locator('.bz-tile[data-space="12"] .bz-hotel');
-  const offered = new Set<string>();
+  // The owner comes back to 12 three turns later and builds ONE level: the offer closes
+  // after it (one level per landing, owner decision in Phase 11). The insolvent player
+  // keeps rolling meanwhile.
+  const buildings = (page: Page) => page.locator('.bz-tile[data-space="12"] .bz-tile__buildings');
+  let built = false;
   const until = Date.now() + 120_000;
-  while ((await hotel(owner).count()) === 0 && Date.now() < until) {
+  while (!built && Date.now() < until) {
     for (const page of pages) {
       const roll = page.getByRole('button', { name: 'Roll the dice' });
       if (await enabled(roll)) await tryClick(page, roll);
       const build = page.getByRole('button', { name: /^BUILD/ });
       if (page === owner && (await enabled(build))) {
-        // Each BUILD button offers exactly the next level.
-        const level = /House \d|Hotel/.exec((await build.textContent().catch(() => '')) ?? '');
-        if (level) offered.add(level[0]);
-        await tryClick(page, build);
+        await expect(build).toContainText('House 1');
+        if (await tryClick(page, build)) {
+          built = true;
+          break;
+        }
       }
       for (const name of [/Don’t buy/, /Let the bank handle it/]) {
         const b = page.getByRole('button', { name }).first();
@@ -444,8 +446,11 @@ test('Business scripted: insolvency without elimination, then a hotel built leve
     }
     await host.waitForTimeout(150);
   }
-  expect([...offered].sort()).toEqual(['Hotel', 'House 1', 'House 2', 'House 3']);
-  await expect(hotel(debtor)).toHaveCount(1); // the other screen shows the hotel too
+  expect(built).toBe(true);
+  // No second level on the same landing; both screens show the one house.
+  await expect(owner.getByRole('button', { name: /^BUILD/ })).toHaveCount(0);
+  await expect(buildings(owner)).toHaveCount(1);
+  await expect(buildings(debtor)).toHaveCount(1);
   await playUntilResults(pages);
   for (const page of pages) await expectResults(page, 2);
 });

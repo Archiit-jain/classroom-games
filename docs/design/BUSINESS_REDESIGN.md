@@ -482,7 +482,8 @@ Rewritten Business tests (the platform tests stay):
 1. **Building several levels per landing** (simulation-driven): landing on your own city may
    build **one or more** levels at once (House 1 → 2 → 3 → Hotel order unchanged, still only on
    landing). With one level per landing, 5,000 simulated matches produced almost no hotels.
-   **Please confirm or reject** — it is a single-line rule switch (`BUILD.levels` max 1).
+   **Rejected by the owner in Phase 11:** back to one level per landing. Hotels are meant to be
+   rare (their rent is very high); measured: ~2.8 houses and 0 hotels per 15-round game.
 2. Bots never _start_ auctions (they bid in them); auctions in the numbers below come from the
    "casual" profile, which starts one about every 40 rolls.
 

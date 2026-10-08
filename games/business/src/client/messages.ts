@@ -130,7 +130,6 @@ export const businessMessages = {
   levelNow: 'Now: {what} · rent {rent}',
   buildNext: 'BUILD {what} · {price}',
   buildThen: 'Rent becomes {rent}',
-  done: 'Done',
   freeQ: 'FREE BUILDING — choose one of your cities',
   freeOpt: '{place}: {from} → {to}',
   rentDue: '{name} pays {amount} rent to {owner}',

@@ -695,19 +695,14 @@ export function createBusinessGame(
     if (!d) return endResolution(w);
     const p = P(w, seat);
     if (kind === 'BUILD') {
-      // One level per BUILD action; the offer stays open for the next level until the
-      // player stops, can't afford it, or the city has its hotel.
+      // One level per landing (House 1 → 2 → 3 → Hotel over separate landings): the
+      // offer closes after the build.
       const lv = s.level[d.space] ?? 0;
       const cost = buildCost(d.space, lv, s.economy);
       toBank(w, seat, cost);
       s.level[d.space] = lv + 1;
       p.spend.development += cost;
       log(w, { type: 'BUILT', seat, space: d.space, level: lv + 1, cost });
-      const next = lv + 1 < HOTEL ? buildCost(d.space, lv + 1, s.economy) : null;
-      if (next !== null && p.cash >= next) {
-        s.decision = { ...d, cost: next, built: (d.built ?? 0) + 1 };
-        return enter(w, 'DECIDE', s.phaseEndsAt - w.ctx.now);
-      }
       s.decision = null;
       return endResolution(w);
     }
@@ -738,7 +733,7 @@ export function createBusinessGame(
     } else if (kind === 'JAIL_WAIT') {
       p.skipNext = true;
       log(w, { type: 'JAIL', seat, paid: false });
-    } else if (!(d.kind === 'BUILD' && (d.built ?? 0) > 0)) {
+    } else {
       log(w, { type: 'DECLINED', seat, space: d.space });
     }
     w.hold = 0;

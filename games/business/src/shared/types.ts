@@ -67,8 +67,6 @@ export interface Decision {
   space: number;
   /** BUY: the price; BUILD: the next level's cost; JAIL: the fee; FREE_BUILD: 0. */
   cost: number;
-  /** BUILD: levels already built during this landing (each one a separate BUILD action). */
-  built?: number;
   /** FREE_BUILD: the player's cities that can take one more level. */
   options?: number[];
 }

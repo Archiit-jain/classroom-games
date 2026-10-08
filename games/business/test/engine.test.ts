@@ -362,7 +362,7 @@ describe('buying, rent, development and transport', () => {
     expect(rentAt(owning(5), patna)).toBe(baseRent(patna) * 2);
   });
 
-  it('builds one level per BUILD action — House 1 → 2 → 3 → Hotel — until done, broke or hotel', () => {
+  it('builds one level per landing — House 1 → 2 → 3 → Hotel over separate landings', () => {
     const game = scripted([
       [1, 0],
       [1, 0],
@@ -375,18 +375,18 @@ describe('buying, rent, development and transport', () => {
     );
     const h2 = act(game, t.state, { type: 'BUILD', space: 1 });
     expect(h2.state.level[1]).toBe(2);
-    expect(h2.state.phase).toBe('DECIDE'); // the offer stays open for the next level
-    expect(h2.state.decision).toMatchObject({ kind: 'BUILD', cost: buildCost(1, 2), built: 1 });
-    const h3 = act(game, h2.state, { type: 'BUILD', space: 1 });
-    const hotel = act(game, h3.state, { type: 'BUILD', space: 1 });
-    expect(hotel.state.level[1]).toBe(HOTEL);
-    expect(hotel.state.phase).toBe('HOLD'); // nothing above the hotel
-    expect(hotel.state.players[0]?.spend.development).toBe(
-      buildCost(1, 1) + buildCost(1, 2) + buildCost(1, 3),
+    // The offer closes after one level: no second build on the same landing.
+    expect(h2.state.phase).toBe('HOLD');
+    expect(h2.state.decision).toBeNull();
+    expect(verdict(game, h2.state, 0, { type: 'BUILD', turn: h2.state.turn, space: 1 })).not.toBe(
+      'OK',
     );
-    const done = act(game, h2.state, { type: 'SKIP' });
-    expect(done.state.level[1]).toBe(2);
-    expect(logs(done).some((e) => e.type === 'DECLINED')).toBe(false);
+    expect(h2.state.players[0]?.spend.development).toBe(buildCost(1, 1));
+    expect(logs(h2).some((e) => e.type === 'DECLINED')).toBe(false);
+    // Saying no is still a decline.
+    const no = act(game, t.state, { type: 'SKIP' });
+    expect(no.state.level[1]).toBe(1);
+    expect(logs(no).some((e) => e.type === 'DECLINED')).toBe(true);
     // Can't afford the next level: the offer closes after the build.
     const g1 = scripted([[1, 0]]);
     const g1b = scripted([[1, 0]]);

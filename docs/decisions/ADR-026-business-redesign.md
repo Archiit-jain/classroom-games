@@ -34,9 +34,12 @@ no immediate elimination, deterministic events by dice sum and an exact final-we
 - **Guardrails (provisional, measured):** bank sell-back only while raising money; one auction
   per turn; a 3-round lock after an asset changes hands. The cumulative-spending formula makes
   player-to-player sales raise both players' totals; the guardrails limit churn.
-- **Building:** landing on your own city offers one level per BUILD action, again and again
-  in the same landing (House 1 → 2 → 3 → Hotel) until the player stops, can't pay or has the
-  hotel — never an automatic jump (correction pass).
+- **Building:** landing on your own city offers **one level per landing** (House 1 → 2 → 3 →
+  Hotel over separate landings). Phase 11 (owner decision, after a real-phone play-test):
+  the earlier "again and again in the same landing" switch let a player go from nothing to a
+  hotel in one visit. Hotels are now deliberately rare — 0 per game in the 300-game guard
+  simulation, ~3 houses per 15-round game — because a hotel's rent is meant to be a big,
+  lucky event.
 - **Economy tuned by simulation:** `simulate.ts` drives the real engine and bot (plus a
   "casual" profile) through ≥ 5,000 matches per candidate; a 300-game guard test keeps the
   tuned values inside the targets (early leader ≤ 55 %, runaways < 15 %, insolvency < 10 %,

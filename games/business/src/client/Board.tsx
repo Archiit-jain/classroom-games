@@ -1691,7 +1691,7 @@ function ActionTray({
         </>
       );
     } else {
-      // BUILD: one level per click (House 1 → 2 → 3 → Hotel); Done ends the turn.
+      // BUILD: one level per landing (House 1 → 2 → 3 → Hotel over separate landings).
       const lv = view.level[d.space] ?? 0;
       const cost = buildCost(d.space, lv, view.economy);
       const ownerBonus = groupBonus(view, d.space, me);
@@ -1717,7 +1717,7 @@ function ActionTray({
               disabled={busy}
               onClick={() => void send({ type: 'SKIP' })}
             >
-              {(d.built ?? 0) > 0 ? f('done') : f('notNow')}
+              {f('notNow')}
             </button>
           </div>
           {lv < HOTEL && (

@@ -108,7 +108,7 @@ function casualAction(
     (s.decision.kind === 'BUY' || s.decision.kind === 'BUILD')
   ) {
     const d = s.decision;
-    // Builds one level per click; each further level is a fresh 45 % whim.
+    // One level per landing, on a 45 % whim.
     const wants = d.kind === 'BUY' ? rng.int(1, 100) <= 70 : rng.int(1, 100) <= 45;
     if (wants && me.cash >= d.cost) {
       return d.kind === 'BUY'

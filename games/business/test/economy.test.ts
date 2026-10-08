@@ -18,11 +18,11 @@ describe('economy (300 seeded matches, 15 rounds, 2–6 players, half casual)', 
     expect(r.meanSpread).toBeGreaterThan(0.15);
   });
 
-  it('uses every system: buying, transport, building (incl. hotels), loans, trades, auctions', () => {
+  it('uses every system: buying, transport, building, loans, trades, auctions', () => {
     expect(r.ownedAtEnd).toBeGreaterThan(0.5);
     expect(r.transportOwnedAtEnd).toBeGreaterThan(0.5);
+    // One level per landing: houses get built, hotels are deliberately rare (owner decision).
     expect(r.housesPerGame + r.hotelsPerGame).toBeGreaterThan(1.5);
-    expect(r.hotelsPerGame).toBeGreaterThan(0.3);
     expect(r.loansPerGame).toBeGreaterThan(0);
     expect(r.tradesPerGame).toBeGreaterThan(0);
     expect(r.auctionsPerGame).toBeGreaterThan(0);
