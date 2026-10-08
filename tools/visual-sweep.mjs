@@ -7,6 +7,10 @@
 // Start a server with fast game timers and its client, e.g. the preview configs
 // classroom-games-fast-server/-client (GAME_TIME_SCALE=0.05), then
 //   node tools/visual-sweep.mjs http://localhost:5177 <outDir> [channel] [only-game-substring]
+// With channel "android" it runs once in Chrome on a USB-connected Android phone instead,
+// in a new tab of the phone's Chrome (closed afterwards). First:
+//   adb forward tcp:9222 localabstract:chrome_devtools_remote
+//   adb reverse tcp:5177 tcp:5177 && adb reverse tcp:3104 tcp:3104
 // Output: <outDir>/<viewport>/<nn>-<screen>.png and <outDir>/issues.json.
 // The human seat is left idle on purpose: bots take it over and every match reaches
 // its results quickly.
@@ -91,7 +95,10 @@ function inspect() {
   return issues;
 }
 
-const browser = await chromium.launch({ channel });
+const android = channel === 'android';
+const browser = android
+  ? await chromium.connectOverCDP('http://127.0.0.1:9222')
+  : await chromium.launch({ channel });
 const report = {};
 
 // Each viewport waits in a different game's public room, so the sweeps don't match
@@ -104,7 +111,7 @@ const PUBLIC_GAME = {
 };
 
 async function sweep(name, options) {
-  const context = await browser.newContext({ ...options });
+  const context = android ? browser.contexts()[0] : await browser.newContext({ ...options });
   const page = await context.newPage();
   page.on('dialog', (d) => void d.accept());
   const consoleErrors = [];
@@ -141,7 +148,9 @@ async function sweep(name, options) {
   await capture('browse');
   // While browsing, the same button reads "Back".
   await page.locator('.play-hub button', { hasText: /back/i }).first().click();
-  await page.getByRole('button', { name: `Play ${PUBLIC_GAME[name]} with people online` }).click();
+  await page
+    .getByRole('button', { name: `Play ${PUBLIC_GAME[name] ?? 'Pen Fight'} with people online` })
+    .click();
   await page.locator('.public-lobby').waitFor({ timeout: 15_000 });
   await capture('public-waiting');
   await leave();
@@ -191,11 +200,17 @@ async function sweep(name, options) {
     }
   }
   report[name] = { screens, failures, consoleErrors: [...new Set(consoleErrors)] };
-  await context.close();
+  if (android) await page.close();
+  else await context.close();
 }
 
-await Promise.all(Object.entries(VIEWPORTS).map(([name, options]) => sweep(name, options)));
-await browser.close();
+if (android) {
+  await sweep('android', null);
+  await browser.close(); // only disconnects: the phone's Chrome keeps running
+} else {
+  await Promise.all(Object.entries(VIEWPORTS).map(([name, options]) => sweep(name, options)));
+  await browser.close();
+}
 writeFileSync(join(out, 'issues.json'), JSON.stringify(report, null, 1));
 const total = Object.values(report).reduce(
   (sum, v) => sum + v.screens.reduce((s, x) => s + x.issues.length, 0),
